@@ -1,0 +1,17 @@
+[project]
+name = "kitchen-service"
+version = "0.1.0"
+description = "Kitchen service: table 3.2 and the three staff buttons"
+requires-python = "==3.12.*"
+dependencies = [
+  "common",
+  "fastapi>=0.115",
+  "uvicorn>=0.32",
+]
+
+[tool.uv.sources]
+common = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.8.0,<0.14"]
+build-backend = "uv_build"

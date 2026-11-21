@@ -1,0 +1,17 @@
+[project]
+name = "inventory-service"
+version = "0.1.0"
+description = "Inventory service: table 3.3, stock accounting, dish status"
+requires-python = "==3.12.*"
+dependencies = [
+  "common",
+  "fastapi>=0.115",
+  "uvicorn>=0.32",
+]
+
+[tool.uv.sources]
+common = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.8.0,<0.14"]
+build-backend = "uv_build"
