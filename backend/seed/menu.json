@@ -1,0 +1,71 @@
+{
+  "_comment": "Dish catalogue and starting data (section 1 of docs/02-detailed-design.md). Branches load the dishes on every start; Inventory loads ingredients, stock and recipes only when its stock table is empty. Quantities are in the ingredient's unit. No prices: payment is out of scope.",
+  "ingredients": [
+    { "ingredient_id": "BANH_PHO", "name": "Bánh phở", "unit": "kg", "stock": 10 },
+    { "ingredient_id": "THIT_BO", "name": "Thịt bò", "unit": "kg", "stock": 5 },
+    { "ingredient_id": "BUN", "name": "Bún", "unit": "kg", "stock": 10 },
+    { "ingredient_id": "THIT_LON", "name": "Thịt lợn", "unit": "kg", "stock": 6 },
+    { "ingredient_id": "SUON", "name": "Sườn", "unit": "kg", "stock": 4 },
+    { "ingredient_id": "GAO", "name": "Gạo", "unit": "kg", "stock": 10 },
+    { "ingredient_id": "TOM", "name": "Tôm", "unit": "kg", "stock": 2 },
+    { "ingredient_id": "BANH_TRANG", "name": "Bánh tráng", "unit": "cái", "stock": 100 },
+    { "ingredient_id": "RAU_SONG", "name": "Rau sống", "unit": "kg", "stock": 3 },
+    { "ingredient_id": "BANH_MI", "name": "Bánh mì", "unit": "ổ", "stock": 40 },
+    { "ingredient_id": "LA_TRA", "name": "Lá trà", "unit": "kg", "stock": 0.5 },
+    { "ingredient_id": "DA", "name": "Đá", "unit": "kg", "stock": 30 }
+  ],
+  "dishes": [
+    {
+      "dish_id": "PHO_BO",
+      "name": "Phở bò",
+      "recipe": [
+        { "ingredient_id": "BANH_PHO", "quantity": 0.2 },
+        { "ingredient_id": "THIT_BO", "quantity": 0.15 },
+        { "ingredient_id": "RAU_SONG", "quantity": 0.05 }
+      ]
+    },
+    {
+      "dish_id": "BUN_CHA",
+      "name": "Bún chả",
+      "recipe": [
+        { "ingredient_id": "BUN", "quantity": 0.2 },
+        { "ingredient_id": "THIT_LON", "quantity": 0.15 },
+        { "ingredient_id": "RAU_SONG", "quantity": 0.05 }
+      ]
+    },
+    {
+      "dish_id": "COM_TAM",
+      "name": "Cơm tấm sườn",
+      "recipe": [
+        { "ingredient_id": "GAO", "quantity": 0.15 },
+        { "ingredient_id": "SUON", "quantity": 0.2 }
+      ]
+    },
+    {
+      "dish_id": "GOI_CUON",
+      "name": "Gỏi cuốn (2 cuốn)",
+      "recipe": [
+        { "ingredient_id": "BANH_TRANG", "quantity": 2 },
+        { "ingredient_id": "TOM", "quantity": 0.06 },
+        { "ingredient_id": "BUN", "quantity": 0.05 },
+        { "ingredient_id": "RAU_SONG", "quantity": 0.03 }
+      ]
+    },
+    {
+      "dish_id": "BANH_MI_THIT",
+      "name": "Bánh mì thịt",
+      "recipe": [
+        { "ingredient_id": "BANH_MI", "quantity": 1 },
+        { "ingredient_id": "THIT_LON", "quantity": 0.08 }
+      ]
+    },
+    {
+      "dish_id": "TRA_DA",
+      "name": "Trà đá",
+      "recipe": [
+        { "ingredient_id": "LA_TRA", "quantity": 0.005 },
+        { "ingredient_id": "DA", "quantity": 0.3 }
+      ]
+    }
+  ]
+}
