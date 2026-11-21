@@ -436,7 +436,7 @@ The three parameters named N (alert for an order in Awaiting Inventory, dish dat
 
 ## 11. Decisions, limitations and scope
 
-Eight questions Q1–Q8 have been decided; five points still need the team's confirmation before coding.
+Eight questions Q1–Q8 have been decided. Of the five points that needed the team's confirmation, the three that change behaviour were confirmed on 21 Nov 2026; the two still open are configuration values and do not block coding.
 
 ### Decisions made
 
@@ -455,9 +455,9 @@ Eight questions Q1–Q8 have been decided; five points still need the team's con
 
 - [ ] The value of X (proposed 4 hours) and the proposed parameters in section 10.
 - [ ] The list of customer cancel reasons.
-- [ ] BR12 and the "Consumed" message from the Kitchen to Inventory. These two points were added when this version was compiled. If Inventory does not store the Failed result, an order resent after Inventory receives more stock would be reserved and cooked even though the branch has already seen Failed. Without the Consumed message, the reserved quantity would stay in Held forever.
-- [ ] Local cancel of an order that was never attempted (BR9). If this is not accepted, the phrase "never cooked" in scenario 10 must be removed and every cancel request made while offline must be treated as uncertain.
-- [ ] Inventory refusing to reserve an ingredient flagged for stock check (BR6). Consequence: Inventory is shared, so one spoilage report blocks every order that uses that ingredient across the whole chain until the stock check is done.
+- [x] BR12 and the "Consumed" message from the Kitchen to Inventory. These two points were added when this version was compiled. If Inventory does not store the Failed result, an order resent after Inventory receives more stock would be reserved and cooked even though the branch has already seen Failed. Without the Consumed message, the reserved quantity would stay in Held forever. Confirmed on 21 Nov 2026: @Naul agreed as proposed.
+- [x] Local cancel of an order that was never attempted (BR9). If this is not accepted, the phrase "never cooked" in scenario 10 must be removed and every cancel request made while offline must be treated as uncertain. Confirmed on 21 Nov 2026: @Naul agreed as proposed.
+- [x] Inventory refusing to reserve an ingredient flagged for stock check (BR6). Consequence: Inventory is shared, so one spoilage report blocks every order that uses that ingredient across the whole chain until the stock check is done. Confirmed on 21 Nov 2026: @Naul agreed as proposed, with this consequence accepted.
 
 ### Known limitations
 

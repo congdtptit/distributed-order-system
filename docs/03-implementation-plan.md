@@ -1,8 +1,14 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 4 · 21 Nov 2026
+Revision 5 · 21 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the documentation phase and no code has been written. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 5
+
+| Section | Change | Reason |
+|---|---|---|
+| 1 | Three of the five points in section 11 of the specification are confirmed: BR12 with the Consumed message, local cancel under BR9, and blocking flagged ingredients under BR6. BR12 is now named among the points that change behaviour | @Naul agreed on 21 Nov 2026. Revision 4 named only BR9 and BR6, although BR12 decides the Inventory schema and the event catalogue |
 
 ## Changes in revision 4
 
@@ -33,7 +39,7 @@ This document says how to implement business specification v1.5 and the detailed
 
 ## 1. What must be done before coding
 
-- **Close the open points.** All twelve points in section 8 of the detailed design were confirmed on 21 Nov 2026. Still open: the five points in section 11 of the specification. Of those five, the parameters and the reason lists live in configuration and do not block progress; the points that change behaviour (local cancel under BR9, blocking flagged ingredients under BR6) must be confirmed before the related part is built.
+- **Close the open points.** All twelve points in section 8 of the detailed design were confirmed on 21 Nov 2026. Of the five points in section 11 of the specification, the three that change behaviour (BR12 with the Consumed message, local cancel under BR9, blocking flagged ingredients under BR6) were confirmed on 21 Nov 2026. The two still open, the parameters of section 10 and the list of cancel reasons, live in configuration and do not block progress.
 - **Move the project to the implementation phase.** The user changes `.claude/project-phase` from `docs` to `code`. Until then Claude Code is blocked from creating code.
 
 Nothing else blocks step 0: the language is settled (section 2) and there is no existing codebase to align with.

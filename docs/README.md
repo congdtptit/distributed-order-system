@@ -1,6 +1,6 @@
 # Document set of the distributed-order-system project
 
-Updated 21 Nov 2026. The project is in the documentation phase: there is no code, and coding does not start until the items under "Pending work" are settled.
+Updated 21 Nov 2026. The project is in the documentation phase: there is no code, and coding does not start until the project is moved to the implementation phase (see "Pending work").
 
 The repository is `https://github.com/congdtptit/distributed-order-system`, default branch `main`. It holds this document set and the Claude Code configuration.
 
@@ -12,13 +12,14 @@ Read them in number order. When two documents disagree, the lower-numbered one i
 
 | # | Document | Answers the question | State |
 |---|---|---|---|
-| 01 | [Business specification v1.5](01-business-spec.md) | What the system must do: rules BR1–BR12, four state machines, four flows, 44 test scenarios, deployment assumptions | Master copy of the specification from v1.5, after three review rounds. 5 points still await team confirmation (section 11) |
+| 01 | [Business specification v1.5](01-business-spec.md) | What the system must do: rules BR1–BR12, four state machines, four flows, 44 test scenarios, deployment assumptions | Master copy of the specification from v1.5, after three review rounds. 2 points still await team confirmation (section 11); both are configuration values |
 | 02 | [Detailed design, revision 4](02-detailed-design.md) | What to code against: 13 Kafka event types, the three DB schemas, replication and reporting, the API, the implementation order | Follows specification v1.5. The SQL was trial-run on PostgreSQL (section 9). All 12 points in section 8 were confirmed on 21 Nov 2026 |
-| 03 | [Implementation plan, revision 4](03-implementation-plan.md) | What to build with and how: Python and its libraries, modules, three test tiers, order of work, how to use Claude Code | The language is settled; the libraries are proposals to verify in step 0 |
+| 03 | [Implementation plan, revision 5](03-implementation-plan.md) | What to build with and how: Python and its libraries, modules, three test tiers, order of work, how to use Claude Code | The language is settled; the libraries are proposals to verify in step 0 |
 
 ## Pending work
 
-- [ ] Confirm the 5 points in section 11 of document 01.
+- [x] Confirm the three points in section 11 of document 01 that change behaviour: BR12 with the Consumed message, local cancel under BR9, blocking flagged ingredients under BR6. Done on 21 Nov 2026: @Naul agreed to all three as proposed.
+- [ ] Confirm the two remaining points in section 11 of document 01: the parameters of section 10 and the list of customer cancel reasons. They are configuration values and do not block coding.
 - [x] Confirm points 1–11 in section 8 of document 02. Done on 21 Nov 2026: @Naul agreed to all eleven as proposed.
 - [x] Confirm point 12 in section 8 of document 02 (replication and reporting). Done on 21 Nov 2026: @Naul agreed to the proposal, PostgreSQL logical replication.
 - [x] Settle the language. Done on 21 Nov 2026: @Naul chose Python; the project is built from scratch, with no B5 baseline.
