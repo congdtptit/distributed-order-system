@@ -17,6 +17,7 @@ from typing import Any, cast
 
 import psycopg
 
+from common import reasons
 from common.alerts import UNMATCHED_COMMAND, write_alert
 from common.clock import Clock
 from common.consumer import Handler, Incoming
@@ -31,8 +32,12 @@ LINE_RELEASED, LINE_CONSUMED, LINE_WASTED = "DA_HOAN", "DA_DUNG", "HAO_HUT"
 def make_release_handler(clock: Clock) -> Handler:
     def handle(conn: psycopg.Connection[Any], message: Incoming) -> None:
         env = message.envelope
-        spoiled = _spoiled_ingredients(env.payload)
         reason = env.payload.get("reason_code")
+        # BR6: Inventory handles a release command according to its reason. Only the reason
+        # "Spoiled ingredient" writes anything off; any other reason releases everything.
+        spoiled = (
+            _spoiled_ingredients(message) if reason == reasons.SPOILED_INGREDIENT else set[str]()
+        )
         if not _leave_held(
             conn, message, RELEASED, reason if isinstance(reason, str) else None, clock
         ):
@@ -181,9 +186,20 @@ def _close_line(
     )
 
 
-def _spoiled_ingredients(payload: dict[str, Any]) -> set[str]:
-    """``spoiled_ingredients[]`` of ``ReleaseRequested``: ingredient IDs; missing means none."""
-    raw = payload.get("spoiled_ingredients", [])
-    if not isinstance(raw, list) or not all(isinstance(i, str) for i in cast(list[object], raw)):
-        raise ValueError("spoiled_ingredients must be a list of ingredient IDs")
-    return set(cast(list[str], raw))
+def _spoiled_ingredients(message: Incoming) -> set[str]:
+    """``spoiled_ingredients[]`` of ``ReleaseRequested``: ingredient IDs. Never raises: an
+    exception would send the command to the dlq and leave the reservation held for good, so a
+    malformed list is logged and what cannot be read is left out (the rest is released)."""
+    env = message.envelope
+    raw: object = env.payload.get("spoiled_ingredients", [])
+    items = cast(list[object], raw) if isinstance(raw, list) else []
+    spoiled = {i for i in items if isinstance(i, str)}
+    if not isinstance(raw, list) or len(spoiled) != len(items):
+        log.warning(
+            "order_id=%s event_id=%s malformed spoiled_ingredients %s: only %s written off",
+            env.order_id,
+            env.event_id,
+            repr(env.payload.get("spoiled_ingredients")),
+            sorted(spoiled) or "nothing",
+        )
+    return spoiled

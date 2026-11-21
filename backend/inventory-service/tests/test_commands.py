@@ -79,10 +79,12 @@ def test_a_release_command_arriving_three_times_adds_stock_once(inv: str) -> Non
     order = reserve(inv)
     release = release_requested(order.order_id)
     assert deliver(inv, release) is True
+    sent = outbox(inv)
     assert deliver(inv, release) is False  # same event_id: blocked by processed_events
     assert (
         deliver(inv, resend_with_new_event_id(release)) is True
     )  # new event_id: record no longer Held
+    assert outbox(inv) == sent  # neither duplicate emits anything
     after = stock(inv)
     for ingredient in PHO_BO:
         assert after[ingredient].available == before[ingredient].available  # back once, not more
@@ -232,11 +234,14 @@ def test_a_release_returns_the_quantity_recorded_at_reservation_not_the_new_reci
     set_available(inv, "THIT_LON", D("10"))
     before = stock(inv)["THIT_LON"]
     order = reserve(inv, [("BANH_MI_THIT", 25)])  # 2 kg
+    reserved = stock(inv)["THIT_LON"]
+    assert (reserved.available, reserved.reserved) == (D("8"), D("2"))
     with psycopg.connect(inv) as conn:  # the recipe changes: 25 portions would now need 3 kg
-        conn.execute(
+        changed = conn.execute(
             "UPDATE recipes SET quantity = 0.12"
             " WHERE dish_id = 'BANH_MI_THIT' AND ingredient_id = 'THIT_LON'"
-        )
+        ).rowcount
+    assert changed == 1
     deliver(
         inv, release_requested(order.order_id, reason=reasons.CHANGED_MIND, cancelled_by="CUSTOMER")
     )
@@ -271,6 +276,8 @@ def test_clearing_the_flag_lets_a_new_order_reserve_the_ingredient_again(
     assert stock(inv)["THIT_BO"].needs_check is False
     # ... and announced to the Kitchen with a later version.
     assert [(c["needs_check"], c["seq"]) for c in check_changed(inv)] == [(True, 1), (False, 2)]
+    flag_rows = [r for r in outbox(inv) if r.event_type == "IngredientCheckChanged"]
+    assert [(r.topic, r.key) for r in flag_rows] == [("menu-events", "THIT_BO")] * 2
     # A new order that uses meat is reserved.
     again = reserve(inv)
     assert reservations(inv, again.order_id) == PHO_BO
@@ -338,11 +345,30 @@ def test_stock_receipt_and_stock_list(inv: str, api: TestClient) -> None:
     }
 
 
-def test_a_malformed_spoiled_list_is_a_permanent_error(inv: str) -> None:
+def test_a_malformed_spoiled_list_still_releases_the_order(inv: str) -> None:
+    """A handler never raises for bad data (section 2 of document 02): the order is released
+    and only what can be read is written off."""
+    before = stock(inv)
     order = reserve(inv)
-    bad = release_requested(order.order_id)
+    bad = release_requested(order.order_id, reason=reasons.SPOILED_INGREDIENT)
     bad.payload["spoiled_ingredients"] = "THIT_BO"
-    with pytest.raises(ValueError):
-        deliver(inv, bad)
-    assert order_record(inv, order.order_id) is not None
-    assert reservations(inv, order.order_id) == PHO_BO  # rolled back: still held
+    assert deliver(inv, bad) is True
+    record = order_record(inv, order.order_id)
+    assert record is not None and record[0] == "DA_TRA"
+    assert stock(inv) == before  # everything released, nothing written off
+    assert_invariants(inv)
+
+
+def test_only_the_spoiled_reason_writes_anything_off(inv: str) -> None:
+    """BR6: Inventory handles a release command according to its reason; equipment failure
+    releases everything (Flow A step 5), even if the Kitchen sent an ingredient list."""
+    before = stock(inv)
+    order = reserve(inv)
+    deliver(
+        inv,
+        release_requested(order.order_id, reason=reasons.EQUIPMENT_FAILURE, spoiled=["THIT_BO"]),
+    )
+    assert stock(inv) == before
+    assert set(line_outcomes(inv, order.order_id).values()) == {"DA_HOAN"}
+    assert check_changed(inv) == []
+    assert_invariants(inv)

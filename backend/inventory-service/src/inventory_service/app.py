@@ -166,7 +166,9 @@ def stock_receipt(body: Receipt, conn: Conn) -> StockItem:
     """Stock receipt: adds to available stock. Phase 2 adds the dish-status computation."""
     if not receive_stock(conn, body.ingredient_id, body.quantity):
         raise HTTPException(404, f"no ingredient {body.ingredient_id}")
-    return _stock_item(conn, body.ingredient_id)
+    item = _stock_item(conn, body.ingredient_id)
+    conn.commit()  # before the response: a 200 means the change is stored
+    return item
 
 
 @app.post(
@@ -193,4 +195,6 @@ def clear_stock_check(
                 "reserved": str(outcome.reserved),
             },
         )
-    return _stock_item(conn, ingredient_id)
+    item = _stock_item(conn, ingredient_id)
+    conn.commit()  # before the response: a 200 means the change is stored
+    return item
