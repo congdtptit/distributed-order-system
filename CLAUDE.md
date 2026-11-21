@@ -18,7 +18,8 @@ Course project on distributed systems: order taking for a restaurant chain. Bran
 
 | Path | Content |
 |---|---|
-| `compose.yaml` | The whole system in Docker Compose: 3 Kafka brokers, 7 databases (6 + `test-db`), 7 service containers, the screens, Kafka UI, Adminer, the `tools` container |
+| `docker-compose.yml` | Entry point of Docker Compose: includes the files of `docker/` and declares the networks |
+| `docker/` | One file per group of containers: `kafka.yml`, `databases.yml`, `services.yml`, `frontend.yml`, `tools.yml` |
 | `backend/` | Python 3.12 uv workspace and its `Dockerfile` (one image for every Python container): `common/`, `order-service/`, `inventory-service/`, `kitchen-service/`, `query-service/`, each with `src/`, `tests/`, `migrations/`; `scripts/` for the init jobs and tools |
 | `frontend/` | TypeScript screens: React, Vite, Mantine, TanStack Query |
 | `bin/chaos` | Fault injection on the running cluster: a branch offline, a broker or service stopped, replication cut |
@@ -27,7 +28,9 @@ Everything runs in Docker; nothing is installed on the host. Source is mounted i
 
 | Task | Command |
 |---|---|
-| Start / stop everything | `docker compose up -d --wait` / `docker compose down` (topics, migrations and replication set themselves up) |
+| Start the core (14 containers, daily work) | `docker compose up -d --wait` |
+| Start everything (21 containers: adds inventory-2, pos02, online, Kafka UI, Adminer) | `docker compose --profile full up -d --wait`; needed for the demo and for scenarios 35 and 42 |
+| Stop | `docker compose --profile full down` (topics, migrations and replication set themselves up again on the next start) |
 | Follow services | `docker compose logs -f kitchen inventory-1 inventory-2` |
 | Backend tests, tiers 1 and 2 | `docker compose exec tools pytest -m "not tier3"` |
 | Backend tier 3 tests | the `test-runner` subagent, or `docker compose exec tools pytest -m tier3` |
@@ -39,8 +42,8 @@ Everything runs in Docker; nothing is installed on the host. Source is mounted i
 | URL | What |
 |---|---|
 | `http://localhost:5173` | The screens |
-| `http://localhost:8080` / `:8081` | Kafka UI (topics, messages, consumer lag) / Adminer (log in to `inventory-db`, `pos01-db`…, user and password `app`) |
-| `http://localhost:8101`, `8102`, `8201`, `8301`–`8303`, `8401` | inventory-1, inventory-2, kitchen, pos01, pos02, online, query; each has `/health` and `/docs` |
+| `http://localhost:8080` / `:8081` | Profile `full`: Kafka UI (topics, messages, consumer lag) / Adminer (log in to `inventory-db`, `pos01-db`…, user and password `app`) |
+| `http://localhost:8101`, `8102`, `8201`, `8301`–`8303`, `8401` | inventory-1, inventory-2, kitchen, pos01, pos02, online, query (8102, 8302, 8303 with profile `full`); each has `/health` and `/docs` |
 
 Hooks format each edited file (ruff, Biome) and refuse to end a turn while changed code fails pyright, tsc or the tier 1 and 2 tests of its module.
 

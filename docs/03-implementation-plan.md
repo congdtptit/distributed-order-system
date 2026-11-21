@@ -1,8 +1,15 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 8 · 22 Nov 2026
+Revision 9 · 22 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the documentation phase and no code has been written. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 9
+
+| Section | Change | Reason |
+|---|---|---|
+| 2 | The compose setup is split by group into `docker/kafka.yml`, `databases.yml`, `services.yml`, `frontend.yml`, `tools.yml`, included from `docker-compose.yml` at the root. Two profiles: the core (14 containers) by default, `full` (21) for the demo and the scenarios that need a second Inventory, a second branch or the tools. The Vite server's heap is capped | @Naul, 22 Nov 2026: one 320-line file was hard to read, `docker-compose.yml` is the name people know, and daily work does not need all 21 containers |
+| 6 | Resources measured per profile | |
 
 ## Changes in revision 8
 
@@ -102,23 +109,26 @@ The hardest parts of the project, races and deduplication, are solved by row loc
 
 | Path | Content |
 |---|---|
-| `compose.yaml` | The whole system: `docker compose up -d --wait` starts it, `docker compose down` stops it |
+| `docker-compose.yml` | Entry point: includes the files of `docker/` and declares the networks. `docker compose up -d --wait` starts the core, `docker compose --profile full up -d --wait` everything |
+| `docker/` | One file per group of containers: `kafka.yml`, `databases.yml`, `services.yml`, `frontend.yml`, `tools.yml` |
 | `backend/` | One uv workspace: the Python modules below, each with `src/`, `tests/` and `migrations/`; `scripts/` for the init jobs and tools; `conftest.py` with the shared fixtures; the `Dockerfile` of the one image every Python container uses |
 | `frontend/` | The npm project of the screens |
 | `bin/chaos` | Fault injection for the tier 3 scenarios and the demo |
 | `e2e/` | End-to-end scenarios across services, from step 7 |
 
-Nothing is installed on the host machine beyond Docker. The containers of `compose.yaml`:
+Nothing is installed on the host machine beyond Docker. The containers, by file:
 
-| Group | Containers | Notes |
+| File | Containers | Notes |
 |---|---|---|
-| Kafka | `kafka1`, `kafka2`, `kafka3`, `kafka-init` | `kafka-init` creates the topics, checks their settings and exits |
-| Databases | `inventory-db`, `kitchen-db`, `pos01-db`, `pos02-db`, `online-db`, `central-db`, `test-db` | Branch DBs run with logical WAL; `test-db` keeps its data in memory and serves only the tests |
-| Services | `inventory-1`, `inventory-2`, `kitchen`, `pos01`, `pos02`, `online`, `query` | One image, told apart by `SERVICE` and `BRANCH_ID`. Each applies its migrations on start (a lock keeps the two Inventory instances from racing), then serves its API with reload on source changes. Host ports 8101, 8102, 8201, 8301–8303, 8401 |
-| Replication | `replication-init` | Creates the publications and the three subscriptions of section 5 of the design, then exits |
-| Screens | `frontend` | Vite dev server on port 5173; forwards `/api/<service>` to the services. `inventory` resolves to both instances |
-| Looking inside | `kafka-ui` (8080), `adminer` (8081) | Topics, messages and consumer lag; the content of every database |
-| Tools | `tools` | Tests, lint and type checks: `docker compose exec tools pytest` |
+| `kafka.yml` | `kafka1`, `kafka2`, `kafka3`, `kafka-init` | `kafka-init` creates the topics, checks their settings and exits |
+| `databases.yml` | `inventory-db`, `kitchen-db`, `pos01-db`, `pos02-db`, `online-db`, `central-db`, `test-db` | Branch DBs run with logical WAL; `test-db` keeps its data in memory and serves only the tests |
+| `services.yml` | `inventory-1`, `inventory-2`, `kitchen`, `pos01`, `pos02`, `online`, `query` | One image, told apart by `SERVICE` and `BRANCH_ID`. Each applies its migrations on start (a lock keeps the two Inventory instances from racing), then serves its API with reload on source changes. Host ports 8101, 8102, 8201, 8301–8303, 8401 |
+| `services.yml` | `replication-init` | Creates the publication of each running branch DB and its subscription at the central DB (section 5 of the design), then exits; it runs again when the `full` profile starts |
+| `frontend.yml` | `frontend` | Vite dev server on port 5173, heap capped at 512 MB; forwards `/api/<service>` to the services. `inventory` resolves to every running instance |
+| `tools.yml` | `kafka-ui` (8080), `adminer` (8081) | Topics, messages and consumer lag; the content of every database |
+| `tools.yml` | `tools` | Tests, lint and type checks: `docker compose exec tools pytest`. It also builds the backend image |
+
+**Profiles.** Without a profile Compose starts the core, enough for daily work and most scenarios: the three brokers, `inventory-1`, `kitchen`, `pos01`, `query`, their databases, `test-db`, `frontend`, `tools` and the two init jobs. `--profile full` adds `inventory-2` (scenario 42), `pos02` and `online` with their databases (scenario 35 and the cross-branch cases), Kafka UI and Adminer. The demo and the tier 3 run use `full`.
 
 The networks follow the paths data takes, so that one path can be cut without the others: `kafka-net` (brokers and every service that produces or consumes), one network per service and its database, `replication-net` (the branch DBs, the central DB and the Order Query Service), `api-net` (the screens and every API), `test-net`. `bin/chaos offline pos01` therefore cuts POS01 off Kafka while it still writes to its database and answers its API, which is the situation of scenarios 10 and 36.
 
@@ -144,7 +154,7 @@ The Python modules live in `backend/`, the screens in `frontend/`.
 | `kitchen-service` | Table 3.2, the three kitchen staff buttons |
 | `query-service` | The Order Query Service: Management reporting read from the Central Order Replica (sections 5 and 6 of the design) |
 | `frontend` | The screens, in TypeScript: branch (POS and Online), Kitchen, Inventory, monitoring (Flow D), Management, and a demo page with a branch and the Kitchen side by side. Labels are in Vietnamese, using the glossary in `CLAUDE.md` |
-| `compose.yaml`, `bin/chaos`, `e2e/` | The cluster, fault injection, end-to-end scenarios |
+| `docker-compose.yml`, `docker/`, `bin/chaos`, `e2e/` | The cluster, fault injection, end-to-end scenarios |
 
 ### Four structural principles
 
@@ -158,7 +168,7 @@ The Python modules live in `backend/`, the screens in `frontend/`.
 - **Create topics with a script**, with the partition counts of point 6 in section 8 of the design, `replication.factor=3` and `min.insync.replicas=2`. Do not rely on auto-create.
 - **Kafka's internal topics also need 3 replicas** (`offsets.topic.replication.factor=3`). Otherwise stopping one broker in scenario 31 can stall the consumers.
 - **A pattern subscription sees a new topic only after a metadata refresh**, 5 minutes by default. Create every branch's topics before starting the services to avoid the wait.
-- **Simulate network loss** with `bin/chaos`, which disconnects a container from one network of `compose.yaml` (see above).
+- **Simulate network loss** with `bin/chaos`, which disconnects a container from one network of the compose setup (see above).
 
 ## 3. Test strategy
 
@@ -265,7 +275,7 @@ CI runs on GitHub Actions, one workflow file per row in `.github/workflows/`.
 | `nightly` | Once a night, and on manual start | The tier 3 tests with a real Kafka; they are slow and can be flaky, so they do not block a pull request | Step 7 |
 | `review` | Every pull request | Review by `claude-code-action`, with a `REVIEW.md` holding the twelve prohibitions, a turn limit and a timeout | After step 1. It needs an API key stored as a repository secret |
 
-There is no continuous deployment: the system is demonstrated on one machine with Docker Compose and has no server to deploy to. In its place, `ci` gains a job in step 7 that starts `compose.yaml` and calls every service's `/health`, so that the demo setup cannot break unnoticed.
+There is no continuous deployment: the system is demonstrated on one machine with Docker Compose and has no server to deploy to. In its place, `ci` gains a job in step 7 that starts `docker compose --profile full` and calls every service's `/health`, so that the demo setup cannot break unnoticed.
 
 - **Test quality audit:** done by the `test-auditor` subagent inside `/scenario` (section 5.5). Before the demo, one run over every scenario gives the scenario-to-test table.
 - **Not needed for this project:** an MCP server (`psql` and the Kafka CLI through Bash are enough), the Agent SDK and OpenTelemetry.
@@ -299,6 +309,6 @@ Every part was created on 21 Nov 2026, in step 0 or before it. What is left belo
 - **Python catches fewer errors before the code runs.** Type hints checked by Pyright and the scenario tests have to make up for the missing compiler; both run before a turn ends.
 - **Reporting is designed but not built.** Logical replication was trial-run in step 0 (section 9 of the design): rows arrive, "data as of" stops moving while replication is stopped, and rows written while the central DB is down arrive after it returns. `GET /reports/summary` is still untried.
 - **How Kafka assigns partitions to the two Inventory instances** needs a trial run (point 6 in section 8 of the design). Scenario 42 therefore takes its handler-level test as the main one.
-- **Resources of the demo machine.** Measured on 22 Nov 2026 with every container of `compose.yaml` running, on a Docker Desktop with 4 CPUs and 5.8 GB of memory: about 3.1 GB in all. The three brokers take about 300–340 MB each (384 MB heap), Kafka UI about 320 MB, each service container about 80 MB, each database about 25–30 MB, the frontend container up to 900 MB while tests run in it. Measure again in step 7, when the services consume and produce.
+- **Resources of the demo machine.** Measured on 22 Nov 2026, idle, on a Docker Desktop with 4 CPUs and 5.8 GB of memory: about 2.5 GB for the core profile and 3.1 GB for `full`. The three brokers take about 300–350 MB each (384 MB heap), Kafka UI about 330 MB, each service container about 80 MB, each database about 25–30 MB, the frontend container about 200 MB (without the heap cap Vite held 1 GB). Measure again in step 7, when the services consume and produce.
 - **A second toolchain.** Node and npm run in their own container, like the Python tools. Their `node_modules` stay inside the container, so the editor sees the TypeScript types only when the project is opened in the dev container. Major versions move fast there: step 0 found that TypeScript 7 breaks `openapi-typescript`.
 - **Tier 3 scenarios tend to be flaky.** They depend on when containers stop and start; they need explicit wait conditions instead of waiting on time.

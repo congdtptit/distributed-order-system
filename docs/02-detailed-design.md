@@ -1,8 +1,14 @@
 # Detailed design – Kafka events, DB schemas and API
 
-Revision 6 · 21 Nov 2026 · @Naul · follows business specification v1.5
+Revision 7 · 22 Nov 2026 · @Naul · follows business specification v1.5
 
 This document turns business specification v1.5 (the lean edition) into three things to code against: the Kafka event catalogue, each service's DB schema, and the API. There is no existing codebase to align with: the base flow is built in this project as well, so the event names, table names, column names and API paths here are the ones to use.
+
+## Changes in revision 7
+
+| Section | Change | Reason |
+|---|---|---|
+| 9 | The replication row points to section 2 of document 03 instead of naming a compose file | The compose setup was split into several files on 22 Nov 2026 |
 
 ## Changes in revision 6
 
@@ -473,7 +479,7 @@ The run on 21 Nov 2026 used PostgreSQL 16.2 and a temporary script that is not p
 | Branch, races | 200 runs of the sender and the cancel button at the same time (83 local cancels, 117 through the Kitchen); 200 runs of two cancel commands at the same time; 200 runs of a cancel and a Completed message at the same time. The first version's approach reproduces both defects described above | 37 |
 | Kitchen | Cancel arriving before the order; duplicate order arrival; wrong-branch cancel before and after the order arrives; reason per branch; cancel while Cooking; the ticket warning; the "needs review" mark is not duplicated | 1, 2, 6, 23, 27, 29, 34, 35 |
 | Kitchen, races | 200 runs of Cancel and Start cooking at the same time (cooking won 98 times, cancel won 102 times); 200 runs of an order and a cancel request for the same order ID arriving at the same time | 3, 28 |
-| Replication (separate run, step 0) | On PostgreSQL 16.14, the publication and subscription at the end of section 5 between a branch DB and the central DB: an order and a heartbeat arrive in about 0.2 s; with the subscription disabled for 5 s the central `beat_at` stays still while the branch keeps beating, then catches up in about 0.2 s; with the central DB paused for 5 s, three orders written meanwhile arrive once it is back. The one-off script was removed when the environment moved to Docker Compose; `replication-init` in `compose.yaml` now sets replication up and `bin/chaos cut-replication` cuts it | 55 (the "data as of" part) |
+| Replication (separate run, step 0) | On PostgreSQL 16.14, the publication and subscription at the end of section 5 between a branch DB and the central DB: an order and a heartbeat arrive in about 0.2 s; with the subscription disabled for 5 s the central `beat_at` stays still while the branch keeps beating, then catches up in about 0.2 s; with the central DB paused for 5 s, three orders written meanwhile arrive once it is back. The one-off script was removed when the environment moved to Docker Compose; the `replication-init` container now sets replication up and `bin/chaos cut-replication` cuts it (section 2 of document 03) | 55 (the "data as of" part) |
 
 Not yet checked:
 
