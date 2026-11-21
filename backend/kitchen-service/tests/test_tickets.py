@@ -22,6 +22,7 @@ from kitchen_support import (
     records_count,
     sent_envelopes,
 )
+from psycopg.types.json import Jsonb
 
 from common import reasons
 from common.api import get_clock, get_conn
@@ -316,3 +317,82 @@ def test_an_older_flag_message_does_not_overwrite_a_newer_one(kdb: str, api: Tes
     assert tickets(api)[str(order_id)]["warnings"] == []
     deliver(kdb, check_changed("THIT_BO", True, seq=1, epoch=2))  # a new epoch wins
     assert tickets(api)[str(order_id)]["warnings"] == ["THIT_BO"]
+
+
+def cancel_pending(kdb: str, order_id: uuid.UUID, reasons_by_branch: dict[str, str]) -> None:
+    """Test setup: the Cancel-pending record that step 5 creates when cancel requests arrive
+    before the order (table 3.2)."""
+    with psycopg.connect(kdb) as conn:
+        conn.execute(
+            "INSERT INTO kitchen_orders (order_id, status, cancel_branches, cancel_reasons)"
+            " VALUES (%s, 'HUY_CHO_DON', %s, %s)",
+            (order_id, list(reasons_by_branch), Jsonb(reasons_by_branch)),
+        )
+
+
+def test_the_order_meets_a_cancel_request_from_its_origin_branch_and_is_cancelled(kdb: str) -> None:
+    """Table 3.2: Cancel-pending, order arrives, origin branch is in the list → Cancelled
+    (customer cancel); release command to Inventory, Cancelled to the branch."""
+    order_id = uuid.uuid4()
+    cancel_pending(kdb, order_id, {"POS02": reasons.WAITED_TOO_LONG, "POS01": reasons.CHANGED_MIND})
+    deliver(kdb, order_reserved(order_id, origin="POS01"))
+    rec = record(kdb, order_id)
+    assert rec is not None
+    assert (rec["status"], rec["cancelled_by"], rec["close_reason"]) == (
+        "DA_HUY",
+        "CUSTOMER",
+        reasons.CHANGED_MIND,
+    )
+    assert [(s.topic, s.event_type, s.payload) for s in outbox(kdb)] == [
+        (
+            "stock-commands",
+            "ReleaseRequested",
+            {
+                "cancelled_by": "CUSTOMER",
+                "reason_code": reasons.CHANGED_MIND,
+                "spoiled_ingredients": [],
+            },
+        ),
+        (
+            "status-events.POS01",
+            "OrderCancelled",
+            {"cancelled_by": "CUSTOMER", "reason_code": reasons.CHANGED_MIND},
+        ),
+    ]
+
+
+def test_the_order_meets_only_wrong_branch_requests_and_gets_a_ticket_with_a_warning(
+    kdb: str,
+) -> None:
+    """Table 3.2: Cancel-pending, order arrives, origin branch is not in the list → Queued;
+    the recorded requests are dismissed and a HUY_SAI_CHI_NHANH alert is written."""
+    order_id = uuid.uuid4()
+    cancel_pending(kdb, order_id, {"POS02": reasons.CHANGED_MIND})
+    deliver(kdb, order_reserved(order_id, origin="POS01"))
+    with psycopg.connect(kdb) as conn:
+        row = conn.execute(
+            "SELECT status, cancel_branches, cancel_reasons FROM kitchen_orders"
+            " WHERE order_id = %s",
+            (order_id,),
+        ).fetchone()
+        alerts = conn.execute("SELECT kind, order_id, detail FROM alerts").fetchall()
+    assert row == ("CHO_NAU", [], {})
+    assert alerts == [
+        ("HUY_SAI_CHI_NHANH", order_id, {"origin_branch": "POS01", "dismissed": ["POS02"]})
+    ]
+    assert outbox(kdb) == []  # no reply to the dismissed branch (section 4 of document 02)
+
+
+def test_failed_at_inventory_on_a_cancel_pending_record_is_recorded(kdb: str) -> None:
+    """Table 3.2: Cancel-pending, Inventory reports Failed → Failed, nothing more."""
+    order_id = uuid.uuid4()
+    cancel_pending(kdb, order_id, {"POS01": reasons.CHANGED_MIND})
+    deliver(kdb, order_failed(order_id, reason=reasons.ORDER_EXPIRED))
+    rec = record(kdb, order_id)
+    assert rec is not None
+    assert (rec["status"], rec["origin_branch"], rec["close_reason"]) == (
+        "THAT_BAI",
+        "POS01",
+        reasons.ORDER_EXPIRED,
+    )
+    assert outbox(kdb) == []

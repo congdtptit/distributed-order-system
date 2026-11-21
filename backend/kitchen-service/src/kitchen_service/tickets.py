@@ -35,6 +35,9 @@ COMPLETED, CANCELLED, FAILED = "HOAN_TAT", "DA_HUY", "THAT_BAI"
 TERMINAL = frozenset({COMPLETED, CANCELLED, FAILED})
 CUSTOMER, KITCHEN = "CUSTOMER", "KITCHEN"
 
+# Columns stored as JSONB; ``cancel_branches`` is TEXT[] and takes a plain list.
+_JSONB_COLUMNS = frozenset({"cancel_reasons", "items", "reserved", "spoiled"})
+
 _COLUMNS = (
     "order_id, status, origin_branch, cancel_branches, cancel_reasons, cancelled_by,"
     " close_reason, items, reserved, spoiled, order_created_at"
@@ -103,7 +106,7 @@ def _set(
 ) -> None:
     """A conditional write on the status read under the lock (BR7)."""
     columns = ", ".join(f"{name} = %s" for name in values)
-    params = [Jsonb(v) if isinstance(v, (dict, list)) else v for v in values.values()]
+    params = [Jsonb(v) if name in _JSONB_COLUMNS else v for name, v in values.items()]
     changed = conn.execute(
         f"UPDATE kitchen_orders SET {columns}, updated_at = %s"  # pyright: ignore[reportArgumentType]
         " WHERE order_id = %s AND status = %s",
