@@ -1,8 +1,15 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 16 · 22 Nov 2026
+Revision 17 · 22 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the implementation phase; section 7 records what has been built so far. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 17
+
+| Section | Change | Reason |
+|---|---|---|
+| 4, 7 | Step 5 is done, so the Kitchen's part of phase 1 is complete; progress and estimate updated, with what step 5 built and how it was checked | Scenarios 1, 2, 3, 8, 23, 25, 27, 28, 33, 34, 35 and 51 pass on 22 Nov 2026 |
+| 6 | The flaky failure is identified and fixed | It was scenario 31's own precondition (section 7, step 5) |
 
 ## Changes in revision 16
 
@@ -247,7 +254,7 @@ The order follows the steps and phase 2 in section 7 of the detailed design; the
 | 0. Preparation | Project skeleton, compose files, topic creation script, CI, the remaining Claude Code configuration of section 5.7. Done on 21 Nov 2026 | One session in plan mode; a person reviews closely |
 | 1. Shared | The `common` module. Done on 22 Nov 2026 (section 7) | One session; reviewed by a reviewer running in a fresh context |
 | 2–3. Inventory | Reserve, release, waste, consumed, the stock-check flag. Steps 2 and 3 done on 22 Nov 2026 (section 7) | A separate worktree, one scenario at a time |
-| 4–5. Kitchen | Table 3.2, cancel requests, origin branch. Step 4 done on 22 Nov 2026 (section 7) | A separate worktree, one scenario at a time |
+| 4–5. Kitchen | Table 3.2, cancel requests, origin branch. Steps 4 and 5 done on 22 Nov 2026 (section 7) | A separate worktree, one scenario at a time |
 | 6. Branch | Send queue, local cancel, applying messages by rank | A separate worktree, one scenario at a time |
 | 6b. Screens | The `frontend` screens for the branch, the Kitchen, Inventory and monitoring, and the demo page, against the APIs of steps 2–6 | One session, one screen at a time with the `/screen` skill |
 | 7. Integration | Tier 3 scenarios, Flow D (`/monitor`, `/alerts`), the Order Query Service and its report (scenario 55; replication itself runs since step 0), the Management screen; the performance test with Apache JMeter (section 2 of document 04) | One main session; slow test runs are delegated to a subagent |
@@ -360,11 +367,11 @@ Every part was created on 21 Nov 2026, in step 0 or before it. What is left belo
 - **How Kafka assigns partitions to the two Inventory instances** needs a trial run (point 6 in section 8 of the design). Scenario 42 therefore takes its handler-level test as the main one.
 - **Resources of the demo machine.** Measured on 22 Nov 2026, idle, on a Docker Desktop with 4 CPUs and 5.8 GB of memory: about 2.5 GB for the core profile and 3.1 GB for `full`. The three brokers take about 300–350 MB each (384 MB heap), Kafka UI about 330 MB, each service container about 80 MB, each database about 25–30 MB, the frontend container about 200 MB (without the heap cap Vite held 1 GB). Measure again in step 7, when the services consume and produce.
 - **A second toolchain.** Node and npm run in their own container, like the Python tools. Their `node_modules` stay inside the container, so the editor sees the TypeScript types only when the project is opened in the dev container. Major versions move fast there: step 0 found that TypeScript 7 breaks `openapi-typescript`.
-- **Tier 3 scenarios tend to be flaky.** They depend on when containers stop and start; they need explicit wait conditions instead of waiting on time. On 22 Nov 2026 one full run had one failure that could not be identified (the summary did not name it) and four later runs passed; runs now use `-rf` so that a failure is named.
+- **Tier 3 scenarios tend to be flaky.** They depend on when containers stop and start; they need explicit wait conditions instead of waiting on time. On 22 Nov 2026 one full run had a failure that the summary did not name; with `-rf` the next one was named: scenario 31's test required a batch in flight at the instant of the kill, which a fast relay sometimes did not leave. Fixed by asserting what the scenario names (orders still being sent).
 
 ## 7. Progress
 
-Updated 22 Nov 2026, after step 4. A step is done when its scenarios pass, the code passes Ruff and Pyright, the reviews of section 5.3 are closed, and its sections of the report in `report/` are updated.
+Updated 22 Nov 2026, after step 5. A step is done when its scenarios pass, the code passes Ruff and Pyright, the reviews of section 5.3 are closed, and its sections of the report in `report/` are updated.
 
 | Step | State | Scenarios passing |
 |---|---|---|
@@ -373,14 +380,14 @@ Updated 22 Nov 2026, after step 4. A step is done when its scenarios pass, the c
 | 2. Inventory: receiving orders | Done 22 Nov 2026 | 9, 15, 16, 24, 30, 39, 42, 44 |
 | 3. Inventory: release, consumed, waste, stock check | Done 22 Nov 2026 | 5, 22, 43, 49; the Inventory parts of 6 and 48 |
 | 4. Kitchen: tickets, buttons, warnings | Done 22 Nov 2026 | 4, 50, 52; the Kitchen parts of 6 and 48 |
-| 5. Kitchen: cancel requests | Next | 0 of 12 |
-| 6. Branch | Can start now, in parallel | 0 of 7 |
+| 5. Kitchen: cancel requests | Done 22 Nov 2026 | 1, 2, 3, 8, 23, 25, 27, 28, 33, 34, 35, 51 |
+| 6. Branch | Next | 0 of 7 |
 | 6b. Screens | After steps 2–6 | – |
 | 7. Integration | After step 6 | 0 of 1 (scenario 55), plus the end-to-end versions and the performance test |
 | 8. Report material | After step 7 | – |
 | Phase 2 | After phase 1 | 0 of 4 |
 
-**Scenarios:** 18 of 44 pass in full (41 %); 6 and 48 pass every phase 1 part and wait for phase 2. **Estimate of work done:** about 41 % of the whole project, weighting each step by its expected effort. The report template added a performance test and report material, so the weights were rescaled on 22 Nov 2026: preparation 13 %, step 1 9 %, Inventory 13 %, Kitchen 13 % (step 4 counts for 6 %), branch 11 %, screens 11 %, integration and reporting 9 %, performance test 5 %, report material 8 %, phase 2 5 %, demo 3 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.
+**Scenarios:** 32 of 44 pass at their step (73 %). Of those, 6 and 48 wait for phase 2, and 3, 4, 8, 23, 24 and 33 are checked up to the branch's topic: the branch applying the message is step 6, and their end-to-end versions follow it. **Estimate of work done:** about 48 % of the whole project, weighting each step by its expected effort. The report template added a performance test and report material, so the weights were rescaled on 22 Nov 2026: preparation 13 %, step 1 9 %, Inventory 13 %, Kitchen 13 %, branch 11 %, screens 11 %, integration and reporting 9 %, performance test 5 %, report material 8 %, phase 2 5 %, demo 3 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.
 
 ### What step 1 built
 
@@ -453,3 +460,14 @@ Shared pieces added to `common`: the reason codes (`reasons.py`), the seed reade
 - **Tests:** 133 backend tests pass (120 in tiers 1 and 2, 13 in tier 3). Scenario 50 runs through the HTTP API. Scenario 52 races Reject against Start cooking 100 times on two connections; the order is reserved by Inventory's real handler and the Kitchen's command goes back to it, so "leaves Held exactly once" is checked on Inventory's side; both buttons won in some runs. Scenario 4 runs on the cluster: the order passes through the real services, every Inventory instance is stopped, the ticket is rejected over HTTP, `OrderCancelled` reaches `status-events.POS01` at once, and when Inventory is back it releases exactly once. The warning test of 6 and 48 hands each service's real messages to the other.
 - **The tests can fail:** ignoring the required status, dropping the row lock and the conditional write (both buttons then win), overwriting flags whatever the version, dropping the warning join, or not recording Inventory's Failed each fails at least one test.
 - **Reviews:** the test audit found that the warning test started from a hand-built message; it now uses Inventory's real one. The specification review found one fault, fixed: an order meeting a Cancel-pending record of other branches could never become a ticket (a JSONB value written to a `TEXT[]` column), which no test reached because Cancel-pending records come in step 5; three tests now cover those rows. It also found that the documents said the buttons insert a `CHUA_CO` row; the documents were corrected (revision 12 of the design).
+
+### What step 5 built
+
+`kitchen_service/tickets.py` gained `make_cancel_requested_handler`: table 3.2 for cancel requests in its order of precedence (wrong branch first, then the explicit rows, then the stored result), `CancelPending` to the asking branch, `CancelRejected` at Cooking or Completed (rule "Cancel requests in practice" in section 4 of the design). The service now subscribes to `cancel-events.*`. Each service accepts every message type only from the topics that carry it.
+
+### How step 5 was checked
+
+- **Tests:** 155 backend tests pass (141 in tiers 1 and 2, 14 in tier 3). Scenarios 1, 2, 8 and 35 run Inventory's real handler next to the Kitchen's, so "Inventory releases once" is checked on Inventory's DB. The races 3 and 51 (60 runs each, Inventory included) and 28 (100 runs) saw both outcomes. Scenario 25 stops the Kitchen container while 10 orders and 5 cancel requests arrive, some cancels before their order and some after, then starts it: every order ends where table 3.2 puts it, with one release command and one Cancelled per cancelled order.
+- **The tests can fail:** removing the wrong-branch check, answering Cancelled before the order arrives, cancelling a Cooking ticket, or treating a Failed record as none each fails at least one test.
+- **Reviews:** the specification review found no violation; it found that message types were not tied to topics (a misconfigured branch could release stock or decide an order) and that a Failed record with no origin answered nothing; both fixed (revision 13 of the design). The test audit asked for the invariants in scenarios 2 and 8, the reply topics in 35 and 28, the release-everything branch of 51 checked at Inventory, a stricter wait in 25, and errors surfaced from the race threads; all added.
+- **Flaky test found:** the full run named it at last: scenario 31's test (fixed, section 6).

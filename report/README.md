@@ -45,7 +45,7 @@ Script ghép các file theo thứ tự, thay các dòng `<!-- include: … -->` 
 | Phần I | Chưa viết; chờ quyết định ai viết |
 | Mô hình HLD | Có |
 | Danh sách chức năng | Có đủ các chức năng của đợt 1 và đợt 2 |
-| Thiết kế chức năng | Có cho các giao dịch đã làm (Kho, Bếp); các giao dịch khác bổ sung theo từng bước |
+| Thiết kế chức năng | Có cho các giao dịch đã làm: Kho và Bếp (12 giao dịch, gồm quyết định yêu cầu hủy); chi nhánh ở bước 6 |
 | Thiết kế CSDL | Có: danh sách CSDL, sơ đồ tổng quát, danh sách bảng; sơ đồ ER và bảng chi tiết sinh từ CSDL đang chạy |
 | Công nghệ | Có |
 | Giao diện | Chờ bước 6b |

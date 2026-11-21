@@ -88,7 +88,7 @@ Các nguyên tắc chung: mỗi tin có `event_id` để chống trùng (`proces
 
 ## II. THIẾT KẾ CHỨC NĂNG PHẦN MỀM
 
-Mục này có thẻ use case cho các giao dịch đã xây dựng. Các giao dịch còn lại được bổ sung khi bước tương ứng hoàn thành (chi nhánh: bước 6; quyết định yêu cầu hủy: bước 5; cảnh báo và báo cáo: bước 7; tình trạng món: đợt 2).
+Mục này có thẻ use case cho các giao dịch đã xây dựng. Các giao dịch còn lại được bổ sung khi bước tương ứng hoàn thành (chi nhánh: bước 6; cảnh báo và báo cáo: bước 7; tình trạng món: đợt 2).
 
 ### 1. Kho - module
 
@@ -352,7 +352,38 @@ flowchart TD
   d -- CHO_NAU hoặc DANG_NAU --> z
 ```
 
-##### 2.2.2. Nhận cờ kiểm kho - giao dịch
+##### 2.2.2. Quyết định yêu cầu hủy - giao dịch
+
+- **Tên Usecase:** Quyết định yêu cầu hủy
+- **Mô tả Usecase:** Chức năng cho phép Kitchen Service quyết định một yêu cầu hủy đơn do chi nhánh gửi; Bếp là bên duy nhất quyết định hủy một đơn đã gửi đi (BR7).
+- **Tác nhân chính:** Kitchen Service (tự động, tin `CancelRequested` trên `cancel-events.<branch>`). **Tác nhân phụ:** chi nhánh gửi yêu cầu, chi nhánh gốc, Inventory Service (nhận lệnh hoàn kho).
+- **Điều kiện bắt đầu (Pre-Condition):** thu ngân hoặc khách hàng đã yêu cầu hủy một đơn mà tin tạo đơn đã được thử gửi (BR9).
+- **Điều kiện kết thúc (Post-Condition):** đơn có đúng một dòng trong `kitchen_orders`; câu trả lời cho chi nhánh nằm trong outbox của Bếp.
+- **Trình tự các sự kiện:**
+  1. Lấy chi nhánh gửi từ tên topic; chèn dòng `CHUA_CO` nếu chưa có, khóa dòng.
+  2. Đã biết chi nhánh gốc mà yêu cầu đến từ chi nhánh khác: bỏ qua, không trả lời, ghi cảnh báo `HUY_SAI_CHI_NHANH`.
+  3. Chưa có đơn (`CHUA_CO`): tạo bản ghi Chờ hủy `HUY_CHO_DON`, ghi chi nhánh và lý do, trả cam kết `CancelPending` ("bếp sẽ không nấu") cho chi nhánh hỏi. Không bao giờ trả Đã hủy cho đơn chưa tới.
+  4. Đang Chờ hủy: thêm chi nhánh mới vào danh sách; yêu cầu lặp lại được trả `CancelPending` lần nữa, lý do đầu tiên được giữ.
+  5. Chờ nấu (`CHO_NAU`): chuyển `DA_HUY` (khách hủy), ghi `ReleaseRequested` tới Kho và `OrderCancelled` tới chi nhánh gốc.
+  6. Đang nấu hoặc Hoàn tất: giữ nguyên, trả `CancelRejected` ("Không hủy được: bếp đã bắt đầu nấu").
+  7. Đã hủy hoặc Thất bại: trả lại kết quả cũ; không bao giờ gửi lệnh hoàn kho lần hai.
+- **Các yêu cầu phi chức năng:** hủy và Bắt đầu nấu cùng lúc thì đúng một thao tác thắng (kịch bản 3); hai instance nhận đơn và yêu cầu hủy cùng lúc chỉ tạo một bản ghi (kịch bản 28); Bếp tắt rồi bật lại xử lý đủ mọi tin còn trong Kafka, không mất, không trùng (kịch bản 25).
+- **Biểu đồ hoạt động:**
+
+```mermaid
+flowchart TD
+  s((Bắt đầu)) --> a[Lấy chi nhánh gửi từ topic; chèn CHUA_CO nếu chưa có; khóa dòng]
+  a --> b{Đã biết chi nhánh gốc và khác chi nhánh gửi?}
+  b -- có --> w[Bỏ qua, ghi cảnh báo HUY_SAI_CHI_NHANH] --> z((Kết thúc))
+  b -- không --> c{Trạng thái hiện tại}
+  c -- CHUA_CO --> c1[Tạo HUY_CHO_DON, ghi chi nhánh và lý do] --> p[Outbox: CancelPending tới chi nhánh hỏi] --> z
+  c -- HUY_CHO_DON --> c2[Thêm chi nhánh nếu chưa có] --> p
+  c -- CHO_NAU --> c3[Chuyển DA_HUY] --> r[Outbox: ReleaseRequested tới Kho, OrderCancelled tới chi nhánh gốc] --> z
+  c -- DANG_NAU hoặc HOAN_TAT --> c4[Outbox: CancelRejected tới chi nhánh gốc] --> z
+  c -- DA_HUY hoặc THAT_BAI --> c5[Trả lại kết quả cũ] --> z
+```
+
+##### 2.2.3. Nhận cờ kiểm kho - giao dịch
 
 - **Tên Usecase:** Nhận cờ kiểm kho
 - **Mô tả Usecase:** Chức năng cho phép Kitchen Service ghi nhận nguyên liệu bị bật hoặc gỡ cờ kiểm kho để hiển thị cảnh báo trên phiếu.

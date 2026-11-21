@@ -46,10 +46,11 @@ flowchart LR
 | 29 | Tin có `event_type` lạ hoặc `schema_version` cao hơn mức hỗ trợ | Gửi tin hỏng xen giữa hai đơn hợp lệ trên cùng partition | Tin vào `dlq`, đơn bị đánh dấu `CAN_KIEM_TRA`, hai đơn kia vẫn được giữ nguyên liệu | Đạt |
 | 31 | Broker đang làm leader bị kill khi đang gửi tin | `kill` (SIGKILL) container leader của partition trong lúc outbox relay đang gửi | Không mất tin nào Kafka đã xác nhận; gửi vẫn tiếp tục; partition có leader mới | Đạt (3 lần liên tiếp) |
 | 4 | Kho ngừng hoạt động khi Bếp từ chối phiếu | Dừng mọi instance Inventory, từ chối phiếu qua API của Bếp, bật lại Kho | Chi nhánh nhận Đã hủy ngay; Kho hoàn kho đúng một lần khi bật lại | Đạt |
+| 3, 51, 52 | Hai thao tác tranh nhau trên cùng một phiếu | Hai kết nối, lặp 60–100 lần, có Kho thật nhận lệnh của Bếp | Đúng một thao tác thắng; Kho rời trạng thái Đang giữ đúng một lần theo bên thắng | Đạt |
 | 24 | Định tuyến theo chi nhánh | Gửi đơn thật vào `order-events.POS01` | Bếp nhận qua `kitchen-orders`; chỉ POS01 nhận trạng thái | Đạt |
-| 25 | Bếp tắt 2 giờ trong khi đơn và yêu cầu hủy vẫn đến | (bước 5) | | Chưa kiểm thử |
+| 25 | Bếp ngừng hoạt động trong khi đơn và yêu cầu hủy vẫn đến | Dừng container `kitchen`, gửi 10 đơn và 5 yêu cầu hủy (có cái trước, có cái sau đơn của nó), bật lại | Mọi đơn đến đúng trạng thái theo bảng 3.2; mỗi đơn bị hủy có đúng một lệnh hoàn kho và một Đã hủy; Kho hoàn kho đủ | Đạt |
 | 10, 36, 12 | Chi nhánh mất mạng | `bin/chaos offline` (bước 6) | | Chưa kiểm thử |
-| 28, 42 | Hai instance cùng xử lý một đơn | (bước 5, bước 7) | | Chưa kiểm thử |
+| 28, 42 | Hai instance cùng xử lý một đơn | Hai kết nối CSDL chạy song song, lặp 100 lần (bước 7 bổ sung bản chạy hai instance thật trên Kafka) | Chỉ một bản ghi, kết quả đúng bảng 3.2 dù tin nào đến trước (28); đúng một đơn được giữ, kho không âm (42) | Đạt |
 | 55 | Cắt nhân bản về Central Order Replica | `bin/chaos cut-replication` (bước 7) | | Chưa kiểm thử |
 
 #### 2.2. Công cụ kiểm thử

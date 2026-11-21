@@ -30,10 +30,10 @@ The `paths` above follow the module names in section 2 of `docs/03-implementatio
 
 | File | Content |
 |---|---|
-| `src/kitchen_service/tickets.py` | `_lock` (the row-lock sequence), the handlers of `OrderReserved`, `OrderFailed`, `IngredientCheckChanged`; the buttons `start_cooking`, `reject`, `complete`; `list_tickets` with warnings. Step 5 adds the `CancelRequested` handler here |
-| `src/kitchen_service/app.py` | Consumer (`kitchen-orders`, `menu-events`; add `cancel-events.*` with the step 5 handler, never before) and outbox relay threads; `GET /tickets` and the three buttons |
+| `src/kitchen_service/tickets.py` | `_lock` (the row-lock sequence), the handlers of `OrderReserved`, `OrderFailed`, `CancelRequested`, `IngredientCheckChanged`; `_from_inventory` (topic check); the buttons `start_cooking`, `reject`, `complete`; `list_tickets` with warnings |
+| `src/kitchen_service/app.py` | Consumer (`kitchen-orders`, `cancel-events.*`, `menu-events`) and outbox relay threads; `GET /tickets` and the three buttons |
 | `tests/kitchen_support.py` | Inventory's messages, `deliver` (through `handle_once`), `sent_envelopes` to hand real messages between the services, readers of the Kitchen DB |
 
 ## Scenarios of this module
 
-Steps 4 and 5 in section 7 of document 02: 1, 2, 3, 4, 6, 8, 23, 25, 27, 28, 33, 34, 35, 48, 50, 51, 52. Step 4 (4, 50, 52, and the warning parts of 6 and 48) passes since 22 Nov 2026.
+Steps 4 and 5 in section 7 of document 02: 1, 2, 3, 4, 6, 8, 23, 25, 27, 28, 33, 34, 35, 48, 50, 51, 52. Steps 4 and 5 pass since 22 Nov 2026 (6 and 48: the Kitchen part; 3, 8, 23, 33: up to the branch's topic, the branch side is step 6).

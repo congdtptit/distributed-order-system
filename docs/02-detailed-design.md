@@ -1,8 +1,16 @@
 # Detailed design – Kafka events, DB schemas and API
 
-Revision 12 · 22 Nov 2026 · @Naul · follows business specification v1.5
+Revision 13 · 22 Nov 2026 · @Naul · follows business specification v1.5
 
 This document turns business specification v1.5 (the lean edition) into three things to code against: the Kafka event catalogue, each service's DB schema, and the API. There is no existing codebase to align with: the base flow is built in this project as well, so the event names, table names, column names and API paths here are the ones to use.
+
+## Changes in revision 13
+
+| Section | Change | Reason |
+|---|---|---|
+| 4 | New rule "Cancel requests in practice": reasons, what a Cancel-pending record keeps, repeats, the answer to a Failed record with no origin, the alert detail | Built in step 5 (22 Nov 2026); the spec review listed what the documents did not state |
+| 4 | Each message type is accepted only from its own topics; on a branch topic, Inventory's and the Kitchen's types count as unreadable | The handlers were chosen by `event_type` alone, so a misconfigured branch writing `OrderFailed` to its cancel topic could decide an order, or `ReleaseRequested` to its order topic could release stock; section 13.2 of the specification exists to stop exactly such configuration errors |
+| 4 | The sentence on the requesting branch: it is added to `cancel_branches` only when the request is not ignored | The old wording read as if every request, wrong-branch ones included, joined the list |
 
 ## Changes in revision 12
 
@@ -348,12 +356,19 @@ CREATE TABLE flagged_ingredients (                -- from IngredientCheckChanged
 Rules that go with the schema:
 
 - **One entry point for every change**: messages from `kitchen-orders`, messages from `cancel-events` and the three staff buttons all run the same sequence (the buttons skip the first step: they act only on a row that exists, and answer 404 otherwise): insert a `CHUA_CO` row if none exists, `SELECT ... FOR UPDATE`, apply table 3.2, write the outbox, commit (section 13.4 of the specification).
-- **The branch that sent a cancel request** is taken from the topic name, not from `branch_id` in the message, and is then added to `cancel_branches` if it is not already there. That branch's reason is written to `cancel_reasons`; a repeated request from the same branch does not overwrite the existing reason.
+- **The branch that sent a cancel request** is taken from the topic name, not from `branch_id` in the message, and is then added to `cancel_branches` if it is not already there, unless the request is ignored as coming from the wrong branch (below). That branch's reason is written to `cancel_reasons`; a repeated request from the same branch does not overwrite the existing reason.
 - **When `OrderReserved` reaches a `HUY_CHO_DON` row**: if `origin_branch = ANY(cancel_branches)`, the row moves to `DA_HUY`, `close_reason` takes the origin branch's reason from `cancel_reasons`, and `ReleaseRequested` is emitted together with `OrderCancelled`. Otherwise `cancel_branches` and `cancel_reasons` are cleared, the row moves to `CHO_NAU`, and an `alerts` row of kind `HUY_SAI_CHI_NHANH` is written with the list of dismissed branches.
 - **A wrong-branch cancel request** that arrives when the row already has `origin_branch`: keep the status, send no reply, and write an `alerts` row of kind `HUY_SAI_CHI_NHANH`.
 - **The `alerts` table**: the Kitchen uses two kinds, `CAN_KIEM_TRA` and `HUY_SAI_CHI_NHANH`, inserted the same way as at Inventory.
 - **The red warning on the ticket** is a display-time join between the `reserved` of `CHO_NAU` tickets and the `flagged_ingredients` rows with `needs_check = TRUE`. A `flagged_ingredients` row is overwritten only when the message's `(epoch, seq)` is greater.
 - **The release command is stored durably before it is sent**: `ReleaseRequested` sits in `outbox_events` in the same transaction as the `status` change, so if Inventory is down the command is still there (scenario 4).
+- **Cancel requests in practice** (built in step 5):
+  - A request is decided even without a reason from the customer-cancel group of section 1 (the branch validates reasons, BR9); it is logged, never sent to the dlq. A Queued ticket cancelled that way gets `close_reason = CHANGED_MIND`, as a Cancel-pending record does on the order's arrival (rule "Tickets in practice").
+  - A Cancel-pending record keeps every asking branch and its first reason. A repeat from a listed branch changes nothing except filling in a reason that was missing, and gets `CancelPending` again. Cancelling a Queued ticket writes the origin branch and its reason to `cancel_branches` and `cancel_reasons`; at Cooking, Completed, Cancelled or Failed they are not written.
+  - `CancelPending` carries the asking branch as `branch_id` (the one exception to "Tickets in practice"), an empty payload, and the request as `causation_id`. A branch whose request is later dismissed hears nothing more.
+  - A request reaching a Failed record with no origin (left by a malformed `OrderFailed`) gets the stored `OrderFailed` at the asking branch.
+  - The `alerts` row of kind `HUY_SAI_CHI_NHANH` has `detail = {origin_branch, dismissed}`: the order's origin and the branches whose requests were ignored or dismissed. Each new message raises its own row.
+  - **Message types and topics:** Inventory's `OrderReserved` and `OrderFailed` are accepted only from `kitchen-orders`, `CancelRequested` only from `cancel-events.<branch>`; at Inventory, `ReleaseRequested` and `StockConsumed` only from `stock-commands`. A message of those types on another topic counts as unreadable (5 attempts, the dlq, a `CAN_KIEM_TRA` alert).
 - **Tickets in practice** (built in step 4):
   - `OrderFailed` reaching a Queued or Cooking ticket changes nothing and is logged: table 3.2 has no such row, and Inventory keeps one result per order (BR12). Reaching a Cancel-pending record it gives Failed and nothing more, as table 3.2 says, without comparing the recorded cancel branches with the origin branch.
   - An `OrderReserved` without `origin_branch` cannot be recorded and counts as unreadable (5 attempts, then the dlq). An `OrderFailed` with a missing field is still recorded as `THAT_BAI`, with NULL in that column, because recording the result matters more (prohibition 11). A `created_at` that cannot be read is kept as NULL `order_created_at`.
