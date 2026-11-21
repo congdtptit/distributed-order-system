@@ -3,7 +3,7 @@
 The tests run against the ``test-db`` PostgreSQL of docker-compose.yml (in CI, a PostgreSQL service
 of the workflow), and each test gets a new, empty database in it. Tests never delete rows to
 reset state: prohibition 1 in section 9 of docs/01-business-spec.md forbids deleting order
-records, so a clean state means a new database.
+records, so a clean state means a new database (dropped as a whole after the test).
 
 ``TEST_DATABASE_URL`` points at the server's default database.
 
@@ -42,12 +42,18 @@ def postgres_server() -> str:
 
 
 @pytest.fixture
-def fresh_db(postgres_server: str) -> str:
-    """Connection string of a new, empty database."""
+def fresh_db(postgres_server: str) -> Iterator[str]:
+    """Connection string of a new, empty database, dropped after the test.
+
+    ``test-db`` keeps its data in memory; without the drop, a few hundred test databases fill
+    it and PostgreSQL stops.
+    """
     name = f"t_{uuid.uuid4().hex[:16]}"
     with psycopg.connect(postgres_server, autocommit=True) as conn:
         conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
-    return make_conninfo(postgres_server, dbname=name)
+    yield make_conninfo(postgres_server, dbname=name)
+    with psycopg.connect(postgres_server, autocommit=True) as conn:
+        conn.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))
 
 
 def migrated_db(dsn: str, module: str) -> str:
