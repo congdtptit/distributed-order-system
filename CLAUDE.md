@@ -73,6 +73,7 @@ Hooks format each edited file (ruff, Biome) and refuse to end a turn while chang
 | Consumers, deduplication, dlq | 01 sections 9 and 13.3; 02 sections 2 and 3 |
 | One test scenario | 01 section 12; its step in 02 section 7; its tier in 03 section 3 |
 | What the system promises and does not promise | 01 sections 14 and 15 |
+| Dish catalogue, names, seed data | 02 section 1 ("Catalogue and seed data"); the `dishes` table in section 5 |
 
 ## Glossary
 

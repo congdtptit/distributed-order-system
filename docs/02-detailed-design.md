@@ -1,8 +1,17 @@
 # Detailed design – Kafka events, DB schemas and API
 
-Revision 7 · 22 Nov 2026 · @Naul · follows business specification v1.5
+Revision 8 · 22 Nov 2026 · @Naul · follows business specification v1.5
 
 This document turns business specification v1.5 (the lean edition) into three things to code against: the Kafka event catalogue, each service's DB schema, and the API. There is no existing codebase to align with: the base flow is built in this project as well, so the event names, table names, column names and API paths here are the ones to use.
+
+## Changes in revision 8
+
+| Section | Change | Reason |
+|---|---|---|
+| 1 | The dish catalogue and the seed data come from one file, `backend/seed/menu.json` | No document said where dish names, ingredient names, recipes and starting stock come from; the order form had no source of dishes in phase 1, since `GET /menu` is phase 2. Decided by @Naul on 22 Nov 2026 |
+| 2 | `items[]` of `OrderCreated` and `OrderReserved` carry the dish name; `reserved[]` carries the ingredient name and unit | The Kitchen screen shows names without calling another service, and an order keeps the names it was placed with |
+| 3 | `stock.name` | Ingredient names for the screens |
+| 5, 6 | The branch's `dishes` table and `GET /dishes`; `POST /orders` rejects a dish that is not in it | The order form works while the branch is offline (scenario 10) |
 
 ## Changes in revision 7
 
@@ -78,6 +87,7 @@ Specification v1.5 is the deciding source for business behaviour. When this docu
 - **Statuses in the DB**: unaccented upper-case codes (`CHO_KHO`, `DANG_GIU`…), continuing the naming of `CHUA_CO` and `THAT_BAI` in section 13.4 of the specification.
 - **Reasons**: fixed codes from the catalogue in section 10 of the specification; no free text.
 - **Ingredient quantities**: decimal numbers with a fixed unit per ingredient, type `NUMERIC(12,3)`.
+- **Catalogue and seed data**: dishes (id, Vietnamese name), ingredients (id, name, unit, starting stock) and recipes come from one file, `backend/seed/menu.json`. Each branch loads the dishes into its own `dishes` table on every start (insert or update). Inventory loads ingredients, stock and recipes on its first start only, when `stock` is empty, so that a restart never overwrites stock that has changed. Ids are unaccented upper-case codes like the status codes (`PHO_BO`, `THIT_BO`). There are no prices: payment is out of scope (section 11 of the specification).
 
 ## 2. Kafka event catalogue
 
@@ -91,9 +101,9 @@ The system has 13 event types across 6 topic groups, not counting the dlq. Every
 
 | event_type | Topic | Sender → receiver | payload | Emitted when |
 |---|---|---|---|---|
-| `OrderCreated` | `order-events.<branch>` | Branch → Inventory | `created_at`, `channel` (POS, ONLINE), `items[{dish_id, quantity}]` | A cashier or customer submits a valid order |
+| `OrderCreated` | `order-events.<branch>` | Branch → Inventory | `created_at`, `channel` (POS, ONLINE), `items[{dish_id, name, quantity}]` | A cashier or customer submits a valid order |
 | `CancelRequested` | `cancel-events.<branch>` | Branch → Kitchen | `reason_code` | An order is cancelled whose create-order entry already has the "send attempted" flag (BR9) |
-| `OrderReserved` | `kitchen-orders` | Inventory → Kitchen | `origin_branch`, `created_at`, `items[]`, `reserved[{ingredient_id, quantity}]` | Inventory reserves all the ingredients |
+| `OrderReserved` | `kitchen-orders` | Inventory → Kitchen | `origin_branch`, `created_at`, `items[]`, `reserved[{ingredient_id, name, unit, quantity}]` | Inventory reserves all the ingredients |
 | `OrderReserved` | `status-events.<branch>` | Inventory → origin branch | empty | Same transaction as the row above; the branch moves to Reserved |
 | `OrderFailed` | `kitchen-orders` and `status-events.<branch>` | Inventory → Kitchen, origin branch | `origin_branch`, `reason_code` | Inventory rejects the order (section 10 of the specification) |
 | `StockConsumed` | `stock-commands` | Kitchen → Inventory | empty | Staff press Start cooking |
@@ -110,6 +120,7 @@ Notes on the table:
 
 - `OrderReserved` and `OrderFailed` going to two topics are two outbox rows with two different `event_id` values, written in the same Inventory transaction.
 - "Return the stored result" means re-emitting the event type that matches the stored status, with a new `event_id`. The Kitchen emits `CancelPending` when at Cancel-pending, `OrderCancelled` when at Cancelled, and `OrderFailed` when at Failed, with `reason_code` taken from `close_reason`. How Inventory returns the stored result is described in section 3. Receivers already tolerate duplicate messages thanks to the rank rule (section 3.1 of the specification) and BR12.
+- **Names travel with the order.** The branch copies each dish's name from its `dishes` table into `items[]` of `OrderCreated`; Inventory passes `items[]` on and copies each ingredient's `name` and `unit` from `stock` into `reserved[]` of `OrderReserved`. Names are for display only: no rule reads them, and an order keeps the names it was placed with.
 - A cancel request from a branch other than the origin branch gets no reply message; the Kitchen writes an `alerts` row of kind `HUY_SAI_CHI_NHANH` (section 13.2 of the specification).
 - Messages on `menu-events` belong to no order: `order_id` is `null`, the partition key is `dish_id` or `ingredient_id`, and `Heartbeat` alone uses the fixed key `heartbeat`.
 - Each side handles only the message types meant for it on `menu-events`: the Kitchen handles `IngredientCheckChanged`, and branches handle `DishStatusChanged` and `Heartbeat`. The other types in this catalogue are known types: the receiver ignores them, does not write `processed_events` and does not move them to the dlq.
@@ -209,6 +220,13 @@ CREATE TABLE outbox_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   sent_at    TIMESTAMPTZ                            -- NULL: not yet acknowledged by Kafka
 );
+```
+
+Added in revision 8, as migration `002`:
+
+```sql
+-- The ingredient's display name, from backend/seed/menu.json.
+ALTER TABLE stock ADD COLUMN name TEXT NOT NULL DEFAULT '';
 ```
 
 Rules that go with the schema:
@@ -320,6 +338,19 @@ CREATE TABLE replication_heartbeat (              -- replicated with orders; giv
 -- processed_events: same as the Inventory DB
 ```
 
+Added in revision 8, as migration `002`:
+
+```sql
+-- The dish catalogue of this branch, loaded from backend/seed/menu.json on every start.
+-- It serves the order form, also while the branch is offline (scenario 10).
+CREATE TABLE dishes (
+  dish_id TEXT PRIMARY KEY,
+  name    TEXT NOT NULL
+);
+```
+
+`POST /orders` rejects an order whose `dish_id` is not in `dishes` (HTTP 400, section 4 of the specification, step 1). This checks only that the dish exists; whether it is Sold out is a matter for the screen (point 5 in section 8), and whether it can be made is decided by Inventory.
+
 Five conditional writes decide the correctness of the branch side:
 
 ```sql
@@ -399,7 +430,8 @@ Each service exposes only the APIs that a person or a screen needs; services do 
 
 | Service | API | What it does | Returns |
 |---|---|---|---|
-| Branch | `POST /orders` | Validates the data, generates `order_id`, stores the Awaiting Inventory order and the create-order entry in one transaction | 201 with `order_id`; 400 if the data is invalid (BR9) |
+| Branch | `POST /orders` | Validates the data, generates `order_id`, stores the Awaiting Inventory order and the create-order entry in one transaction | 201 with `order_id`; 400 if the data is invalid: a missing field, a non-positive quantity, or a dish not in `dishes` (BR9) |
+| Branch | `GET /dishes` | The dish catalogue from the branch's own `dishes` table; answers while the branch is offline | 200 |
 | Branch | `POST /orders/{id}/cancel` | Runs operation (2) in section 5 with `reason_code` | 200 `DA_HUY` for a local cancel; 202 `DANG_YEU_CAU` if it goes through the Kitchen or a cancel request is already pending; 409 if the order is already in a terminal status; 404 if the order does not exist |
 | Branch | `GET /orders`, `GET /orders/{id}` | Reads orders with the cancel flag and message | 200 |
 | Branch | `GET /menu` (phase 2) | Reads `menu_cache`, with a `stale` flag when nothing has been heard from Inventory for more than N minutes | 200 |
@@ -480,6 +512,8 @@ The run on 21 Nov 2026 used PostgreSQL 16.2 and a temporary script that is not p
 | Kitchen | Cancel arriving before the order; duplicate order arrival; wrong-branch cancel before and after the order arrives; reason per branch; cancel while Cooking; the ticket warning; the "needs review" mark is not duplicated | 1, 2, 6, 23, 27, 29, 34, 35 |
 | Kitchen, races | 200 runs of Cancel and Start cooking at the same time (cooking won 98 times, cancel won 102 times); 200 runs of an order and a cancel request for the same order ID arriving at the same time | 3, 28 |
 | Replication (separate run, step 0) | On PostgreSQL 16.14, the publication and subscription at the end of section 5 between a branch DB and the central DB: an order and a heartbeat arrive in about 0.2 s; with the subscription disabled for 5 s the central `beat_at` stays still while the branch keeps beating, then catches up in about 0.2 s; with the central DB paused for 5 s, three orders written meanwhile arrive once it is back. The one-off script was removed when the environment moved to Docker Compose; the `replication-init` container now sets replication up and `bin/chaos cut-replication` cuts it (section 2 of document 03) | 55 (the "data as of" part) |
+
+The two statements added in revision 8 (`stock.name`, the `dishes` table) run in the schema tests of each service, not in the trial runs above.
 
 Not yet checked:
 

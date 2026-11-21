@@ -1,8 +1,14 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 10 · 22 Nov 2026
+Revision 11 · 22 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the documentation phase and no code has been written. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 11
+
+| Section | Change | Reason |
+|---|---|---|
+| 2 | `backend/seed/` holds the dish catalogue and the starting data (section 1 of the design) | Decided on 22 Nov 2026; the order form needs dishes in phase 1 |
 
 ## Changes in revision 10
 
@@ -117,7 +123,7 @@ The hardest parts of the project, races and deduplication, are solved by row loc
 |---|---|
 | `docker-compose.yml` | Entry point: includes the files of `docker/` and declares the networks. `docker compose up -d --wait` starts the core, `docker compose --profile full up -d --wait` everything |
 | `docker/` | One file per group of containers: `kafka.yml`, `databases.yml`, `services.yml`, `frontend.yml`, `tools.yml` |
-| `backend/` | One uv workspace: the Python modules below, each with `src/`, `tests/` and `migrations/`; `scripts/` for the init jobs and tools; `conftest.py` with the shared fixtures; the `Dockerfile` of the one image every Python container uses |
+| `backend/` | One uv workspace: the Python modules below, each with `src/`, `tests/` and `migrations/`; `scripts/` for the init jobs and tools; `seed/menu.json`, the dish catalogue and starting data (section 1 of the design); `conftest.py` with the shared fixtures; the `Dockerfile` of the one image every Python container uses |
 | `frontend/` | The npm project of the screens |
 | `bin/chaos` | Fault injection for the tier 3 scenarios and the demo |
 | `e2e/` | End-to-end scenarios across services, from step 7 |
