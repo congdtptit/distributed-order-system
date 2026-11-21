@@ -1,8 +1,15 @@
 # Detailed design – Kafka events, DB schemas and API
 
-Revision 10 · 22 Nov 2026 · @Naul · follows business specification v1.5
+Revision 11 · 22 Nov 2026 · @Naul · follows business specification v1.5
 
 This document turns business specification v1.5 (the lean edition) into three things to code against: the Kafka event catalogue, each service's DB schema, and the API. There is no existing codebase to align with: the base flow is built in this project as well, so the event names, table names, column names and API paths here are the ones to use.
+
+## Changes in revision 11
+
+| Section | Change | Reason |
+|---|---|---|
+| 3 | New rule "Release commands and Consumed reports in practice": only the Spoiled reason writes off; spoiled ingredients not reserved for the order; a malformed list; the `reason` column; one `IngredientCheckChanged` per newly flagged ingredient; the starting `menu_version` row | Built in step 3 (22 Nov 2026); the spec review listed what the documents did not state. Writing off by reason follows BR6 ("according to its reason") |
+| 6 | The Inventory stock APIs: 404 for an unknown ingredient, 422 for invalid input, the 409 body, what the responses return, `clear-check` on an ingredient that is not flagged | Built in step 3 |
 
 ## Changes in revision 10
 
@@ -284,6 +291,13 @@ Rules that go with the schema:
   - *A message that cannot be recorded*: an `OrderCreated` without `order_id`, or one on a topic that names no branch, cannot get a record keyed by order ID. It counts as unreadable: 5 attempts, then the dlq (section 2, "The shared consumer").
 - **Release, consumed, waste**: these run only when `UPDATE inventory_orders SET status = ... WHERE order_id = :id AND status = 'DANG_GIU'` changes exactly one row. If no row changes, it is a duplicate message or an unmatched command: do not touch `stock`.
 - **Unmatched command**: a release command or a Consumed report for an order with no record, or for an order whose record is `THAT_BAI`, writes an `alerts` row of kind `LENH_KHONG_KHOP`, along with a log line containing `order_id` and `event_id`. A command that reaches a `DA_TRA` or `DA_DUNG` record is a duplicate message: ignore it and write no alert.
+- **Release commands and Consumed reports in practice** (built in step 3):
+  - Only a release whose `reason_code` is `SPOILED_INGREDIENT` writes anything off (BR6: "according to its reason"). Any other reason releases every line, even if `spoiled_ingredients[]` is not empty.
+  - A spoiled ingredient that was not reserved for the order is ignored with a log line: nothing to write off, no flag. A malformed `spoiled_ingredients` (not a list of IDs) is logged and whatever cannot be read is left out; the handler does not raise, because the command would go to the dlq and the reservation would stay held for good. A missing list means none.
+  - Writing off an ingredient that is already flagged adds to `wasted` but sends no second `IngredientCheckChanged`. Several newly flagged ingredients each get their own message and `seq`, in ascending `ingredient_id`, in the same transaction. `IngredientCheckChanged` has no `causation_id` and no `branch_id`.
+  - The `reason` column takes the release's `reason_code`; Consumed leaves it as it was. `cancelled_by` is not stored at Inventory.
+  - The `alerts` row of an unmatched command has `detail = {event_type, record_status}`, where `record_status` is null when there is no record.
+  - `menu_version` starts at `epoch = 1, seq = 0`. Inventory inserts that row on start if it is missing, so the first flag change has `seq = 1`.
 - **The `alerts` table**: Inventory uses two kinds, `CAN_KIEM_TRA` (a message of the order went to the dlq) and `LENH_KHONG_KHOP`. Every insert uses `ON CONFLICT DO NOTHING` on the unique key, so a Kafka redelivery does not create a second row. For an unreadable message, `order_id` is taken from the message's Kafka key if the key is a UUID.
 - **Lock order**: every Inventory transaction locks in exactly this order: the order's `inventory_orders` row, the `stock` rows in ascending `ingredient_id`, the `dish_status` rows in ascending `dish_id`, and finally the `menu_version` row. No transaction locks in the reverse of this order.
 - **Computing dish status**: after changing `stock`, the transaction locks the `dish_status` rows of the dishes that use the changed ingredients with `SELECT ... FOR UPDATE`, and only then reads the stock of every ingredient in the recipes and recomputes according to section 3.4 of the specification. Reading stock before locking is wrong: two transactions that change two different ingredients of the same dish would not see each other's change, and the dish could sit at Available when it should be Sold out.
@@ -502,6 +516,7 @@ Each service exposes only the APIs that a person or a screen needs; services do 
 - **`POST /orders` does not wait for Inventory**: the Reserved or Failed result comes later through `status-events`. The UI re-reads the order with `GET /orders/{id}`.
 - **`counted_on_hand` of `clear-check`** is the on-hand stock, that is, available stock plus reserved (section 3.3 of the specification). Inventory sets `available = counted_on_hand − reserved`. If the result is negative it returns 409: the tickets still holding that ingredient must first be rejected through Flow A. If `counted_on_hand` is not sent, `available` stays unchanged.
 - **`clear-check` and `receipts`** can both make a dish change status, so they rerun Flow C's dish-status computation in the same transaction. `clear-check` also emits `IngredientCheckChanged`.
+- **The Inventory stock APIs as built in step 3**: an unknown ingredient gives 404 on `clear-check` and `receipts`; invalid input gives 422 (a receipt quantity of 0 or less, a negative `counted_on_hand`, more than 12 digits or 3 decimals). The 409 of `clear-check` carries `{message, reserved}`. `receipts` and `clear-check` return the ingredient's row as `GET /stock` shows it (the four quantities, `needs_check`, `name`, `unit`). `clear-check` on an ingredient that is not flagged returns 200 and sends nothing; with `counted_on_hand` it still sets `available`, so it doubles as a stock adjustment. A receipt never clears the flag. Each request commits before it answers. The dish-status computation of these two APIs comes with phase 2.
 - **Management's report** is served by the Order Query Service through `GET /reports/summary`, from the Central Order Replica (section 5). It counts order statuses at the branches only; a Cancel-pending record at the Kitchen is not a terminal status and is not counted (section 8 of the specification).
 
 ## 7. Implementation order

@@ -1,8 +1,14 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 13 · 22 Nov 2026
+Revision 14 · 22 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the implementation phase; section 7 records what has been built so far. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 14
+
+| Section | Change | Reason |
+|---|---|---|
+| 4, 7 | Step 3 is done, so the Inventory part of phase 1 is complete; progress and estimate updated, with what step 3 built and how it was checked | Scenarios 5, 22, 43, 49 and the Inventory parts of 6 and 48 pass on 22 Nov 2026; scenarios 26 and 29 now also pass with Inventory's real handler |
 
 ## Changes in revision 13
 
@@ -226,7 +232,7 @@ The order follows the steps and phase 2 in section 7 of the detailed design; the
 |---|---|---|
 | 0. Preparation | Project skeleton, compose files, topic creation script, CI, the remaining Claude Code configuration of section 5.7. Done on 21 Nov 2026 | One session in plan mode; a person reviews closely |
 | 1. Shared | The `common` module. Done on 22 Nov 2026 (section 7) | One session; reviewed by a reviewer running in a fresh context |
-| 2–3. Inventory | Reserve, release, waste, consumed, the stock-check flag. Step 2 done on 22 Nov 2026 (section 7) | A separate worktree, one scenario at a time |
+| 2–3. Inventory | Reserve, release, waste, consumed, the stock-check flag. Steps 2 and 3 done on 22 Nov 2026 (section 7) | A separate worktree, one scenario at a time |
 | 4–5. Kitchen | Table 3.2, cancel requests, origin branch | A separate worktree, one scenario at a time |
 | 6. Branch | Send queue, local cancel, applying messages by rank | A separate worktree, one scenario at a time |
 | 6b. Screens | The `frontend` screens for the branch, the Kitchen, Inventory and monitoring, and the demo page, against the APIs of steps 2–6 | One session, one screen at a time with the `/screen` skill |
@@ -343,21 +349,21 @@ Every part was created on 21 Nov 2026, in step 0 or before it. What is left belo
 
 ## 7. Progress
 
-Updated 22 Nov 2026, after step 2. A step is done when its scenarios pass, the code passes Ruff and Pyright, and the reviews of section 5.3 are closed.
+Updated 22 Nov 2026, after step 3. A step is done when its scenarios pass, the code passes Ruff and Pyright, and the reviews of section 5.3 are closed.
 
 | Step | State | Scenarios passing |
 |---|---|---|
 | 0. Preparation | Done 21–22 Nov 2026: compose cluster (21 containers in `full`), topics, migrations, replication, CI, Claude Code configuration, frontend skeleton, dish catalogue | – |
 | 1. Shared | Done 22 Nov 2026 | 26, 29, 31 |
 | 2. Inventory: receiving orders | Done 22 Nov 2026 | 9, 15, 16, 24, 30, 39, 42, 44 |
-| 3. Inventory: release, consumed, waste, stock check | Next | 0 of 6 |
+| 3. Inventory: release, consumed, waste, stock check | Done 22 Nov 2026 | 5, 22, 43, 49; the Inventory parts of 6 and 48 |
 | 4–5. Kitchen | Can start now, in parallel | 0 of 17 |
 | 6. Branch | Can start now, in parallel | 0 of 7 |
 | 6b. Screens | After steps 2–6 | – |
 | 7. Integration | After step 6 | 0 of 1 (scenario 55), plus the end-to-end versions |
 | Phase 2 | After phase 1 | 0 of 4 |
 
-**Scenarios:** 11 of 44 pass (25 %). **Estimate of work done:** about 33 % of the whole project, weighting each step by its expected effort: preparation 15 %, step 1 10 %, Inventory 15 % (step 2 counts for 8 %), Kitchen 15 %, branch 12 %, screens 13 %, integration and reporting 10 %, phase 2 6 %, demo 4 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.
+**Scenarios:** 15 of 44 pass in full (34 %); 6 and 48 pass their Inventory part and wait for the Kitchen (step 4) and phase 2. **Estimate of work done:** about 40 % of the whole project, weighting each step by its expected effort: preparation 15 %, step 1 10 %, Inventory 15 %, Kitchen 15 %, branch 12 %, screens 13 %, integration and reporting 10 %, phase 2 6 %, demo 4 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.
 
 ### What step 1 built
 
@@ -399,3 +405,19 @@ Shared pieces added to `common`: the reason codes (`reasons.py`), the seed reade
 - **The tests can fail:** removing the flag condition, the stock condition (the `CHECK (available >= 0)` constraint then stops the run), the savepoint, the time limit, or the stored-result rule each fails at least one scenario test.
 - **Reviews:** the test audit asked for proof that scenario 9's restock covers the order and for the invariants in scenario 24; both added. The specification review found no transition outside table 3.3 and no broken prohibition. It found that the Failed reason was read without a lock after a failed `UPDATE`; the reservation now decides from locked rows (revision 10 of the design). Its list of behaviour the documents did not state is now the rule "Receiving `OrderCreated`".
 - **Found on the way:** `test-db` keeps its data in memory and every test creates a database; after a few hundred, PostgreSQL stopped with "No space left on device". The `fresh_db` fixture now drops its database after the test.
+
+### What step 3 built
+
+| File | Content |
+|---|---|
+| `commands.py` | `ReleaseRequested` (release, or write off and flag for the Spoiled reason) and `StockConsumed`, both only from Held; unmatched commands write a `LENH_KHONG_KHOP` alert and leave stock alone; repeats are ignored |
+| `checks.py` | `menu_version` (start row, `next_version`), `IngredientCheckChanged` to `menu-events`, `clear_check` with `counted_on_hand` |
+| `app.py` | The consumer also reads `stock-commands`; `GET /stock`, `POST /stock/receipts`, `POST /ingredients/{id}/clear-check` |
+
+`common`: `Incoming.source` (the message's Kafka position, needed by an `alerts` row) and a `branch_of` option on the consumer for tests on throwaway topics. `httpx2` is a dev dependency for FastAPI's test client.
+
+### How step 3 was checked
+
+- **Tests:** 111 backend tests pass (99 in tiers 1 and 2, 12 in tier 3). The step 3 scenarios are tier 1; the APIs run through FastAPI's test client on the test DB. A smoke run sent `StockConsumed` through the real brokers to the running service. Scenarios 26 and 29 also run in tier 3 with Inventory's real handler, which the step 1 review asked for.
+- **The tests can fail:** leaving Held without the status condition, releasing a spoiled ingredient instead of writing it off, deducting available stock on Consumed, keeping the flag on `clear-check`, or skipping the unmatched alert each fails at least one test.
+- **Reviews:** the test audit asked for the stock after reserving in scenario 49, proof that the recipe change hit a row, and no messages on duplicates in scenario 5; all added. The specification review found no certain violation and three suspected ones, all fixed: writing off now depends on the reason (BR6), a malformed spoiled list no longer strands a reservation in the dlq, and the APIs commit before they answer. Its list of unstated behaviour is now in revision 11 of the design.

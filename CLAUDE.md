@@ -11,7 +11,7 @@ Course project on distributed systems: order taking for a restaurant chain. Bran
 ## Current phase: implementation
 
 - `.claude/project-phase` contains `code`. Only the user changes that file; a hook blocks edits to it.
-- The order of work is section 4 of `docs/03-implementation-plan.md`; steps 0 (preparation), 1 (the shared `common` module) and 2 (Inventory receives orders) are done, and section 7 there records the progress. Next: Inventory step 3, the Kitchen (4–5) and the branch (6), which can run in parallel. Business code is written one scenario at a time with `/scenario <n>`, screens one at a time with `/screen <name>`.
+- The order of work is section 4 of `docs/03-implementation-plan.md`; steps 0 (preparation), 1 (the shared `common` module), 2 and 3 (Inventory) are done, and section 7 there records the progress. Next: the Kitchen (steps 4–5) and the branch (step 6), which can run in parallel. Business code is written one scenario at a time with `/scenario <n>`, screens one at a time with `/screen <name>`.
 - The project is built from scratch, with no existing codebase to follow.
 
 ## Layout and commands
