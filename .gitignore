@@ -1,0 +1,28 @@
+# OS and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Claude Code: personal files, not shared with the team
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/

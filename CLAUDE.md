@@ -1,0 +1,91 @@
+# distributed-order-system
+
+Course project on distributed systems: order taking for a restaurant chain. Branches (POS, Online) create orders and send cancel requests. Inventory reserves, releases and writes off ingredients. The Kitchen cooks, rejects tickets and is the only party that decides cancellations. The services talk through Kafka with at-least-once delivery and no ordering guarantee across topics.
+
+## Language
+
+- Reply to the user in Vietnamese.
+- Write every project document in English: everything in `docs/`, this file, and the files under `.claude/`.
+- The user talks about the domain in Vietnamese. The glossary below maps their words to the terms used in the documents.
+
+## Current phase: documentation
+
+- The project has no code. Do not create source code, build configuration or infrastructure until the user says clearly that implementation starts. A `PreToolUse` hook blocks this while `.claude/project-phase` contains `docs`; only the user decides to change it to `code`.
+- The work still pending before coding is listed in `docs/README.md`.
+- The implementation language is Python 3.12; the libraries are listed in section 2 of `docs/03-implementation-plan.md`. The project is built from scratch, with no existing codebase to follow.
+- There are no build, test or format commands yet. Record them in this section in step 0, when the project skeleton exists.
+
+## The documents are the source of truth
+
+| File | Content |
+|---|---|
+| `docs/01-business-spec.md` | The business: rules BR1–BR12, four state machines, the flows, the test scenarios, deployment assumptions |
+| `docs/02-detailed-design.md` | Kafka events, the three DB schemas, the API, the implementation order, the confirmed design choices |
+| `docs/03-implementation-plan.md` | Technology, modules, the three test tiers, how Claude Code is used |
+| `docs/README.md` | Index, pending work, conventions for editing the documents |
+
+- When two documents disagree, the lower-numbered one is right; fix the higher-numbered one.
+- Read by section: find the heading with Grep, then read that part. Do not read all of file 01 for one table.
+- When the documents do not cover a situation, stop and ask the user. The answer goes into the relevant document, not only into the conversation.
+- `docs/archive/` holds frozen Vietnamese originals. Do not read them for answers and do not update them.
+
+## Where to read for what
+
+| Task | Read |
+|---|---|
+| Order at the branch, status rank, the "Cancel requested" flag | 01 section 3.1; 02 section 5 |
+| Order record at the Kitchen, cancellation, origin branch | 01 sections 3.2, 6, 13.2; 02 section 4 |
+| Order record at Inventory, stock accounting | 01 section 3.3; 02 section 3 |
+| Dish status, version (epoch, seq) | 01 sections 3.4 and 7; 02 sections 3 and 5 |
+| Message types, topics, payloads | 02 section 2; 01 section 13.1 |
+| Consumers, deduplication, dlq | 01 sections 9 and 13.3; 02 sections 2 and 3 |
+| One test scenario | 01 section 12; its step in 02 section 7; its tier in 03 section 3 |
+| What the system promises and does not promise | 01 sections 14 and 15 |
+
+## Glossary
+
+Status codes in the DB and in code are unaccented Vietnamese in upper case. They are identifiers and stay as they are.
+
+| Term in the documents | Code | Vietnamese, as the user says it |
+|---|---|---|
+| Branch, Inventory, Kitchen, Management | | Chi nhánh, Kho, Bếp, Quản lý |
+| Order, ticket, dish, ingredient, recipe | | đơn, phiếu, món, nguyên liệu, công thức |
+| Branch order: Awaiting Inventory, Reserved, Completed, Cancelled, Failed | `CHO_KHO`, `DA_GIU`, `HOAN_TAT`, `DA_HUY`, `THAT_BAI` | Chờ Kho, Đã giữ, Hoàn tất, Đã hủy, Thất bại |
+| Kitchen record: (none), Cancel-pending, Queued, Cooking, Completed, Cancelled, Failed | `CHUA_CO`, `HUY_CHO_DON`, `CHO_NAU`, `DANG_NAU`, `HOAN_TAT`, `DA_HUY`, `THAT_BAI` | (chưa có), Hủy chờ đơn, Chờ nấu, Đang nấu, Hoàn tất, Đã hủy, Thất bại |
+| Inventory record: Held, Failed, Released, Consumed | `DANG_GIU`, `THAT_BAI`, `DA_TRA`, `DA_DUNG` | Đang giữ, Thất bại, Đã trả, Đã dùng |
+| Outcome of one reservation line: released, consumed, wasted | `DA_HOAN`, `DA_DUNG`, `HAO_HUT` | hoàn, đã dùng, hao hụt |
+| Dish status: Available, Sold out, Hidden | `CON`, `HET`, `AN` | Còn, Hết, Ẩn |
+| Cancel flag at the branch: off, "Cancel requested", "kitchen will not cook" | `KHONG`, `DANG_YEU_CAU`, `BEP_KHONG_NAU` | tắt, Đang yêu cầu hủy, bếp sẽ không nấu |
+| Alert kinds: needs review, unmatched command, cancel from wrong branch | `CAN_KIEM_TRA`, `LENH_KHONG_KHOP`, `HUY_SAI_CHI_NHANH` | cần kiểm tra, lệnh không khớp, hủy sai chi nhánh |
+| Reserve, release, write off as waste, flag for stock check | | giữ, hoàn, ghi hao hụt, đánh dấu cần kiểm kho |
+| Send queue (outbox), entry, "send attempted" flag, local cancel | `attempted` | hàng chờ gửi, gói, cờ "đã thử gửi", hủy cục bộ |
+| Origin branch, cancel request, return the stored result | | chi nhánh gốc, yêu cầu hủy, trả lại kết quả cũ |
+| Scenario, step, phase, tier | `kb(<n>)` pytest marker | kịch bản, bước, đợt, tầng |
+
+Event names are English as in 02 section 2 (`OrderCreated`, `CancelRequested`, …).
+
+## Working rules
+
+- Every status transition must be in table 3.1, 3.2 or 3.3 of document 01. If it is not there, reject it; do not add one.
+- Do not change what a test expects unless you can quote the document section that proves the old expectation wrong.
+- Do not use mocks in place of PostgreSQL or Kafka in tests.
+- Mark each test `@pytest.mark.kb(<number>)` with the scenario number from 01 section 12.
+- Edit the documents following the conventions in `docs/README.md`. A `Stop` hook checks that the document set is still consistent before a turn ends.
+- Git: the remote is `origin`, the default branch is `main`. Commit or push only when the user asks. Never commit `.env` files or `.claude/settings.local.json`.
+
+## Twelve things that must not be done
+
+The list from section 9 of document 01, repeated here so that it is always in context.
+
+1. Do not delete order records at the Kitchen or at Inventory.
+2. Do not keep the version counter in RAM, and do not use the system clock as a version.
+3. Do not assign a snapshot straight into the dish cache.
+4. Do not assume the Kitchen receives the order before the cancel request, even when the POS sends them in order.
+5. Do not let the Kitchen answer "Cancelled" for an order that has not arrived.
+6. Do not recompute the released quantity from the current recipe.
+7. Do not block the whole send queue because of one failing entry; do not drop an entry because sending failed.
+8. Do not add to stock when a release command matches no reservation record.
+9. Do not cancel locally an order whose create-order entry has been attempted, even if that attempt reported an error.
+10. Do not treat a Kafka acknowledgement as Inventory having received the order.
+11. Do not let the Kitchen ignore a Failed message for an order it has no record of.
+12. Do not reserve an ingredient that is flagged for stock check, even when available stock is sufficient.
