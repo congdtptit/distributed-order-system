@@ -1,6 +1,6 @@
 {
   "name": "distributed-order-system (backend tools)",
-  "dockerComposeFile": ["../compose.yaml"],
+  "dockerComposeFile": ["../docker-compose.yml"],
   "service": "tools",
   "workspaceFolder": "/app",
   "customizations": {

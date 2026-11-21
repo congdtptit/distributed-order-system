@@ -1,0 +1,41 @@
+# Tools: the tools container (tests, lint, type checks; it also builds the backend image
+# every Python container uses) and, with --profile full, two ways to look inside.
+# Paths are relative to this file's directory.
+
+services:
+  tools:
+    # docker compose exec tools <command>, from backend/.
+    build: ../backend
+    image: order-system-backend:local
+    command: ["sleep", "infinity"]
+    init: true
+    volumes: ["../backend:/app"]
+    environment:
+      KAFKA_BOOTSTRAP: kafka1:19092,kafka2:19092,kafka3:19092
+      TEST_DATABASE_URL: postgresql://app:app@test-db:5432/postgres
+    networks:
+      [kafka-net, inventory-net, kitchen-net, pos01-net, pos02-net, online-net, replication-net, test-net]
+    depends_on:
+      test-db: { condition: service_healthy }
+
+  kafka-ui:
+    # Topics, messages, consumer groups and their lag: http://localhost:8080
+    image: kafbat/kafka-ui:v1.5.0
+    profiles: [full]
+    restart: unless-stopped
+    ports: ["8080:8080"]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: order-system
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka1:19092,kafka2:19092,kafka3:19092
+      JAVA_OPTS: -Xms128m -Xmx256m
+    networks: [kafka-net]
+    depends_on:
+      kafka-init: { condition: service_completed_successfully }
+
+  adminer:
+    # The content of every database: http://localhost:8081
+    image: adminer:6.1.2
+    profiles: [full]
+    restart: unless-stopped
+    ports: ["8081:8080"]
+    networks: [inventory-net, kitchen-net, pos01-net, pos02-net, online-net, replication-net]

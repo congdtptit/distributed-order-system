@@ -3,7 +3,9 @@
 Runs once in compose (the ``replication-init`` container) after the branch services and the
 Order Query Service have applied their migrations. It creates the publication at each branch
 DB and one subscription per branch at the central DB, as at the end of section 5 of
-docs/02-detailed-design.md. It can run any number of times.
+docs/02-detailed-design.md. It can run any number of times. A branch DB that is not running
+(pos02-db and online-db belong to the compose profile ``full``) is skipped; the job runs
+again when that profile starts.
 
 Environment: CENTRAL_DSN, and BRANCH_DBS as ``<branch>=<host>`` pairs separated by commas,
 for example ``POS01=pos01-db,POS02=pos02-db,ONLINE=online-db``. All branch DBs are named
@@ -22,7 +24,12 @@ def main() -> int:
     pairs = [p.split("=", 1) for p in os.environ["BRANCH_DBS"].split(",") if p]
     for branch, host in pairs:
         branch_dsn = f"host={host} dbname=branch user=app password=app"
-        with psycopg.connect(branch_dsn, autocommit=True) as conn:
+        try:
+            conn = psycopg.connect(branch_dsn, autocommit=True, connect_timeout=3)
+        except psycopg.OperationalError:
+            print(f"{branch}: {host} is not running, skipped", flush=True)
+            continue
+        with conn:
             exists = conn.execute(
                 "SELECT 1 FROM pg_publication WHERE pubname = 'central_pub'"
             ).fetchone()

@@ -1,0 +1,129 @@
+# The services: one image (built by the tools service in tools.yml), told apart by
+# SERVICE and BRANCH_ID. Each applies its migrations on start, then serves its API on 8000
+# and reloads when the mounted source changes. Paths are relative to this file's directory.
+#
+# Core: inventory-1, kitchen, pos01, query. --profile full adds inventory-2 (scenario 42),
+# pos02 (scenario 35, cross-branch) and online.
+
+x-service: &service
+  image: order-system-backend:local
+  pull_policy: never
+  restart: unless-stopped
+  volumes: ["../backend:/app"]
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/health', timeout=2)"]
+    interval: 3s
+    timeout: 3s
+    retries: 40
+    start_period: 5s
+
+x-service-env: &service-env
+  KAFKA_BOOTSTRAP: kafka1:19092,kafka2:19092,kafka3:19092
+  RELOAD: "1"
+
+x-inventory: &inventory
+  <<: *service
+  environment:
+    <<: *service-env
+    SERVICE: inventory
+    DATABASE_URL: postgresql://app:app@inventory-db:5432/inventory
+  networks:
+    kafka-net: {}
+    inventory-net: {}
+    api-net: { aliases: [inventory] } # the screens reach either instance
+  depends_on:
+    inventory-db: { condition: service_healthy }
+    kafka-init: { condition: service_completed_successfully }
+
+x-branch: &branch
+  <<: *service
+  depends_on:
+    kafka-init: { condition: service_completed_successfully }
+
+services:
+  inventory-1:
+    <<: *inventory
+    ports: ["8101:8000"]
+  inventory-2:
+    <<: *inventory
+    profiles: [full]
+    ports: ["8102:8000"]
+
+  kitchen:
+    <<: *service
+    ports: ["8201:8000"]
+    environment:
+      <<: *service-env
+      SERVICE: kitchen
+      DATABASE_URL: postgresql://app:app@kitchen-db:5432/kitchen
+    networks: [kafka-net, kitchen-net, api-net]
+    depends_on:
+      kitchen-db: { condition: service_healthy }
+      kafka-init: { condition: service_completed_successfully }
+
+  pos01:
+    <<: *branch
+    ports: ["8301:8000"]
+    environment:
+      <<: *service-env
+      SERVICE: branch
+      BRANCH_ID: POS01
+      DATABASE_URL: postgresql://app:app@pos01-db:5432/branch
+    networks: [kafka-net, pos01-net, api-net]
+    depends_on:
+      pos01-db: { condition: service_healthy }
+      kafka-init: { condition: service_completed_successfully }
+  pos02:
+    <<: *branch
+    profiles: [full]
+    ports: ["8302:8000"]
+    environment:
+      <<: *service-env
+      SERVICE: branch
+      BRANCH_ID: POS02
+      DATABASE_URL: postgresql://app:app@pos02-db:5432/branch
+    networks: [kafka-net, pos02-net, api-net]
+    depends_on:
+      pos02-db: { condition: service_healthy }
+      kafka-init: { condition: service_completed_successfully }
+  online:
+    <<: *branch
+    profiles: [full]
+    ports: ["8303:8000"]
+    environment:
+      <<: *service-env
+      SERVICE: branch
+      BRANCH_ID: ONLINE
+      DATABASE_URL: postgresql://app:app@online-db:5432/branch
+    networks: [kafka-net, online-net, api-net]
+    depends_on:
+      online-db: { condition: service_healthy }
+      kafka-init: { condition: service_completed_successfully }
+
+  query:
+    <<: *service
+    ports: ["8401:8000"]
+    environment:
+      <<: *service-env
+      SERVICE: query
+      DATABASE_URL: postgresql://app:app@central-db:5432/central
+    networks: [replication-net, api-net]
+    depends_on:
+      central-db: { condition: service_healthy }
+
+  replication-init:
+    # Publication at each running branch DB, one subscription per branch at central-db, then
+    # exits. Branches of the full profile are connected when that profile is started.
+    image: order-system-backend:local
+    pull_policy: never
+    volumes: ["../backend:/app"]
+    command: ["python", "scripts/setup_replication.py"]
+    environment:
+      CENTRAL_DSN: host=central-db dbname=central user=app password=app
+      BRANCH_DBS: POS01=pos01-db,POS02=pos02-db,ONLINE=online-db
+    networks: [replication-net]
+    depends_on:
+      pos01: { condition: service_healthy }
+      query: { condition: service_healthy }
+      pos02: { condition: service_healthy, required: false }
+      online: { condition: service_healthy, required: false }

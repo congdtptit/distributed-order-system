@@ -1,5 +1,5 @@
 # uv workspace of the Python services (section 2 of docs/03-implementation-plan.md).
-# Commands run in the tools container of compose.yaml, from this directory:
+# Commands run in the tools container of docker-compose.yml, from this directory:
 #   docker compose exec tools pytest
 [project]
 name = "order-system-backend"

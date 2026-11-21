@@ -1,6 +1,6 @@
-# One image for every Python container of compose.yaml: the four services (seven
+# One image for every Python container of docker-compose.yml: the four services (seven
 # containers), the one-shot init jobs and the tools container used for tests and checks.
-# compose.yaml mounts ./backend over /app, so a code change needs no rebuild; a change to
+# docker-compose.yml mounts ./backend over /app, so a code change needs no rebuild; a change to
 # a pyproject.toml or uv.lock does: docker compose build.
 FROM python:3.12.13-slim-bookworm
 

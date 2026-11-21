@@ -1,0 +1,29 @@
+# The screens: Vite dev server on http://localhost:5173, forwarding /api/<service> to the
+# services (frontend/vite.config.ts). Paths are relative to this file's directory.
+
+services:
+  frontend:
+    image: node:24.22.1-bookworm-slim
+    restart: unless-stopped
+    init: true
+    working_dir: /app
+    # Installs the locked packages when the node_modules volume is empty, then serves Vite.
+    command:
+      - sh
+      - -c
+      - "[ -x node_modules/.bin/vite ] || npm ci --no-audit --no-fund; exec npm run dev"
+    ports: ["5173:5173"]
+    environment:
+      # Vite keeps about 1 GB without a cap (it pre-bundles all Tabler icons); 512 MB is enough.
+      NODE_OPTIONS: --max-old-space-size=512
+    volumes:
+      - ../frontend:/app
+      - frontend-node-modules:/app/node_modules
+      - npm-cache:/root/.npm
+    networks: [api-net]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:5173').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+      start_period: 5s

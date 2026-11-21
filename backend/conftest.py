@@ -1,6 +1,6 @@
 """Fixtures shared by every module's tests.
 
-The tests run against the ``test-db`` PostgreSQL of compose.yaml (in CI, a PostgreSQL service
+The tests run against the ``test-db`` PostgreSQL of docker-compose.yml (in CI, a PostgreSQL service
 of the workflow), and each test gets a new, empty database in it. Tests never delete rows to
 reset state: prohibition 1 in section 9 of docs/01-business-spec.md forbids deleting order
 records, so a clean state means a new database.

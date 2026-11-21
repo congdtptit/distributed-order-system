@@ -40,7 +40,7 @@ A screen shows what the services decide; it decides nothing itself. Everything b
 ## Step 4: check and look
 
 1. Go through `references/checklist.md` item by item. Fix what fails; for an item that does not apply, say why in one line.
-2. With the Vite server running (the `frontend` container of `compose.yaml` serves it), take screenshots at the sizes the screen's entry names:
+2. With the Vite server running (the `frontend` container of `docker-compose.yml` serves it), take screenshots at the sizes the screen's entry names:
    `.claude/skills/screen/scripts/screenshot.sh <route> <width>x<height> <output.png>`
    Write them to the scratchpad or `/tmp`, never into the repository. Look at each screenshot and fix what is visibly wrong once; do not loop.
 

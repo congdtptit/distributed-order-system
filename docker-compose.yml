@@ -1,0 +1,38 @@
+# The whole system on one machine. Each group of containers has its own file in docker/;
+# section 2 of docs/03-implementation-plan.md explains the containers and the networks.
+#
+#   docker compose up -d --wait                  core: 14 containers, enough for daily work
+#   docker compose --profile full up -d --wait   everything: 21 containers, for the demo
+#                                                and the scenarios that need a second
+#                                                Inventory, a second branch or the tools
+#   docker compose exec tools pytest             backend tests (tiers 1 and 2)
+#   bin/chaos offline pos01                      fault injection (see bin/chaos)
+#   docker compose --profile full down           stop everything
+#
+# Screens: http://localhost:5173    Services: inventory-1 8101, inventory-2 8102,
+# kitchen 8201, pos01 8301, pos02 8302, online 8303, query 8401 (/health, /docs)
+# With --profile full: Kafka UI http://localhost:8080, Adminer http://localhost:8081
+name: order-system
+
+include:
+  - docker/kafka.yml
+  - docker/databases.yml
+  - docker/services.yml
+  - docker/frontend.yml
+  - docker/tools.yml
+
+# Networks follow the paths data takes, so that one path can be cut without the others.
+networks:
+  kafka-net: # brokers and every service that produces or consumes
+  inventory-net: # each service with its own database
+  kitchen-net:
+  pos01-net:
+  pos02-net:
+  online-net:
+  replication-net: # the branch DBs, the central DB and the Order Query Service
+  api-net: # the screens and every service's HTTP API
+  test-net: # the tools container and test-db
+
+volumes:
+  frontend-node-modules:
+  npm-cache:

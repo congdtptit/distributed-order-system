@@ -1,0 +1,53 @@
+# One PostgreSQL per service and per branch (section 13.5 of the specification), the
+# Central Order Replica, and test-db for the tests. Passwords are for this local setup only.
+# Log in with Adminer (--profile full): server = container name, user and password app.
+
+x-postgres: &postgres
+  image: postgres:16.14
+  restart: unless-stopped
+  environment: &postgres-env
+    POSTGRES_USER: app
+    POSTGRES_PASSWORD: app
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U app -d $${POSTGRES_DB}"]
+    interval: 3s
+    timeout: 3s
+    retries: 30
+
+x-branch-db: &branch-db
+  <<: *postgres
+  # Branch DBs publish orders to the Central Order Replica (02 section 5).
+  command: ["postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=4", "-c", "max_wal_senders=4"]
+  environment: { <<: *postgres-env, POSTGRES_DB: branch }
+
+services:
+  inventory-db:
+    <<: *postgres
+    environment: { <<: *postgres-env, POSTGRES_DB: inventory }
+    networks: [inventory-net]
+  kitchen-db:
+    <<: *postgres
+    environment: { <<: *postgres-env, POSTGRES_DB: kitchen }
+    networks: [kitchen-net]
+  pos01-db:
+    <<: *branch-db
+    networks: [pos01-net, replication-net]
+  pos02-db:
+    <<: *branch-db
+    profiles: [full]
+    networks: [pos02-net, replication-net]
+  online-db:
+    <<: *branch-db
+    profiles: [full]
+    networks: [online-net, replication-net]
+  central-db:
+    <<: *postgres
+    environment: { <<: *postgres-env, POSTGRES_DB: central }
+    networks: [replication-net]
+
+  test-db:
+    # Only for the tests: data in memory, a new database per test.
+    <<: *postgres
+    environment: { <<: *postgres-env, POSTGRES_DB: postgres }
+    tmpfs: [/var/lib/postgresql/data]
+    networks: [test-net]

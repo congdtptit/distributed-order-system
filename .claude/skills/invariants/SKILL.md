@@ -13,7 +13,7 @@ Run the script; do not write the queries by hand:
 docker compose exec tools python scripts/check_invariants.py $ARGUMENTS
 ```
 
-With no argument it connects to the `inventory-db` container of `compose.yaml`. To check another database, pass its DSN.
+With no argument it connects to the `inventory-db` container of `docker-compose.yml`. To check another database, pass its DSN.
 
 The script exits 0 and prints one summary line when every check returns no rows. Otherwise it exits 1 and prints the offending rows of each failed check.
 

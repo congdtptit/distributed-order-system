@@ -15,11 +15,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 project=order-system
-container() { docker compose ps -q "$1"; }
+# --profile full so that the containers of that profile can be named too.
+compose=(docker compose --profile full)
+container() { "${compose[@]}" ps -q "$1"; }
 need() {
   local id
   id=$(container "$1")
-  [ -n "$id" ] || { echo "$1 is not running: docker compose up -d" >&2; exit 1; }
+  [ -n "$id" ] || { echo "$1 is not running (pos02, online and inventory-2 need: docker compose --profile full up -d)" >&2; exit 1; }
   echo "$id"
 }
 branch() {
@@ -39,9 +41,9 @@ case "${1:-}" in
     docker network connect "${project}_kafka-net" "$(need "$b")"
     echo "$b is back on Kafka" ;;
   stop)
-    docker compose stop "${2:?container name}" ;;
+    "${compose[@]}" stop "${2:?container name}" ;;
   start)
-    docker compose start "${2:?container name}" ;;
+    "${compose[@]}" start "${2:?container name}" ;;
   cut-replication)
     b=$(branch "${2:-}")
     docker network disconnect "${project}_replication-net" "$(need "$b-db")"
@@ -51,7 +53,7 @@ case "${1:-}" in
     docker network connect "${project}_replication-net" "$(need "$b-db")"
     echo "$b-db replicates to central-db again" ;;
   status)
-    docker compose ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}'
+    "${compose[@]}" ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}'
     for b in pos01 pos02 online; do
       id=$(container "$b")
       [ -n "$id" ] || continue

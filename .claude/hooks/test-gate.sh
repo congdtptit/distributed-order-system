@@ -19,7 +19,7 @@ except Exception:
 [ "$active" = "True" ] && exit 0
 
 MODULES="common order-service inventory-service kitchen-service query-service"
-compose=(docker compose -f "$ROOT/compose.yaml")
+compose=(docker compose -f "$ROOT/docker-compose.yml")
 running() { [ -n "$("${compose[@]}" ps -q --status running "$1" 2>/dev/null)" ]; }
 in_tools() { "${compose[@]}" exec -T tools "$@"; }
 in_frontend() { "${compose[@]}" exec -T frontend "$@"; }

@@ -1,7 +1,7 @@
 #!/bin/bash
 # PostToolUse (Edit|Write|MultiEdit).
 # Formats a file right after Claude edits it:
-#   backend/**/*.py                    ruff format, in the tools container of compose.yaml
+#   backend/**/*.py                    ruff format, in the tools container of docker-compose.yml
 #   frontend/**/*.ts|tsx|js|json|css   Biome, in the frontend container
 # The edit has already happened, so this hook never blocks; exit 2 only
 # passes a message back to Claude.
@@ -30,7 +30,7 @@ case "$rel" in
   *) exit 0 ;;
 esac
 
-compose=(docker compose -f "$ROOT/compose.yaml")
+compose=(docker compose -f "$ROOT/docker-compose.yml")
 if [ -z "$("${compose[@]}" ps -q --status running "$service" 2>/dev/null)" ]; then
   echo "$rel was not formatted: the $service container is not running. Start the system with docker compose up -d, then run: docker compose exec $service $cmd" >&2
   exit 2

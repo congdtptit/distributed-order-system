@@ -43,7 +43,7 @@ jobs:
     defaults:
       run:
         working-directory: backend
-    # The same PostgreSQL as test-db in compose.yaml; each test creates its own database.
+    # The same PostgreSQL as test-db in docker-compose.yml; each test creates its own database.
     services:
       postgres:
         image: postgres:16.14
