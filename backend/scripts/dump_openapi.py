@@ -8,6 +8,7 @@ docs/02-detailed-design.md). Run after changing an API:
 """
 
 import json
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -17,7 +18,14 @@ from kitchen_service.app import app as kitchen
 from order_service.app import app as branch
 from query_service.app import app as reports
 
-OUT = Path(__file__).resolve().parents[2] / "frontend" / "src" / "api" / "openapi"
+# In compose the tools container mounts frontend/src/api/openapi at OPENAPI_DIR; in a full
+# checkout (CI) the default path is used.
+OUT = Path(
+    os.environ.get(
+        "OPENAPI_DIR",
+        Path(__file__).resolve().parents[2] / "frontend" / "src" / "api" / "openapi",
+    )
+)
 
 APPS: dict[str, FastAPI] = {
     "branch": branch,
@@ -34,7 +42,7 @@ def main() -> None:
         path.write_text(
             json.dumps(app.openapi(), indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
-        print(f"wrote {path.relative_to(OUT.parents[3])}")
+        print(f"wrote {name}.json")
 
 
 if __name__ == "__main__":

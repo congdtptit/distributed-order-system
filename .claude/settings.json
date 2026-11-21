@@ -13,8 +13,7 @@
       "Bash(docker compose logs *)",
       "Bash(docker compose up *)",
       "Bash(bin/chaos status)",
-      "Bash(python3 .claude/skills/doc-check/scripts/check_docs.py)",
-      "Bash(python3 .claude/skills/ui-ux-pro-max/scripts/search.py *)"
+      "Bash(python3 .claude/skills/doc-check/scripts/check_docs.py)"
     ],
     "deny": [
       "Read(./.env)",

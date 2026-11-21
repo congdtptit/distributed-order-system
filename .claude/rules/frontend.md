@@ -15,10 +15,6 @@ The `frontend` module is a client of the services' APIs. Its place in the system
 
 A new screen, or a rework of one, goes through the `/screen <name>` skill.
 
-## Design guidance from ui-ux-pro-max
-
-The `ui-ux-pro-max` skill is a general UI/UX database. For this project, `design.md` above and the rules below win over anything it suggests. Use only its targeted searches (`--domain ux`, `--stack react`) for a specific concern. Do not run its `--design-system` or `--persist` modes: they propose landing-page patterns and web fonts that do not fit an operations tool that must run offline.
-
 ## Rules
 
 - Call only the APIs in section 6 of document 02, through the types generated in `src/api/generated/`. Do not edit the generated files; regenerate them from the services' OpenAPI documents.

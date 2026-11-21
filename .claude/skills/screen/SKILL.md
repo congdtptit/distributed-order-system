@@ -3,7 +3,7 @@ name: screen
 description: Build or rework one screen of the web module, specification first. Runs only when the user calls /screen with a screen name (branch, kitchen, inventory, monitor, reports, demo).
 argument-hint: <screen name>
 disable-model-invocation: true
-allowed-tools: Bash(python3 .claude/skills/ui-ux-pro-max/scripts/search.py *), Bash(.claude/skills/screen/scripts/screenshot.sh *)
+allowed-tools: Bash(.claude/skills/screen/scripts/screenshot.sh *)
 ---
 
 # Build screen $ARGUMENTS
@@ -32,10 +32,7 @@ A screen shows what the services decide; it decides nothing itself. Everything b
 
 1. Follow `references/design.md` for layout, components, status colours, labels and polling. Use Mantine components; do not add another UI library.
 2. All Vietnamese labels for status codes and reasons come from the single label module named in `references/design.md`. Add missing labels there, using the glossary in `CLAUDE.md`.
-3. For a specific UX concern that `references/design.md` does not settle (for example keyboard behaviour in a modal), you may run one targeted search in the ui-ux-pro-max data:
-   `python3 .claude/skills/ui-ux-pro-max/scripts/search.py "<2–5 words>" --domain ux`
-   Treat the result as a suggestion. `references/design.md` and `.claude/rules/frontend.md` win over it. Never run its `--design-system` or `--persist` modes for this project.
-4. Run the screen's tests until they pass, then `docker compose exec frontend npx --no-install tsc --noEmit` and `docker compose exec frontend npx --no-install biome check src`.
+3. Run the screen's tests until they pass, then `docker compose exec frontend npx --no-install tsc --noEmit` and `docker compose exec frontend npx --no-install biome check src`.
 
 ## Step 4: check and look
 

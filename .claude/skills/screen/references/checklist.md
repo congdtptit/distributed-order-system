@@ -1,6 +1,6 @@
 # Checklist before handing over a screen
 
-Go through every item. The ids in backticks are the rule ids of the ui-ux-pro-max data, so one rule can be read in full with `python3 .claude/skills/ui-ux-pro-max/scripts/search.py "<id>" --domain ux`. The rules were filtered for this project: web screens on desktop and tablet, Mantine, no marketing pages, no native mobile app.
+Go through every item. The ids in backticks name the general UI rule behind an item (they come from a UI/UX rule set that was filtered for this project: web screens on desktop and tablet, Mantine, no marketing pages, no native mobile app).
 
 ## The project's own rules
 

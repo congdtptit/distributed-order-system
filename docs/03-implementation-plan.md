@@ -1,8 +1,14 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 9 · 22 Nov 2026
+Revision 10 · 22 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the documentation phase and no code has been written. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 10
+
+| Section | Change | Reason |
+|---|---|---|
+| 5.7 | The `ui-ux-pro-max` skill is removed; `/screen` keeps its own checklist, filtered from that rule set | @Naul, 22 Nov 2026: not needed. Its useful rules were already copied into the checklist, and its design-system mode did not fit an operations tool that runs offline |
 
 ## Changes in revision 9
 
@@ -302,7 +308,7 @@ Every part was created on 21 Nov 2026, in step 0 or before it. What is left belo
 | `/invariants` skill, the `ci` workflow | `.claude/skills/invariants/`, `.github/workflows/ci.yml` | Created |
 | The `nightly` and `review` workflows of section 5.6 | | Not created. Step 7, and after step 1 |
 | Rules for the screens | `.claude/rules/frontend.md`, `paths: frontend/**` | Created |
-| Building one screen | `/screen <name>` skill: read the specification section of the screen, list every state it must show, build it, test its display rules, take a screenshot for the user | Created ahead of step 6b. Built from the `ui-ux-pro-max` skill, filtered for this project |
+| Building one screen | `/screen <name>` skill: read the specification section of the screen, list every state it must show, build it, test its display rules, take a screenshot for the user | Created ahead of step 6b. Its checklist is a UI/UX rule set filtered for this project; the source skill was removed on 22 Nov 2026 |
 
 ## 6. Open risks
 

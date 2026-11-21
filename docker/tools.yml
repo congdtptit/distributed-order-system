@@ -9,10 +9,14 @@ services:
     image: order-system-backend:local
     command: ["sleep", "infinity"]
     init: true
-    volumes: ["../backend:/app"]
+    volumes:
+      - ../backend:/app
+      # scripts/dump_openapi.py writes the services' OpenAPI documents for the screens here.
+      - ../frontend/src/api/openapi:/openapi
     environment:
       KAFKA_BOOTSTRAP: kafka1:19092,kafka2:19092,kafka3:19092
       TEST_DATABASE_URL: postgresql://app:app@test-db:5432/postgres
+      OPENAPI_DIR: /openapi
     networks:
       [kafka-net, inventory-net, kitchen-net, pos01-net, pos02-net, online-net, replication-net, test-net]
     depends_on:
