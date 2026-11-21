@@ -1,8 +1,17 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 5 · 21 Nov 2026
+Revision 6 · 21 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the documentation phase and no code has been written. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 6
+
+| Section | Change | Reason |
+|---|---|---|
+| 2 | New `web` module: a TypeScript frontend (React, Vite, Mantine, TanStack Query) with types generated from the services' OpenAPI; a fourth structural principle, "the screens decide nothing" | The specification describes screen behaviour (01 sections 6–8) but no document said who builds the screens. @Naul chose TypeScript on 21 Nov 2026 |
+| 3 | How the `web` module is tested | HTTP stubs are allowed there; the no-mock rule covers PostgreSQL and Kafka |
+| 4 | New step 6b for the screens; the Management screen joins step 7; blocking Sold-out dishes on screen joins phase 2 | The screens need the APIs of all three sides. Point 5 of the design makes the screen the only place that blocks a Sold-out dish |
+| 5.3, 5.6, 5.7 | The format hook, the test gate and CI also cover `web`; new rows for `.claude/rules/web.md` and the `/screen` skill | A second language needs its own checks |
 
 ## Changes in revision 5
 
@@ -61,6 +70,12 @@ The project is built from scratch; there is no existing codebase to follow. Pyth
 | Central Order Replica | PostgreSQL logical replication, one subscription per branch (section 5 of the design) | Asynchronous replication that the database already provides; no extra service to write |
 | Testing | pytest, Testcontainers for Python, and Toxiproxy to cut the network | Tests run against a real PostgreSQL and a real Kafka |
 | Code quality | Ruff for formatting and linting, Pyright for type checking | Python has no compiler to catch type errors, so the type checker runs together with the tests |
+| Frontend language | TypeScript, chosen on 21 Nov 2026 (@Naul) | Typed against the same API contract as the services |
+| Frontend framework | React with Vite, React Router | Common, well documented, no server-side rendering needed for a demo |
+| UI components | Mantine | Tables, badges, modals and notifications that look finished without designing them; keeps the frontend plain |
+| Server state | TanStack Query, polling every 2 seconds on the screen in view | Statuses arrive asynchronously through Kafka, so screens must refresh; polling is enough and needs no WebSocket |
+| API types | `openapi-typescript`, generated from each service's FastAPI OpenAPI document | A change to a request or response breaks the frontend build instead of the demo |
+| Frontend quality | Biome for formatting and linting, `tsc --noEmit`, Vitest with Testing Library and MSW | One tool for format and lint; tests run without a browser |
 
 The hardest parts of the project, races and deduplication, are solved by row locks and transactions inside PostgreSQL, so they do not depend on the language.
 
@@ -73,13 +88,15 @@ The hardest parts of the project, races and deduplication, are solved by row loc
 | `inventory-service` | Table 3.3, stock accounting, dish status |
 | `kitchen-service` | Table 3.2, the three kitchen staff buttons |
 | `query-service` | The Order Query Service: Management reporting read from the Central Order Replica (sections 5 and 6 of the design) |
+| `web` | The screens, in TypeScript: branch (POS and Online), Kitchen, Inventory, monitoring (Flow D), Management, and a demo page with a branch and the Kitchen side by side. Labels are in Vietnamese, using the glossary in `CLAUDE.md` |
 | `infra/`, `e2e/` | Compose files, topic creation script, end-to-end scenarios |
 
-### Three structural principles
+### Four structural principles
 
 - **The handler is separate from the consumer loop.** A handler receives one message and one DB transaction and knows nothing about Kafka. A test can therefore decide the order in which messages arrive, and most scenarios need no real Kafka.
 - **The clock is replaceable.** Inventory and the branch read time through a clock object, so that scenarios 15, 16, 21 and 25 do not wait for real time.
 - **One entry point at the Kitchen.** The consumer and the three buttons call the same row-locking function, as section 4 of the detailed design requires.
+- **The screens decide nothing.** `web` calls only the APIs in section 6 of the design and shows the statuses the services return. It never infers a status, and it treats a 409 as the normal outcome of a race: it reloads the item and says so. The one rule that lives only on screen is blocking a Sold-out dish while the data is fresh (point 5 in section 8 of the design). In development the Vite server forwards `/api/<service>/…` to each service; for the demo an nginx container serves the built files and forwards the same paths, so the browser never needs CORS.
 
 ### Notes for setting up the infrastructure
 
@@ -104,12 +121,13 @@ Conventions for every test:
 - No mocks in place of PostgreSQL or Kafka. A mock makes a test pass without proving anything about row locks and transactions.
 - After every Inventory test, run the two invariant queries in section 3 of the detailed design.
 - Each scenario has a handler-level version at its own step and, if it needs several services, an end-to-end version that runs after step 6 (section 7 of the design).
+- The `web` module is tested with Vitest: each screen's display rules from the specification (for example, the Cancel button is hidden when the order is terminal) against API responses stubbed with MSW. Stubbing HTTP is allowed here; the no-mock rule covers PostgreSQL and Kafka. Screens are not scenario tests and carry no `kb` marker; the scenarios stay proven at the service level.
 
 Section 9 of the detailed design records the SQL that was trial-run while the documents were written. Those runs do not replace this test suite.
 
 ## 4. Order of work
 
-The order follows the steps and phase 2 in section 7 of the detailed design; the scenarios of each step are listed there. This plan adds a preparation step at the start, folds reporting into an integration step at the end, and says how to work with Claude Code at each step.
+The order follows the steps and phase 2 in section 7 of the detailed design; the scenarios of each step are listed there. This plan adds a preparation step at the start and a screens step (6b) after step 6, folds reporting into an integration step at the end, and says how to work with Claude Code at each step.
 
 | Step | Content | How to work with Claude Code |
 |---|---|---|
@@ -118,8 +136,9 @@ The order follows the steps and phase 2 in section 7 of the detailed design; the
 | 2–3. Inventory | Reserve, release, waste, consumed, the stock-check flag | A separate worktree, one scenario at a time |
 | 4–5. Kitchen | Table 3.2, cancel requests, origin branch | A separate worktree, one scenario at a time |
 | 6. Branch | Send queue, local cancel, applying messages by rank | A separate worktree, one scenario at a time |
-| 7. Integration | Tier 3 scenarios, Flow D (`/monitor`, `/alerts`), the Order Query Service and replication (scenario 55) | One main session; slow test runs are delegated to a subagent |
-| Phase 2 | Flow C | One session, scenarios 18–21 |
+| 6b. Screens | The `web` screens for the branch, the Kitchen, Inventory and monitoring, and the demo page, against the APIs of steps 2–6 | One session, one screen at a time with the `/screen` skill |
+| 7. Integration | Tier 3 scenarios, Flow D (`/monitor`, `/alerts`), the Order Query Service and replication (scenario 55), the Management screen | One main session; slow test runs are delegated to a subagent |
+| Phase 2 | Flow C, including blocking a Sold-out dish on the branch screen while the data is fresh and the "may be sold out" warning when it is stale | One session, scenarios 18–21 |
 | Demo | Scenarios 1, 3, 4, 10, 36 on all services | One repeatable demo script |
 
 The detailed design allows Inventory and the branch to proceed in parallel after step 1. This plan proposes running the Kitchen in parallel as well: the message contract is fixed by the design, and the Kitchen's handler-level tests need neither Inventory nor the branch.
@@ -150,9 +169,9 @@ At the start of each step of section 4, use plan mode to produce a plan. Clear t
 
 | Mechanism | What it catches |
 |---|---|
-| `PostToolUse` hook | Formats a file after each edit with `ruff format` |
+| `PostToolUse` hook | Formats a file after each edit: `ruff format` for Python, Biome for TypeScript |
 | `PreToolUse` hook | Editing an applied migration; `DELETE` on the order tables of the Kitchen and Inventory; turning offset auto-commit on |
-| `Stop` hook | The turn cannot end while tier 1 and 2 tests of the changed module are red or Pyright reports an error |
+| `Stop` hook | The turn cannot end while tier 1 and 2 tests of the changed module are red or Pyright reports an error; for `web`, while `tsc` or Vitest fails |
 | `test-auditor` subagent, read-only | A test that leaves a clause of "Expected result" unasserted; a race test that runs on one connection; a mock |
 | `spec-reviewer` subagent, read-only | A status transition missing from tables 3.1–3.3; a diff that touches what a test expects |
 | `/invariants` skill | Negative stock, reserved quantity out of line, a reservation leaving Held twice |
@@ -187,7 +206,7 @@ CI runs on GitHub Actions, one workflow file per row in `.github/workflows/`.
 | Workflow | Runs on | What it runs | State |
 |---|---|---|---|
 | `docs` | Every push to `main` and every pull request | The document consistency check, the same script as the `Stop` hook | Created |
-| `ci` | Every push to `main` and every pull request | `ruff format --check`, `ruff check`, Pyright, then the tier 1 and tier 2 tests; PostgreSQL is started by Testcontainers | Step 0, when the skeleton and the commands exist |
+| `ci` | Every push to `main` and every pull request | `ruff format --check`, `ruff check`, Pyright, then the tier 1 and tier 2 tests; PostgreSQL is started by Testcontainers. A second job for `web`: Biome, `tsc --noEmit`, Vitest | Step 0, when the skeleton and the commands exist |
 | `nightly` | Once a night, and on manual start | The tier 3 tests with a real Kafka; they are slow and can be flaky, so they do not block a pull request | Step 7 |
 | `review` | Every pull request | Review by `claude-code-action`, with a `REVIEW.md` holding the twelve prohibitions, a turn limit and a timeout | After step 1. It needs an API key stored as a repository secret |
 
@@ -216,6 +235,8 @@ The parts that do not depend on the code were created on 21 Nov 2026. The rest b
 | Running the slow tests | `test-runner` subagent | Not created. It needs the test commands of step 0 |
 | Formatting, the test gate at `Stop`, blocking edits to applied migrations, blocking `DELETE` and auto-commit | Hooks | Not created. They need the project skeleton and the installed tools |
 | `/invariants` skill, the `ci`, `nightly` and `review` workflows of section 5.6 | | Not created. Step 0 and later |
+| Rules for the screens | `.claude/rules/web.md`, `paths: web/**` | Not created. Step 0, with the `web` skeleton |
+| Building one screen | `/screen <name>` skill: read the specification section of the screen, list every state it must show, build it, test its display rules, take a screenshot for the user | Not created. Step 6b |
 
 ## 6. Open risks
 
@@ -223,4 +244,5 @@ The parts that do not depend on the code were created on 21 Nov 2026. The rest b
 - **Replication and reporting are designed but not trial-run.** Point 12 in section 8 of the design was agreed on 21 Nov 2026, but logical replication was not part of the SQL trial runs. Try it on two PostgreSQL containers in step 0, before step 7 depends on it.
 - **How Kafka assigns partitions to the two Inventory instances** needs a trial run (point 6 in section 8 of the design). Scenario 42 therefore takes its handler-level test as the main one.
 - **Resources of the demo machine.** With two POS sites, one machine has to run three brokers, six PostgreSQL databases and seven service processes at once; measure early, in step 0.
+- **A second toolchain.** Node and npm run in their own container, like the Python tools. Their `node_modules` stay inside the container, so the editor sees the TypeScript types only when the project is opened in the dev container.
 - **Tier 3 scenarios tend to be flaky.** They depend on when containers stop and start; they need explicit wait conditions instead of waiting on time.

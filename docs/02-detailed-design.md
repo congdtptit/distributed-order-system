@@ -1,8 +1,15 @@
 # Detailed design – Kafka events, DB schemas and API
 
-Revision 4 · 21 Nov 2026 · @Naul · follows business specification v1.5
+Revision 5 · 21 Nov 2026 · @Naul · follows business specification v1.5
 
 This document turns business specification v1.5 (the lean edition) into three things to code against: the Kafka event catalogue, each service's DB schema, and the API. There is no existing codebase to align with: the base flow is built in this project as well, so the event names, table names, column names and API paths here are the ones to use.
+
+## Changes in revision 5
+
+| Section | Change | Reason |
+|---|---|---|
+| 6 | States that the screens are a client of these APIs, not a service, and that each service publishes its OpenAPI document | A TypeScript frontend was added on 21 Nov 2026 (section 2 of document 03); its types are generated from that document |
+| 8 | The note on the specification's open points: three of the five are confirmed | Confirmed by @Naul on 21 Nov 2026 |
 
 ## Changes in revision 4
 
@@ -398,6 +405,7 @@ Each service exposes only the APIs that a person or a screen needs; services do 
 | Inventory | `POST /admin/epoch/bump` (phase 2) | Runs the `epoch` bump procedure in section 3; used after restoring Inventory and for scenario 20 | 200 with the new `epoch` |
 | Reporting | `GET /reports/summary` | For each branch: the "data as of" time, the number of orders by status, and the number by reason for Cancelled and Failed orders; reads the Central Order Replica only | 200 |
 
+- **The screens** (the `web` module in section 2 of document 03) are a client of the APIs in this table and use nothing else: no direct DB access, no Kafka. They show the statuses the services return and decide none of their own; the only rule enforced on screen alone is point 5 in section 8. Each service publishes the OpenAPI document that FastAPI generates, and the screens' TypeScript types are generated from it.
 - **The three Kitchen buttons** run the same row-locking sequence as the consumer (section 4). A 409 here is the normal outcome of the race between Cancel and Start cooking (BR7); the UI only needs to reload the ticket.
 - **`POST /orders` does not wait for Inventory**: the Reserved or Failed result comes later through `status-events`. The UI re-reads the order with `GET /orders/{id}`.
 - **`counted_on_hand` of `clear-check`** is the on-hand stock, that is, available stock plus reserved (section 3.3 of the specification). Inventory sets `available = counted_on_hand − reserved`. If the result is negative it returns 409: the tickets still holding that ingredient must first be rejected through Flow A. If `counted_on_hand` is not sent, `available` stays unchanged.

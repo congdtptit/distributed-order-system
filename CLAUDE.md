@@ -12,7 +12,7 @@ Course project on distributed systems: order taking for a restaurant chain. Bran
 
 - The project has no code. Do not create source code, build configuration or infrastructure until the user says clearly that implementation starts. A `PreToolUse` hook blocks this while `.claude/project-phase` contains `docs`; only the user decides to change it to `code`. Repository configuration (`.gitignore`, `.gitattributes`, `.github/`) is allowed.
 - The work still pending before coding is listed in `docs/README.md`.
-- The implementation language is Python 3.12; the libraries are listed in section 2 of `docs/03-implementation-plan.md`. The project is built from scratch, with no existing codebase to follow.
+- The services are written in Python 3.12 and the screens (`web/`) in TypeScript; the libraries of both are listed in section 2 of `docs/03-implementation-plan.md`. The project is built from scratch, with no existing codebase to follow.
 - There are no build, test or format commands yet. Record them in this section in step 0, when the project skeleton exists.
 
 ## The documents are the source of truth
