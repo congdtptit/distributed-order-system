@@ -2,6 +2,7 @@
 delivery through the consumer's deduplication (``handle_once``), and readers of the Kitchen DB."""
 
 import itertools
+import json
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -11,7 +12,7 @@ import psycopg
 
 from common.clock import Clock, FixedClock
 from common.consumer import Incoming, Source, handle_once
-from common.envelope import Envelope, new_envelope
+from common.envelope import Envelope, decode, new_envelope
 from kitchen_service.app import kitchen_handlers
 
 NOW = datetime(2026, 11, 20, 9, 15, tzinfo=UTC)
@@ -118,6 +119,17 @@ def outbox(dsn: str) -> list[Sent]:
         Sent(str(r[0]), str(r[1]), r[2]["event_type"], r[2]["causation_id"], r[2]["payload"])
         for r in rows
     ]
+
+
+def sent_envelopes(dsn: str, event_type: str) -> list[Envelope]:
+    """The messages of one type in a service's outbox (Inventory's or the Kitchen's), as the
+    receiver would decode them: to hand real messages from one service to the other."""
+    with psycopg.connect(dsn) as conn:
+        rows = conn.execute(
+            "SELECT payload FROM outbox_events WHERE payload->>'event_type' = %s ORDER BY id",
+            (event_type,),
+        ).fetchall()
+    return [decode(json.dumps(r[0]).encode()) for r in rows]
 
 
 def record(dsn: str, order_id: uuid.UUID | None) -> dict[str, Any] | None:

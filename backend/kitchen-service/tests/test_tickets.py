@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Callable, Iterator
 from typing import Any
 
+import inventory_support as inv
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
@@ -19,11 +20,14 @@ from kitchen_support import (
     outbox,
     record,
     records_count,
+    sent_envelopes,
 )
 
 from common import reasons
 from common.api import get_clock, get_conn
 from common.clock import FixedClock
+from common.envelope import Envelope
+from inventory_service.checks import ClearResult, clear_check
 from kitchen_service.app import app
 
 
@@ -222,11 +226,7 @@ def test_a_repeat_reaching_a_terminal_status_gets_the_stored_result_and_no_secon
     assert [s.event_type for s in outbox(kdb)].count("ReleaseRequested") == 1
 
 
-@pytest.mark.kb(6)
 def test_queued_tickets_with_a_flagged_ingredient_show_a_warning(kdb: str, api: TestClient) -> None:
-    """Scenario 6, the ticket warning part: the Kitchen rejects with the reason spoiled
-    ingredient (meat) ... Queued tickets that contain meat show a warning. The flag reaches the
-    Kitchen as Inventory's IngredientCheckChanged (step 3)."""
     with_meat = queued(kdb)  # PHO_BO: THIT_BO
     without_meat = queued(kdb, reserved=BUN_CHA_RESERVED, dish="BUN_CHA")
     cooking = queued(kdb)
@@ -236,16 +236,72 @@ def test_queued_tickets_with_a_flagged_ingredient_show_a_warning(kdb: str, api: 
     assert shown[str(with_meat)]["warnings"] == ["THIT_BO"]
     assert shown[str(without_meat)]["warnings"] == []
     assert shown[str(cooking)]["warnings"] == []  # the warning is for Queued tickets
-    # The warning is only a warning: the ticket is not cancelled by itself (Flow A rules).
-    rec = record(kdb, with_meat)
-    assert rec is not None and rec["status"] == "CHO_NAU"
 
 
+def from_inventory(idb: str, kdb: str, order: Envelope) -> uuid.UUID:
+    """Inventory reserves the order with its real handler; its OrderReserved reaches the
+    Kitchen."""
+    inv.deliver(idb, order)
+    [to_kitchen] = [
+        e
+        for e in sent_envelopes(idb, "OrderReserved")
+        if e.causation_id == order.event_id and e.payload
+    ]
+    deliver(kdb, to_kitchen)
+    assert order.order_id is not None
+    return order.order_id
+
+
+@pytest.mark.kb(6)
 @pytest.mark.kb(48)
+def test_a_spoiled_rejection_warns_other_meat_tickets_until_the_check_is_done(
+    migrated: Callable[[str], str], kdb: str, api: TestClient
+) -> None:
+    """Scenario 6, the ticket warning part: the Kitchen rejects with the reason spoiled
+    ingredient (meat) ... Queued tickets that contain meat show a warning.
+    Scenario 48, the warning part: Inventory confirms that the stock check is done; the warning
+    on the ticket disappears.
+
+    Both services run their real code on their own DB; each message is the one the other side
+    really wrote to its outbox. The Inventory clauses are tested in step 3, dish status in
+    phase 2."""
+    idb = inv.seeded(migrated("inventory-service"))
+    rejected = from_inventory(idb, kdb, inv.order_created(items=[("PHO_BO", 1)]))
+    other_meat = from_inventory(idb, kdb, inv.order_created(items=[("PHO_BO", 1)]))
+    no_meat = from_inventory(idb, kdb, inv.order_created(items=[("BUN_CHA", 1)]))
+    assert all(t["warnings"] == [] for t in tickets(api).values())
+
+    # The Kitchen rejects with the reason spoiled ingredient (meat) ...
+    response = api.post(
+        f"/tickets/{rejected}/reject",
+        json={"reason_code": reasons.SPOILED_INGREDIENT, "spoiled_ingredients": ["THIT_BO"]},
+    )
+    assert response.status_code == 200
+    [release] = sent_envelopes(kdb, "ReleaseRequested")
+    inv.deliver(idb, release)  # ... Inventory writes the meat off and flags it ...
+    [flagged] = sent_envelopes(idb, "IngredientCheckChanged")
+    deliver(kdb, flagged)  # ... and tells the Kitchen.
+
+    # Queued tickets that contain meat show a warning; others do not.
+    shown = tickets(api)
+    assert str(rejected) not in shown
+    assert shown[str(other_meat)]["warnings"] == ["THIT_BO"]
+    assert shown[str(no_meat)]["warnings"] == []
+    rec = record(kdb, other_meat)
+    assert rec is not None and rec["status"] == "CHO_NAU"  # only a warning (Flow A rules)
+
+    # Inventory confirms the stock check is done; the warning disappears.
+    with psycopg.connect(idb) as conn:
+        assert clear_check(conn, "THIT_BO", None, FixedClock(NOW)).result is ClearResult.CLEARED
+    cleared = [
+        e for e in sent_envelopes(idb, "IngredientCheckChanged") if e.event_id != flagged.event_id
+    ]
+    [cleared_msg] = cleared
+    deliver(kdb, cleared_msg)
+    assert tickets(api)[str(other_meat)]["warnings"] == []
+
+
 def test_the_warning_disappears_when_the_flag_is_cleared(kdb: str, api: TestClient) -> None:
-    """Scenario 48, the warning part: meat is flagged and a Queued ticket that contains meat
-    is showing a warning; Inventory confirms that the stock check is done. The warning on the
-    ticket disappears."""
     order_id = queued(kdb)
     deliver(kdb, check_changed("THIT_BO", True, seq=1))
     assert tickets(api)[str(order_id)]["warnings"] == ["THIT_BO"]
