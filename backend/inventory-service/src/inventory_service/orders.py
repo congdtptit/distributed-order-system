@@ -201,23 +201,37 @@ def _reserve(
         for ingredient_id, quantity in recipes[line.dish_id]:
             demand[ingredient_id] += quantity * line.quantity
 
+    # Lock every stock row of the order in ascending ID (section 13.4: no deadlock between
+    # orders) and decide from the locked rows, so the reason cannot change under us. A flagged
+    # ingredient decides the reason even when another one is also short (BR6).
+    locked: dict[str, tuple[Decimal, bool]] = {}
+    for ingredient_id in sorted(demand):
+        row = conn.execute(
+            "SELECT available, needs_check FROM stock WHERE ingredient_id = %s FOR UPDATE",
+            (ingredient_id,),
+        ).fetchone()
+        assert row is not None  # recipes.ingredient_id references stock
+        locked[ingredient_id] = (Decimal(row[0]), bool(row[1]))
+    if any(flagged for _available, flagged in locked.values()):
+        return reasons.AWAITING_STOCK_CHECK, []
+    if any(demand[i] > min(available, MAX_QUANTITY) for i, (available, _f) in locked.items()):
+        return reasons.INSUFFICIENT_INGREDIENTS, []
+
     reserved: list[Reserved] = []
     try:
-        with conn.transaction():  # SAVEPOINT reserve: a short ingredient undoes only this part
-            for ingredient_id in sorted(demand):  # ascending ID: no deadlock between orders
+        with conn.transaction():  # SAVEPOINT reserve
+            for ingredient_id in sorted(demand):
                 q = demand[ingredient_id]
-                row = (
-                    None
-                    if q > MAX_QUANTITY
-                    else conn.execute(
-                        """
-                        UPDATE stock SET available = available - %s, reserved = reserved + %s
-                         WHERE ingredient_id = %s AND available >= %s AND NOT needs_check
-                        RETURNING name, unit
-                        """,
-                        (q, q, ingredient_id, q),
-                    ).fetchone()
-                )
+                # The statement of section 13.4, condition included. The rows are locked and
+                # were just checked, so it always deducts; the condition stays as a safeguard.
+                row = conn.execute(
+                    """
+                    UPDATE stock SET available = available - %s, reserved = reserved + %s
+                     WHERE ingredient_id = %s AND available >= %s AND NOT needs_check
+                    RETURNING name, unit
+                    """,
+                    (q, q, ingredient_id, q),
+                ).fetchone()
                 if row is None:
                     raise _Short(ingredient_id)
                 conn.execute(
@@ -226,16 +240,8 @@ def _reserve(
                     (env.order_id, ingredient_id, q),
                 )
                 reserved.append(Reserved(ingredient_id, str(row[0]), str(row[1]), q))
-    except _Short as short:
-        flagged = conn.execute(
-            "SELECT needs_check FROM stock WHERE ingredient_id = %s", (short.ingredient_id,)
-        ).fetchone()
-        reason = (
-            reasons.AWAITING_STOCK_CHECK
-            if flagged is not None and flagged[0]
-            else reasons.INSUFFICIENT_INGREDIENTS
-        )
-        return reason, []
+    except _Short:
+        return reasons.INSUFFICIENT_INGREDIENTS, []
     return None, reserved
 
 

@@ -91,7 +91,7 @@ def test_two_orders_racing_for_one_ingredient_one_reserved_one_failed(
             # No order is partially reserved: the winner holds all three lines, the loser none.
             held = sorted(len(reservations(dsn, o.order_id)) for o in orders)
             assert held == [0, 3]
-        assert_invariants(dsn)
+            assert_invariants(dsn)
     finally:
         for conn in conns:
             conn.close()

@@ -15,6 +15,7 @@ from inventory_support import D, order_created
 
 from common.envelope import decode, encode
 from common.kafka import Outgoing, Record, Sender, TopicTail
+from inventory_service.invariants import violations
 from inventory_service.stock import receive_stock
 
 pytestmark = pytest.mark.tier3
@@ -34,7 +35,11 @@ def test_an_order_from_pos01_reaches_the_kitchen_and_only_pos01_hears_back(
 ) -> None:
     """Scenario 24: Inventory reserves an order from POS01. The Kitchen receives the order
     through kitchen-orders; POS01 receives Reserved through its own status-events; other
-    branches receive nothing."""
+    branches receive nothing.
+
+    "Receives" is checked as the message on the branch's or the Kitchen's topic; the Kitchen
+    and POS01 acting on it is the end-to-end version after step 6 (section 7 of document 02).
+    "Nothing" is checked over a 5-second window after the expected messages arrived."""
     with psycopg.connect(INVENTORY_DB) as conn:
         for ingredient in ("BANH_MI", "THIT_LON"):
             assert receive_stock(conn, ingredient, D("1"))
@@ -79,4 +84,5 @@ def test_an_order_from_pos01_reaches_the_kitchen_and_only_pos01_hears_back(
         record = conn.execute(
             "SELECT status, origin_branch FROM inventory_orders WHERE order_id = %s", (order_id,)
         ).fetchone()
+        assert violations(conn) == {}
     assert record == ("DANG_GIU", "POS01")

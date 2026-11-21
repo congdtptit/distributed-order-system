@@ -170,6 +170,8 @@ def test_failed_for_lack_of_stock_then_restocked_then_resent_fails_again(inv: st
     with psycopg.connect(inv) as conn:
         assert receive_stock(conn, "THIT_BO", D("5"))
     restocked = stock(inv)
+    # The restock now covers the order: PHO_BO needs 0.15 of THIT_BO.
+    assert restocked["THIT_BO"].available == D("5.1")
     sent_before = len(outbox(inv))
 
     for resend in (env, resend_with_new_event_id(env)):  # both kinds of duplicate
@@ -372,6 +374,17 @@ def test_a_flagged_ingredient_is_not_reserved_even_with_enough_stock(inv: str) -
     assert stock(inv) == before
     assert reservations(inv, env.order_id) == {}
     assert_invariants(inv)
+
+
+def test_a_flagged_ingredient_decides_the_reason_even_when_another_is_short(inv: str) -> None:
+    """BR6: an order that needs a flagged ingredient gets Failed (awaiting stock check). Here
+    BANH_PHO (first in lock order) is short and THIT_BO is flagged."""
+    set_available(inv, "BANH_PHO", D("0.1"))
+    flag_for_stock_check(inv, "THIT_BO")
+    env = order_created(items=[("PHO_BO", 1)])
+    deliver(inv, env)
+    record = order_record(inv, env.order_id)
+    assert record is not None and record[:2] == ("THAT_BAI", reasons.AWAITING_STOCK_CHECK)
 
 
 def test_an_unflagged_dish_still_reserves_while_another_ingredient_is_flagged(inv: str) -> None:
