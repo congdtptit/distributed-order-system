@@ -57,11 +57,22 @@ log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+class Source:
+    """Where a message was read: the key of an ``alerts`` row (section 3 of document 02)."""
+
+    topic: str
+    partition: int
+    offset: int
+
+
+@dataclass(frozen=True)
 class Incoming:
-    """What a handler gets: the message, and the sending branch taken from the topic name."""
+    """What a handler gets: the message, the sending branch taken from the topic name, and
+    where the message was read (for alerts only; the handler never talks to Kafka)."""
 
     envelope: Envelope
     source_branch: str | None
+    source: Source | None = None
 
 
 Handler = Callable[[psycopg.Connection[Any], Incoming], None]
@@ -240,7 +251,9 @@ class MessageConsumer:
             return Outcome.SKIPPED
 
         conn = self._connection()
-        if not handle_once(conn, handler, Incoming(envelope, branch_from_topic(record.topic))):
+        source = Source(record.topic, record.partition, record.offset)
+        incoming = Incoming(envelope, branch_from_topic(record.topic), source)
+        if not handle_once(conn, handler, incoming):
             return Outcome.DUPLICATE
         if self._after_db_commit is not None:
             self._after_db_commit(record)

@@ -18,6 +18,7 @@ dev = [
   "pytest>=8.3",
   "ruff>=0.8",
   "pyright[nodejs]>=1.1.390",
+  "httpx2>=2.16.0",
 ]
 
 [tool.uv]

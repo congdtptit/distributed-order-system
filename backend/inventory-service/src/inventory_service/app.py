@@ -1,32 +1,37 @@
 """HTTP entry point of the Inventory service, and its background workers.
 
 On start: load the seed if ``stock`` is empty (section 1 of docs/02-detailed-design.md), then
-run the consumer of ``order-events.*`` and the outbox relay in threads. Two instances share the
-consumer group ``inventory``, so Kafka splits the partitions between them.
+run the consumer of ``order-events.*`` and ``stock-commands`` and the outbox relay in threads.
+Two instances share the consumer group ``inventory``, so Kafka splits the partitions between
+them.
 
 The APIs are in section 6 of docs/02-detailed-design.md.
 """
 
 import logging
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from typing import Any
+from decimal import Decimal
+from typing import Annotated, Any
 
 import psycopg
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
+from pydantic import BaseModel, Field
 
-from common.clock import SystemClock
+from common.clock import Clock, SystemClock
 from common.consumer import ConsumerSettings, MessageConsumer
 from common.kafka import Receiver, Sender
 from common.outbox import OutboxRelay
 from common.runtime import Workers, configure_logging, instance_name
 from common.seed import load_menu
 from common.service import identity
-from common.topics import ORDER_EVENTS_PATTERN
+from common.topics import ORDER_EVENTS_PATTERN, STOCK_COMMANDS
+from inventory_service.checks import ClearResult, clear_check
+from inventory_service.commands import make_consumed_handler, make_release_handler
 from inventory_service.orders import Limits, make_order_created_handler
-from inventory_service.stock import load_seed
+from inventory_service.stock import load_seed, receive_stock
 
 log = logging.getLogger(__name__)
 CONSUMER_GROUP = "inventory"
@@ -49,10 +54,16 @@ def start_workers(dsn: str, bootstrap: str) -> Workers:
     consumer = MessageConsumer(
         ConsumerSettings(
             name=f"inventory@{name}",
-            handlers={"OrderCreated": make_order_created_handler(clock, limits_from_env())},
+            handlers={
+                "OrderCreated": make_order_created_handler(clock, limits_from_env()),
+                "ReleaseRequested": make_release_handler(clock),
+                "StockConsumed": make_consumed_handler(clock),
+            },
             deciding=True,
         ),
-        Receiver(bootstrap, CONSUMER_GROUP, [ORDER_EVENTS_PATTERN], f"{name}-consumer"),
+        Receiver(
+            bootstrap, CONSUMER_GROUP, [ORDER_EVENTS_PATTERN, STOCK_COMMANDS], f"{name}-consumer"
+        ),
         Sender(bootstrap, f"{name}-dlq"),
         connect,
     )
@@ -86,3 +97,100 @@ app = FastAPI(title="Inventory", lifespan=lifespan)
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {"status": "ok", **identity()}
+
+
+# ---------- the APIs of section 6 of docs/02-detailed-design.md ----------
+
+
+def get_conn() -> Iterator[psycopg.Connection[Any]]:
+    """One transaction per request: committed when the handler returns, rolled back on error."""
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        yield conn
+
+
+def get_clock() -> Clock:
+    return SystemClock()
+
+
+Conn = Annotated[psycopg.Connection[Any], Depends(get_conn)]
+ClockDep = Annotated[Clock, Depends(get_clock)]
+Quantity = Annotated[Decimal, Field(max_digits=12, decimal_places=3)]
+
+
+class StockItem(BaseModel):
+    """The four quantities of section 3.3 of the specification and the stock-check flag."""
+
+    ingredient_id: str
+    name: str
+    unit: str
+    available: Decimal
+    reserved: Decimal
+    consumed: Decimal
+    wasted: Decimal
+    needs_check: bool
+
+
+class Receipt(BaseModel):
+    ingredient_id: str
+    quantity: Annotated[Quantity, Field(gt=0)]
+
+
+class ClearCheck(BaseModel):
+    counted_on_hand: Annotated[Quantity, Field(ge=0)] | None = None
+    """The counted on-hand stock (available plus reserved); omitted: available is unchanged."""
+
+
+_STOCK_COLUMNS = "ingredient_id, name, unit, available, reserved, consumed, wasted, needs_check"
+
+
+def _stock_item(conn: psycopg.Connection[Any], ingredient_id: str) -> StockItem:
+    row = conn.execute(
+        f"SELECT {_STOCK_COLUMNS} FROM stock WHERE ingredient_id = %s",  # pyright: ignore[reportArgumentType]
+        (ingredient_id,),
+    ).fetchone()
+    assert row is not None
+    return StockItem(**dict(zip(_STOCK_COLUMNS.split(", "), row, strict=True)))
+
+
+@app.get("/stock")
+def list_stock(conn: Conn) -> list[StockItem]:
+    """Testing, the demo, and Flow D's list of ingredients awaiting a stock check."""
+    rows = conn.execute(
+        f"SELECT {_STOCK_COLUMNS} FROM stock ORDER BY ingredient_id"  # pyright: ignore[reportArgumentType]
+    ).fetchall()
+    return [StockItem(**dict(zip(_STOCK_COLUMNS.split(", "), r, strict=True))) for r in rows]
+
+
+@app.post("/stock/receipts", responses={404: {"description": "No such ingredient"}})
+def stock_receipt(body: Receipt, conn: Conn) -> StockItem:
+    """Stock receipt: adds to available stock. Phase 2 adds the dish-status computation."""
+    if not receive_stock(conn, body.ingredient_id, body.quantity):
+        raise HTTPException(404, f"no ingredient {body.ingredient_id}")
+    return _stock_item(conn, body.ingredient_id)
+
+
+@app.post(
+    "/ingredients/{ingredient_id}/clear-check",
+    responses={
+        404: {"description": "No such ingredient"},
+        409: {"description": "counted_on_hand is less than the reserved quantity"},
+    },
+)
+def clear_stock_check(
+    ingredient_id: str, conn: Conn, clock: ClockDep, body: ClearCheck | None = None
+) -> StockItem:
+    """Clear the stock-check flag once the check is done (Flow A, scenario 48)."""
+    counted = None if body is None else body.counted_on_hand
+    outcome = clear_check(conn, ingredient_id, counted, clock)
+    if outcome.result is ClearResult.NOT_FOUND:
+        raise HTTPException(404, f"no ingredient {ingredient_id}")
+    if outcome.result is ClearResult.BELOW_RESERVED:
+        raise HTTPException(
+            409,
+            {
+                "message": "counted_on_hand is less than the reserved quantity; reject the"
+                " tickets still holding this ingredient first (Flow A)",
+                "reserved": str(outcome.reserved),
+            },
+        )
+    return _stock_item(conn, ingredient_id)

@@ -11,15 +11,18 @@ from typing import Any
 import psycopg
 
 from common.seed import Menu
+from inventory_service.checks import ensure_menu_version
 
 _SEED_LOCK = 7_420_002
 """Advisory lock key: the two Inventory instances start at the same time."""
 
 
 def load_seed(conn: psycopg.Connection[Any], menu: Menu) -> bool:
-    """Load the seed when ``stock`` is empty. True if it loaded, False if stock already exists."""
+    """Load the seed when ``stock`` is empty. True if it loaded, False if stock already exists.
+    Also creates the ``menu_version`` row on the first start."""
     with conn.transaction():
         conn.execute("SELECT pg_advisory_xact_lock(%s)", (_SEED_LOCK,))
+        ensure_menu_version(conn)
         if conn.execute("SELECT EXISTS (SELECT 1 FROM stock)").fetchone() == (True,):
             return False
         for i in menu.ingredients:

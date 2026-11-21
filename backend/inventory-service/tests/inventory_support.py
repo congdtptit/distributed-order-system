@@ -1,6 +1,7 @@
 """Helpers shared by the Inventory tests: build messages, deliver them through the same
 deduplication as the consumer (``handle_once``), and read the Inventory DB."""
 
+import itertools
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -10,10 +11,11 @@ from typing import Any
 import psycopg
 
 from common.clock import Clock, FixedClock
-from common.consumer import Incoming, handle_once
+from common.consumer import Handler, Incoming, Source, handle_once
 from common.envelope import Envelope, new_envelope
 from common.seed import load_menu
 from common.topics import branch_from_topic
+from inventory_service.commands import make_consumed_handler, make_release_handler
 from inventory_service.invariants import violations
 from inventory_service.orders import Limits, make_order_created_handler
 from inventory_service.stock import load_seed
@@ -69,22 +71,81 @@ def resend_with_new_event_id(env: Envelope) -> Envelope:
     )
 
 
+_offsets = itertools.count()
+
+
+def handlers(clock: Clock | None = None, limits: Limits | None = None) -> dict[str, Handler]:
+    """The handlers the Inventory service registers (app.py), on a fixed clock."""
+    clk = clock or FixedClock(NOW)
+    return {
+        "OrderCreated": make_order_created_handler(clk, limits or Limits()),
+        "ReleaseRequested": make_release_handler(clk),
+        "StockConsumed": make_consumed_handler(clk),
+    }
+
+
 def deliver(
     dsn: str,
     env: Envelope,
     *,
-    topic: str = "order-events.POS01",
+    topic: str | None = None,
     clock: Clock | None = None,
     limits: Limits | None = None,
     conn: psycopg.Connection[Any] | None = None,
 ) -> bool:
-    """Process one message as the consumer would (steps 1 to 4). False if it was a duplicate."""
-    handler = make_order_created_handler(clock or FixedClock(NOW), limits or Limits())
-    message = Incoming(env, branch_from_topic(topic))
+    """Process one message as the consumer would (steps 1 to 4). False if it was a duplicate.
+    The topic defaults to where the message type travels; each delivery gets a new offset."""
+    if topic is None:
+        topic = "order-events.POS01" if env.event_type == "OrderCreated" else "stock-commands"
+    handler = handlers(clock, limits)[env.event_type]
+    message = Incoming(env, branch_from_topic(topic), Source(topic, 0, next(_offsets)))
     if conn is not None:
         return handle_once(conn, handler, message)
     with psycopg.connect(dsn, autocommit=True) as own:
         return handle_once(own, handler, message)
+
+
+def release_requested(
+    order_id: uuid.UUID | None,
+    *,
+    reason: str = "EQUIPMENT_FAILURE",
+    spoiled: list[str] | None = None,
+    cancelled_by: str = "KITCHEN",
+) -> Envelope:
+    """The Kitchen's release command (section 2 of document 02)."""
+    return new_envelope(
+        "ReleaseRequested",
+        order_id=order_id,
+        branch_id="POS01",
+        clock=FixedClock(NOW),
+        payload={
+            "cancelled_by": cancelled_by,
+            "reason_code": reason,
+            "spoiled_ingredients": spoiled or [],
+        },
+    )
+
+
+def stock_consumed(order_id: uuid.UUID | None) -> Envelope:
+    """The Kitchen's report that staff pressed Start cooking."""
+    return new_envelope(
+        "StockConsumed", order_id=order_id, branch_id="POS01", clock=FixedClock(NOW)
+    )
+
+
+def alerts(dsn: str) -> list[tuple[Any, ...]]:
+    """(kind, order_id, event_id) of every alert."""
+    with psycopg.connect(dsn) as conn:
+        return conn.execute("SELECT kind, order_id, event_id FROM alerts ORDER BY id").fetchall()
+
+
+def line_outcomes(dsn: str, order_id: uuid.UUID | None) -> dict[str, str | None]:
+    with psycopg.connect(dsn) as conn:
+        rows = conn.execute(
+            "SELECT ingredient_id, outcome FROM inventory_reservations WHERE order_id = %s",
+            (order_id,),
+        ).fetchall()
+    return {str(r[0]): r[1] for r in rows}
 
 
 @dataclass(frozen=True)
