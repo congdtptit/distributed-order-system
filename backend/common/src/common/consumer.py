@@ -140,14 +140,17 @@ class MessageConsumer:
         connect: Connect,
         *,
         after_db_commit: Callable[[Record], None] | None = None,
+        branch_of: Callable[[str], str | None] = branch_from_topic,
     ) -> None:
         """``after_db_commit`` runs between steps 4 and 5; tests use it to stop the process
-        there (scenario 26)."""
+        there (scenario 26). ``branch_of`` maps a topic to the sending branch; tests on
+        throwaway topics replace it, so that no service's ``order-events.*`` pattern sees them."""
         self.settings = settings
         self._receiver = receiver
         self._dlq = dlq_sender
         self._connect = connect
         self._after_db_commit = after_db_commit
+        self._branch_of = branch_of
         self._conn: psycopg.Connection[Any] | None = None
 
     # ---------- the loop ----------
@@ -252,7 +255,7 @@ class MessageConsumer:
 
         conn = self._connection()
         source = Source(record.topic, record.partition, record.offset)
-        incoming = Incoming(envelope, branch_from_topic(record.topic), source)
+        incoming = Incoming(envelope, self._branch_of(record.topic), source)
         if not handle_once(conn, handler, incoming):
             return Outcome.DUPLICATE
         if self._after_db_commit is not None:
