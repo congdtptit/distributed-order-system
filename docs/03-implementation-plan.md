@@ -13,6 +13,7 @@ This document says how to implement business specification v1.5 and the detailed
 | 5.7 | New rows for `test-auditor` and `test-runner` | `test-auditor` was created on 21 Nov 2026; `test-runner` waits for step 0 |
 | 1, 6 | Point 12 of the design is confirmed | @Naul agreed on 21 Nov 2026 |
 | 4, 5.7 | The git repository exists; step 0 no longer creates it | Set up on 21 Nov 2026, ahead of step 0, at the user's request |
+| 5.6 | CI is laid out as four GitHub Actions workflows; `docs` is created; there is no continuous deployment | The repository is on GitHub, and the project has no server to deploy to |
 
 ## Changes in revision 3
 
@@ -175,8 +176,17 @@ There is no implementing subagent per module. A subagent cannot ask the user a q
 
 ### 5.6 Automation
 
-- **CI:** tier 1 and 2 tests on every pull request, tier 3 nightly.
-- **Automatic pull request review** with `claude-code-action`, a `REVIEW.md` holding the twelve prohibitions, a turn limit and a timeout.
+CI runs on GitHub Actions, one workflow file per row in `.github/workflows/`.
+
+| Workflow | Runs on | What it runs | State |
+|---|---|---|---|
+| `docs` | Every push to `main` and every pull request | The document consistency check, the same script as the `Stop` hook | Created |
+| `ci` | Every push to `main` and every pull request | `ruff format --check`, `ruff check`, Pyright, then the tier 1 and tier 2 tests; PostgreSQL is started by Testcontainers | Step 0, when the skeleton and the commands exist |
+| `nightly` | Once a night, and on manual start | The tier 3 tests with a real Kafka; they are slow and can be flaky, so they do not block a pull request | Step 7 |
+| `review` | Every pull request | Review by `claude-code-action`, with a `REVIEW.md` holding the twelve prohibitions, a turn limit and a timeout | After step 1. It needs an API key stored as a repository secret |
+
+There is no continuous deployment: the system is demonstrated on one machine with Docker Compose and has no server to deploy to. In its place, `ci` gains a job in step 7 that builds every service image and starts the compose file, so that the demo setup cannot break unnoticed.
+
 - **Test quality audit:** done by the `test-auditor` subagent inside `/scenario` (section 5.5). Before the demo, one run over every scenario gives the scenario-to-test table.
 - **Not needed for this project:** an MCP server (`psql` and the Kafka CLI through Bash are enough), the Agent SDK and OpenTelemetry.
 
@@ -186,7 +196,8 @@ The parts that do not depend on the code were created on 21 Nov 2026. The rest b
 
 | Part | File | State |
 |---|---|---|
-| Git repository | `origin` on GitHub, branch `main`; `.gitignore` | Created. It holds the documents and the Claude Code configuration; no code yet |
+| Git repository | `origin` on GitHub, branch `main`; `.gitignore`, `.gitattributes` | Created. It holds the documents and the Claude Code configuration; no code yet |
+| CI for the documents | `.github/workflows/docs.yml` | Created. It first runs when the repository is pushed |
 | Shared context | `CLAUDE.md` | Created. No build or test commands yet |
 | Conventions for editing the documents | `.claude/rules/docs.md` | Created, in use |
 | Rules per module | `.claude/rules/common.md`, `inventory.md`, `kitchen.md`, `order-service.md` | Created. Their `paths` use the module names in section 2; change them if the layout changes in step 0 |
@@ -198,7 +209,7 @@ The parts that do not depend on the code were created on 21 Nov 2026. The rest b
 | Reviewing code against the specification | `spec-reviewer` subagent | Created. Useful once there is code |
 | Running the slow tests | `test-runner` subagent | Not created. It needs the test commands of step 0 |
 | Formatting, the test gate at `Stop`, blocking edits to applied migrations, blocking `DELETE` and auto-commit | Hooks | Not created. They need the project skeleton and the installed tools |
-| `/invariants` skill, CI, automatic pull request review | | Not created. Step 0 and later |
+| `/invariants` skill, the `ci`, `nightly` and `review` workflows of section 5.6 | | Not created. Step 0 and later |
 
 ## 6. Open risks
 

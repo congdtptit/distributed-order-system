@@ -1,7 +1,7 @@
 #!/bin/bash
 # PreToolUse (Edit|Write|NotebookEdit).
 # While the project is in the documentation phase, block creating or editing
-# project files outside docs/, .claude/ and a few root files.
+# project files outside docs/, .claude/, .github/ and a few root files.
 # Exit 2 blocks the call; the reason on stderr goes back to Claude.
 input=$(cat)
 ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
@@ -24,10 +24,10 @@ case "$file" in
 esac
 
 case "$file" in
-  "$ROOT"/docs/*|"$ROOT"/.claude/*|"$ROOT"/CLAUDE.md|"$ROOT"/CLAUDE.local.md|"$ROOT"/README.md|"$ROOT"/.gitignore)
+  "$ROOT"/docs/*|"$ROOT"/.claude/*|"$ROOT"/.github/*|"$ROOT"/CLAUDE.md|"$ROOT"/CLAUDE.local.md|"$ROOT"/README.md|"$ROOT"/.gitignore|"$ROOT"/.gitattributes)
     exit 0 ;;
   "$ROOT"/*)
-    echo "The project is in the documentation phase (.claude/project-phase = docs): do not create or edit files outside docs/, .claude/ and CLAUDE.md yet. If the user has just said clearly that implementation starts, ask them to change the content of .claude/project-phase to code." >&2
+    echo "The project is in the documentation phase (.claude/project-phase = docs): do not create or edit files outside docs/, .claude/, .github/ and CLAUDE.md yet. If the user has just said clearly that implementation starts, ask them to change the content of .claude/project-phase to code." >&2
     exit 2 ;;
   *)
     exit 0 ;;

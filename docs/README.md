@@ -31,7 +31,8 @@ The configuration is in `CLAUDE.md` at the project root and in the `.claude/` di
 Two things to know when working on the documents:
 
 - After editing a file in this directory, run `python3 .claude/skills/doc-check/scripts/check_docs.py` from the project root, or call `/doc-check` in Claude Code. It checks tables, links, the scenario list and the version numbers across the files.
-- The file `.claude/project-phase` contains `docs`. While it does, Claude Code is blocked from creating files outside `docs/` and `.claude/`. Change its content to `code` when implementation starts.
+- The file `.claude/project-phase` contains `docs`. While it does, Claude Code is blocked from creating files outside `docs/`, `.claude/` and `.github/`. Change its content to `code` when implementation starts.
+- On GitHub, the `docs` workflow runs the same check on every push to `main` and every pull request.
 
 ## Documents outside this set
 

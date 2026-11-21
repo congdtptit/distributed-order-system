@@ -1,0 +1,21 @@
+# Checks that the documents in docs/ agree with each other.
+# It runs the same script as the Stop hook of Claude Code, so that an edit
+# made outside Claude Code is checked too.
+name: docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that the document set is consistent
+        run: python3 .claude/skills/doc-check/scripts/check_docs.py

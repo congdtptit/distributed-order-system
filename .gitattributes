@@ -1,0 +1,5 @@
+# Keep LF line endings on every machine. A hook script checked out with
+# CRLF on Windows fails to start.
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
