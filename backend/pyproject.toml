@@ -65,10 +65,14 @@ extraPaths = [
   "inventory-service/src",
   "kitchen-service/src",
   "query-service/src",
+  # Shared test helpers of a module (e.g. inventory_support.py); see pytest pythonpath below.
+  "inventory-service/tests",
 ]
 
 [tool.pytest.ini_options]
 addopts = ["--strict-markers", "--import-mode=importlib", "-ra"]
+# Test helper modules shared by the test files of one module; their names are unique.
+pythonpath = ["inventory-service/tests"]
 testpaths = [
   "common/tests",
   "order-service/tests",

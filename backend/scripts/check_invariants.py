@@ -1,51 +1,18 @@
 """Check the stock-accounting invariants of the Inventory DB.
 
-The two invariants come from section 3 of docs/02-detailed-design.md.
+The checks are in inventory_service/invariants.py (section 3 of docs/02-detailed-design.md).
 Exits 0 with a one-line summary when every check returns no rows; exits 1 and
 prints the rows otherwise. Run inside the tools container:
     docker compose exec tools python scripts/check_invariants.py [DSN]
 """
 
 import sys
-from typing import LiteralString
 
 import psycopg
 
-DEFAULT_DSN = "postgresql://app:app@inventory-db:5432/inventory"
+from inventory_service.invariants import CHECKS
 
-CHECKS: list[tuple[str, LiteralString]] = [
-    (
-        "stock.reserved differs from the sum of lines still held",
-        """
-        SELECT s.ingredient_id, s.reserved,
-               COALESCE(SUM(r.quantity) FILTER (WHERE r.outcome IS NULL), 0) AS held
-          FROM stock s
-          LEFT JOIN inventory_reservations r ON r.ingredient_id = s.ingredient_id
-         GROUP BY s.ingredient_id, s.reserved
-        HAVING s.reserved <> COALESCE(SUM(r.quantity) FILTER (WHERE r.outcome IS NULL), 0)
-         ORDER BY s.ingredient_id
-        """,
-    ),
-    (
-        "a line still held belongs to an order that is not DANG_GIU",
-        """
-        SELECT r.order_id, r.ingredient_id, r.quantity, o.status
-          FROM inventory_reservations r
-          JOIN inventory_orders o ON o.order_id = r.order_id
-         WHERE r.outcome IS NULL AND o.status <> 'DANG_GIU'
-         ORDER BY r.order_id, r.ingredient_id
-        """,
-    ),
-    (
-        "negative stock quantity",
-        """
-        SELECT ingredient_id, available, reserved, consumed, wasted
-          FROM stock
-         WHERE available < 0 OR reserved < 0 OR consumed < 0 OR wasted < 0
-         ORDER BY ingredient_id
-        """,
-    ),
-]
+DEFAULT_DSN = "postgresql://app:app@inventory-db:5432/inventory"
 
 
 def main() -> int:
