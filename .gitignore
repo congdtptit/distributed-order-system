@@ -26,3 +26,8 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+
+# TypeScript frontend
+node_modules/
+frontend/dist/
+*.tsbuildinfo

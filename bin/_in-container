@@ -1,0 +1,25 @@
+#!/bin/bash
+# Shared by bin/backend and bin/frontend: start a development container if it is not
+# running, then run the given command in it.
+#   _in-container <service> <working dir> <command...>
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+service=$1
+workdir=$2
+shift 2
+
+compose=(docker compose -f "$ROOT/infra/compose.yaml" --profile dev)
+if [ -z "$("${compose[@]}" ps -q --status running "$service" 2>/dev/null)" ]; then
+  "${compose[@]}" up -d --wait "$service" >&2
+fi
+
+if [ $# -eq 0 ]; then
+  exit 0
+fi
+
+# Allocate a terminal only when both ends are one, so hooks and pipes work.
+if [ -t 0 ] && [ -t 1 ]; then
+  exec "${compose[@]}" exec -w "$workdir" "$service" "$@"
+fi
+exec "${compose[@]}" exec -T -w "$workdir" "$service" "$@"
