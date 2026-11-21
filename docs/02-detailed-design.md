@@ -1,8 +1,16 @@
 # Detailed design – Kafka events, DB schemas and API
 
-Revision 9 · 22 Nov 2026 · @Naul · follows business specification v1.5
+Revision 10 · 22 Nov 2026 · @Naul · follows business specification v1.5
 
 This document turns business specification v1.5 (the lean edition) into three things to code against: the Kafka event catalogue, each service's DB schema, and the API. There is no existing codebase to align with: the base flow is built in this project as well, so the event names, table names, column names and API paths here are the ones to use.
+
+## Changes in revision 10
+
+| Section | Change | Reason |
+|---|---|---|
+| 1 | The `reason_code` values of the catalogue in section 10 of the specification | The documents named the reasons but gave no codes; Inventory's `OrderFailed` needs them. @Naul chose English codes in upper case on 22 Nov 2026 |
+| 3 | New rule "Receiving `OrderCreated`": the order of the checks, what counts as invalid order data, how the Failed reason is chosen, the limits on time and quantity, the message that cannot be recorded | Built in step 2 (22 Nov 2026); the specification lists the reasons but not their order or the exact data checks |
+| 3 | The reservation locks the order's `stock` rows with `SELECT ... FOR UPDATE` before the conditional `UPDATE` | The spec review of step 2 found that reading the flag after a failed `UPDATE`, without a lock, could give the wrong reason |
 
 ## Changes in revision 9
 
@@ -94,7 +102,22 @@ Specification v1.5 is the deciding source for business behaviour. When this docu
 - **Branch ID (`branch_id`)**: `POS01` … `POSN` and `ONLINE`. Per-branch topic names have the form `order-events.POS01`.
 - **Time**: UTC, ISO 8601 format. The order's `created_at` is written by the branch and does not change across messages; Inventory uses it to check the X-hour limit (BR11).
 - **Statuses in the DB**: unaccented upper-case codes (`CHO_KHO`, `DANG_GIU`…), continuing the naming of `CHUA_CO` and `THAT_BAI` in section 13.4 of the specification.
-- **Reasons**: fixed codes from the catalogue in section 10 of the specification; no free text.
+- **Reasons**: fixed codes from the catalogue in section 10 of the specification; no free text. The codes are English in upper case (chosen by @Naul on 22 Nov 2026), unlike the status codes; the screens show the Vietnamese wording. They are defined once in `backend/common/src/common/reasons.py`:
+
+  | Group | Reason in section 10 | `reason_code` |
+  |---|---|---|
+  | Failed (Inventory) | Insufficient ingredients | `INSUFFICIENT_INGREDIENTS` |
+  | Failed (Inventory) | Ingredient awaiting stock check | `AWAITING_STOCK_CHECK` |
+  | Failed (Inventory) | Dish has no recipe | `NO_RECIPE` |
+  | Failed (Inventory) | Order expired | `ORDER_EXPIRED` |
+  | Failed (Inventory) | Invalid creation time (in the future) | `FUTURE_CREATION_TIME` |
+  | Failed (Inventory) | Invalid order data | `INVALID_ORDER_DATA` |
+  | Kitchen rejection | Equipment failure | `EQUIPMENT_FAILURE` |
+  | Kitchen rejection | Short-staffed | `SHORT_STAFFED` |
+  | Kitchen rejection | Spoiled ingredient | `SPOILED_INGREDIENT` |
+  | Customer cancel (proposed) | Customer changed their mind | `CHANGED_MIND` |
+  | Customer cancel (proposed) | Customer waited too long | `WAITED_TOO_LONG` |
+  | Customer cancel (proposed) | Cashier entered the wrong order | `WRONG_ORDER_ENTERED` |
 - **Ingredient quantities**: decimal numbers with a fixed unit per ingredient, type `NUMERIC(12,3)`.
 - **Catalogue and seed data**: dishes (id, Vietnamese name), ingredients (id, name, unit, starting stock) and recipes come from one file, `backend/seed/menu.json`. Each branch loads the dishes into its own `dishes` table on every start (insert or update). Inventory loads ingredients, stock and recipes on its first start only, when `stock` is empty, so that a restart never overwrites stock that has changed. Ids are unaccented upper-case codes like the status codes (`PHO_BO`, `THIT_BO`). There are no prices: payment is out of scope (section 11 of the specification).
 
@@ -251,6 +274,14 @@ Rules that go with the schema:
 - **Two deduplication layers**: with the same `event_id`, `processed_events` blocks the message and Inventory emits nothing (section 13.3 of the specification). With a different `event_id` but the same `order_id`, `INSERT INTO inventory_orders ... ON CONFLICT (order_id) DO NOTHING` inserts no row, and Inventory returns the stored result without re-evaluating the order (BR12).
 - **Inventory returns the stored result**: it emits only to `status-events.<branch>` of the origin branch, not again to `kitchen-orders`, because the Kitchen already received the original message through the outbox. A `THAT_BAI` record emits `OrderFailed` with the stored reason; a `DANG_GIU`, `DA_TRA` or `DA_DUNG` record emits `OrderReserved`.
 - **Reserve**: exactly as in the SQL in section 13.4 of the specification. The `UPDATE stock` statement subtracts from `available` and adds to `reserved`, under the condition `available >= :q AND NOT needs_check`; each reserved ingredient gets one `inventory_reservations` row. The demand of the whole order is summed per ingredient first, so each ingredient has only one `UPDATE` statement.
+- **Receiving `OrderCreated`** (built in step 2):
+  - *Order of the checks*: (1) the order ID already has a record: return the stored result; (2) invalid order data; (3) created more than X hours ago, then created after now plus the tolerance; (4) a dish with no recipe; (5) the stock. Invalid data comes before the time limit because the limit needs a readable creation time. The first check that fails gives the reason.
+  - *Invalid order data* (`INVALID_ORDER_DATA`): `created_at` missing or not an ISO 8601 time with a time zone; `channel` not `POS` or `ONLINE`; `items` missing, not a list or empty; an item that is not an object, whose `dish_id` is not a non-empty string, whose `quantity` is not a whole number above 0 (`1.5`, `"1"` and `true` are invalid), or whose `name` is present but not a string. `name` itself may be missing: it is for display only. The same dish on two lines is summed. The record keeps `order_created_at` NULL.
+  - *Time limit*: X and the tolerance come from the service's environment (`ORDER_EXPIRY_HOURS`, default 4; `FUTURE_TOLERANCE_MINUTES`, default 5) until section 10 of the specification is confirmed. An order created exactly X hours ago, or exactly at now plus the tolerance, is accepted.
+  - *Reason when the stock decides*: the transaction locks the order's `stock` rows in ascending `ingredient_id` with `SELECT ... FOR UPDATE` and decides from them: if any ingredient is flagged for stock check the reason is `AWAITING_STOCK_CHECK`, even when another one is also short (BR6); otherwise, if any is short, `INSUFFICIENT_INGREDIENTS`. Only then does it run the `UPDATE` of section 13.4, condition included, which therefore always deducts and stays as a safeguard. A demand larger than `NUMERIC(12,3)` can hold counts as short.
+  - *What is forwarded*: `OrderReserved` on `kitchen-orders` carries `created_at` and `items[]` exactly as received, and `reserved[]` in ascending `ingredient_id` with `quantity` as a JSON number. The quantities are for display; releases always use `inventory_reservations` (prohibition 6). Every reply carries the origin branch as `branch_id` and the incoming `event_id` as `causation_id`.
+  - *Returning the stored result* goes to the stored `origin_branch`, whatever topic the resend came on.
+  - *A message that cannot be recorded*: an `OrderCreated` without `order_id`, or one on a topic that names no branch, cannot get a record keyed by order ID. It counts as unreadable: 5 attempts, then the dlq (section 2, "The shared consumer").
 - **Release, consumed, waste**: these run only when `UPDATE inventory_orders SET status = ... WHERE order_id = :id AND status = 'DANG_GIU'` changes exactly one row. If no row changes, it is a duplicate message or an unmatched command: do not touch `stock`.
 - **Unmatched command**: a release command or a Consumed report for an order with no record, or for an order whose record is `THAT_BAI`, writes an `alerts` row of kind `LENH_KHONG_KHOP`, along with a log line containing `order_id` and `event_id`. A command that reaches a `DA_TRA` or `DA_DUNG` record is a duplicate message: ignore it and write no alert.
 - **The `alerts` table**: Inventory uses two kinds, `CAN_KIEM_TRA` (a message of the order went to the dlq) and `LENH_KHONG_KHOP`. Every insert uses `ON CONFLICT DO NOTHING` on the unique key, so a Kafka redelivery does not create a second row. For an unreadable message, `order_id` is taken from the message's Kafka key if the key is a UUID.

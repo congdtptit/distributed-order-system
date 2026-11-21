@@ -15,7 +15,7 @@ The `paths` above follow the module names in section 2 of `docs/03-implementatio
 ## Rules
 
 - Reserve all ingredients of an order or none. Use the savepoint of section 13.4 so that a shortage rolls back only the stock deductions, while the Failed record and the deduplication row are still written.
-- The condition `available >= :q AND NOT needs_check` sits inside the `UPDATE stock` statement. Do not check the flag with a separate read.
+- The condition `available >= :q AND NOT needs_check` sits inside the `UPDATE stock` statement. Read the flag or the stock only under a `SELECT ... FOR UPDATE` on that row in the same transaction (the rule "Receiving `OrderCreated`" in section 3 of document 02), never with a plain read.
 - Release, consume and waste run only when `UPDATE inventory_orders ... WHERE status = 'DANG_GIU'` changes exactly one row.
 - Release the quantity recorded in `inventory_reservations`. Do not recompute it from the current recipe.
 - A release command or a consumed report for an order with no record, or with a `THAT_BAI` record: do not touch `stock`, write an `alerts` row of kind `LENH_KHONG_KHOP`.
@@ -26,10 +26,20 @@ The `paths` above follow the module names in section 2 of `docs/03-implementatio
 - Returning the stored result goes only to the origin branch's `status-events` topic, never again to `kitchen-orders`.
 - Do not delete any row of `inventory_orders` or `processed_events`.
 
+## Code map
+
+| File | Content |
+|---|---|
+| `src/inventory_service/orders.py` | `make_order_created_handler(clock, limits)`: step 2 |
+| `src/inventory_service/stock.py` | `load_seed`, `receive_stock` |
+| `src/inventory_service/invariants.py` | `CHECKS`, `violations(conn)` |
+| `src/inventory_service/app.py` | Seed on start; consumer and outbox relay threads; add step 3's handlers to `handlers=` there |
+| `tests/inventory_support.py` | `seeded`, `order_created`, `deliver` (through `handle_once`), readers of stock, records, outbox; `assert_invariants` |
+
 ## After every test
 
 Run the two invariant queries of section 3 of document 02: `stock.reserved` equals the sum of the lines still held, and every line still held belongs to an order in `DANG_GIU`.
 
 ## Scenarios of this module
 
-Steps 2 and 3 in section 7 of document 02: 5, 6, 9, 15, 16, 22, 24, 30, 39, 42, 43, 44, 48, 49. Phase 2: 18 and the Inventory part of 20.
+Steps 2 and 3 in section 7 of document 02: 5, 6, 9, 15, 16, 22, 24, 30, 39, 42, 43, 44, 48, 49. Step 2 (9, 15, 16, 24, 30, 39, 42, 44) passes since 22 Nov 2026. Phase 2: 18 and the Inventory part of 20.

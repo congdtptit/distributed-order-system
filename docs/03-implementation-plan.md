@@ -1,8 +1,15 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 12 · 22 Nov 2026
+Revision 13 · 22 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the implementation phase; section 7 records what has been built so far. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 13
+
+| Section | Change | Reason |
+|---|---|---|
+| 4, 7 | Step 2 is done; the progress table and the estimate are updated, with what step 2 built and how it was checked | Scenarios 9, 15, 16, 24, 30, 39, 42 and 44 pass on 22 Nov 2026 |
+| 7 | `test-db` drops each test database after the test | A long test run filled its in-memory storage and PostgreSQL stopped |
 
 ## Changes in revision 12
 
@@ -219,7 +226,7 @@ The order follows the steps and phase 2 in section 7 of the detailed design; the
 |---|---|---|
 | 0. Preparation | Project skeleton, compose files, topic creation script, CI, the remaining Claude Code configuration of section 5.7. Done on 21 Nov 2026 | One session in plan mode; a person reviews closely |
 | 1. Shared | The `common` module. Done on 22 Nov 2026 (section 7) | One session; reviewed by a reviewer running in a fresh context |
-| 2–3. Inventory | Reserve, release, waste, consumed, the stock-check flag | A separate worktree, one scenario at a time |
+| 2–3. Inventory | Reserve, release, waste, consumed, the stock-check flag. Step 2 done on 22 Nov 2026 (section 7) | A separate worktree, one scenario at a time |
 | 4–5. Kitchen | Table 3.2, cancel requests, origin branch | A separate worktree, one scenario at a time |
 | 6. Branch | Send queue, local cancel, applying messages by rank | A separate worktree, one scenario at a time |
 | 6b. Screens | The `frontend` screens for the branch, the Kitchen, Inventory and monitoring, and the demo page, against the APIs of steps 2–6 | One session, one screen at a time with the `/screen` skill |
@@ -336,20 +343,21 @@ Every part was created on 21 Nov 2026, in step 0 or before it. What is left belo
 
 ## 7. Progress
 
-Updated 22 Nov 2026. A step is done when its scenarios pass, the code passes Ruff and Pyright, and the reviews of section 5.3 are closed.
+Updated 22 Nov 2026, after step 2. A step is done when its scenarios pass, the code passes Ruff and Pyright, and the reviews of section 5.3 are closed.
 
 | Step | State | Scenarios passing |
 |---|---|---|
 | 0. Preparation | Done 21–22 Nov 2026: compose cluster (21 containers in `full`), topics, migrations, replication, CI, Claude Code configuration, frontend skeleton, dish catalogue | – |
 | 1. Shared | Done 22 Nov 2026 | 26, 29, 31 |
-| 2–3. Inventory | Next; can start now | 0 of 14 |
+| 2. Inventory: receiving orders | Done 22 Nov 2026 | 9, 15, 16, 24, 30, 39, 42, 44 |
+| 3. Inventory: release, consumed, waste, stock check | Next | 0 of 6 |
 | 4–5. Kitchen | Can start now, in parallel | 0 of 17 |
 | 6. Branch | Can start now, in parallel | 0 of 7 |
 | 6b. Screens | After steps 2–6 | – |
 | 7. Integration | After step 6 | 0 of 1 (scenario 55), plus the end-to-end versions |
 | Phase 2 | After phase 1 | 0 of 4 |
 
-**Scenarios:** 3 of 44 pass (7 %). **Estimate of work done:** about 25 % of the whole project, weighting each step by its expected effort: preparation 15 %, step 1 10 %, Inventory 15 %, Kitchen 15 %, branch 12 %, screens 13 %, integration and reporting 10 %, phase 2 6 %, demo 4 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.
+**Scenarios:** 11 of 44 pass (25 %). **Estimate of work done:** about 33 % of the whole project, weighting each step by its expected effort: preparation 15 %, step 1 10 %, Inventory 15 % (step 2 counts for 8 %), Kitchen 15 %, branch 12 %, screens 13 %, integration and reporting 10 %, phase 2 6 %, demo 4 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.
 
 ### What step 1 built
 
@@ -371,3 +379,23 @@ Not built yet: starting the consumers and the relay inside each service process 
 - **The tests can fail:** removing the deduplication check fails scenario 26; skipping unknown types instead of the dlq, or not writing the alert, fails scenario 29; removing the read-again step fails its test. Scenario 31 has no such check: a wrong producer setting loses messages only by chance.
 - **Reviews:** the test audit found scenario 31 too gentle (a clean stop with nothing in flight), which led to the kill. The specification review found one fault, fixed: a failed dlq send let a message pass with no dlq copy and no alert. Its other findings were choices the documents did not state; they are now in revision 9 of the design.
 - **For the next steps:** each service's own scenario tests of 26 and 29 count its real effects and run the Inventory invariants; scenario 31 gets a test of the branch's send queue in step 6.
+
+### What step 2 built
+
+`backend/inventory-service/src/inventory_service/`:
+
+| File | Content |
+|---|---|
+| `orders.py` | The `OrderCreated` handler: one record per order, the stored result for a resend, invalid data, the time limit, dishes with no recipe, the reservation under row locks in a savepoint (rule "Receiving `OrderCreated`" in section 3 of the design) |
+| `stock.py` | Loading the seed on first start (once, even with two instances starting together); stock receipts, used by scenario 9 and put behind `POST /stock/receipts` in step 3 |
+| `invariants.py` | The invariant queries, shared by the tests, `scripts/check_invariants.py` and `/invariants` |
+| `app.py` | On start: the seed, then the consumer of `order-events.*` (group `inventory`, shared by both instances) and the outbox relay in background threads |
+
+Shared pieces added to `common`: the reason codes (`reasons.py`), the seed reader (`seed.py`), background workers (`runtime.py`), `handle_once` (the consumer's steps 1–4 as a function, which handler-level tests call directly) and `TopicTail` for end-to-end tests.
+
+### How step 2 was checked
+
+- **Tests:** 93 backend tests pass (83 in tiers 1 and 2, 10 in tier 3). Scenarios 9, 15, 16, 30, 39 and 44 run the handler on a real PostgreSQL, and the scenarios about a resent order cover both a resend with the same `event_id` and one with a new `event_id`. Scenario 42 races two orders on two connections 100 times. Scenario 24 sends an order to the running service through the real brokers and reads `kitchen-orders` and the three `status-events` topics. The invariants run after every Inventory test.
+- **The tests can fail:** removing the flag condition, the stock condition (the `CHECK (available >= 0)` constraint then stops the run), the savepoint, the time limit, or the stored-result rule each fails at least one scenario test.
+- **Reviews:** the test audit asked for proof that scenario 9's restock covers the order and for the invariants in scenario 24; both added. The specification review found no transition outside table 3.3 and no broken prohibition. It found that the Failed reason was read without a lock after a failed `UPDATE`; the reservation now decides from locked rows (revision 10 of the design). Its list of behaviour the documents did not state is now the rule "Receiving `OrderCreated`".
+- **Found on the way:** `test-db` keeps its data in memory and every test creates a database; after a few hundred, PostgreSQL stopped with "No space left on device". The `fresh_db` fixture now drops its database after the test.

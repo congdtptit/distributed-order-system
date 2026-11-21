@@ -11,7 +11,7 @@ Course project on distributed systems: order taking for a restaurant chain. Bran
 ## Current phase: implementation
 
 - `.claude/project-phase` contains `code`. Only the user changes that file; a hook blocks edits to it.
-- The order of work is section 4 of `docs/03-implementation-plan.md`; steps 0 (preparation) and 1 (the shared `common` module) are done, and section 7 there records the progress. Next: Inventory (steps 2–3), the Kitchen (4–5) and the branch (6), which can run in parallel. Business code is written one scenario at a time with `/scenario <n>`, screens one at a time with `/screen <name>`.
+- The order of work is section 4 of `docs/03-implementation-plan.md`; steps 0 (preparation), 1 (the shared `common` module) and 2 (Inventory receives orders) are done, and section 7 there records the progress. Next: Inventory step 3, the Kitchen (4–5) and the branch (6), which can run in parallel. Business code is written one scenario at a time with `/scenario <n>`, screens one at a time with `/screen <name>`.
 - The project is built from scratch, with no existing codebase to follow.
 
 ## Layout and commands
@@ -72,6 +72,7 @@ Hooks format each edited file (ruff, Biome) and refuse to end a turn while chang
 | Message types, topics, payloads | 02 section 2; 01 section 13.1 |
 | Consumers, deduplication, dlq | 01 sections 9 and 13.3; 02 sections 2 (note "The shared consumer") and 3; the code is `backend/common/src/common/`, mapped in `.claude/rules/common.md` |
 | What is built, what is next | 03 section 7 |
+| Reason codes (`reason_code`) | 02 section 1; `backend/common/src/common/reasons.py` |
 | One test scenario | 01 section 12; its step in 02 section 7; its tier in 03 section 3 |
 | What the system promises and does not promise | 01 sections 14 and 15 |
 | Dish catalogue, names, seed data | 02 section 1 ("Catalogue and seed data"); the `dishes` table in section 5 |
