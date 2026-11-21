@@ -88,7 +88,9 @@ def test_the_kitchen_down_while_messages_arrive_processes_all_of_them_once(
         wait_until(
             "Inventory to reserve",
             60,
-            lambda: set(statuses(INVENTORY_DB, "inventory_orders", ids).values()) == {"DANG_GIU"},
+            lambda: (
+                statuses(INVENTORY_DB, "inventory_orders", ids) == dict.fromkeys(ids, "DANG_GIU")
+            ),
         )
         assert chaos.health("kitchen") != "healthy"
         assert statuses(KITCHEN_DB, "kitchen_orders", ids) == {}
@@ -128,5 +130,7 @@ def test_the_kitchen_down_while_messages_arrive_processes_all_of_them_once(
         by_type.setdefault(env.event_type, []).append(env.order_id)
     assert sorted(by_type.get("OrderCancelled", [])) == sorted(cancelled)
     assert sorted(by_type.get("ReleaseRequested", [])) == sorted(cancelled)
+    pending = by_type.get("CancelPending", [])
+    assert len(pending) == len(set(pending)) and set(pending) <= cancelled
     with psycopg.connect(INVENTORY_DB) as conn:
         assert violations(conn) == {}

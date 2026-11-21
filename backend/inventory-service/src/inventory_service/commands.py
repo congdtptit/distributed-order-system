@@ -29,8 +29,19 @@ HELD, FAILED, RELEASED, CONSUMED = "DANG_GIU", "THAT_BAI", "DA_TRA", "DA_DUNG"
 LINE_RELEASED, LINE_CONSUMED, LINE_WASTED = "DA_HOAN", "DA_DUNG", "HAO_HUT"
 
 
+def _from_kitchen(message: Incoming) -> None:
+    """The Kitchen's commands travel on ``stock-commands``, a topic that names no branch; one
+    on a branch's topic counts as unreadable (dlq), so a misconfigured branch cannot release
+    stock."""
+    if message.source_branch is not None:
+        raise ValueError(
+            f"{message.envelope.event_type} arrived on a branch topic, not from the Kitchen"
+        )
+
+
 def make_release_handler(clock: Clock) -> Handler:
     def handle(conn: psycopg.Connection[Any], message: Incoming) -> None:
+        _from_kitchen(message)
         env = message.envelope
         reason = env.payload.get("reason_code")
         # BR6: Inventory handles a release command according to its reason. Only the reason
@@ -89,6 +100,7 @@ def make_release_handler(clock: Clock) -> Handler:
 
 def make_consumed_handler(clock: Clock) -> Handler:
     def handle(conn: psycopg.Connection[Any], message: Incoming) -> None:
+        _from_kitchen(message)
         if not _leave_held(conn, message, CONSUMED, None, clock):
             return
         for ingredient_id, q in _held_lines(conn, message):

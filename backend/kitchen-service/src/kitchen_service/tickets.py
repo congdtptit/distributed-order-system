@@ -6,9 +6,11 @@ One entry point for every change (section 13.4): insert a ``CHUA_CO`` row if non
 the three staff buttons all go through ``_lock``; every transition is a conditional write on
 the status just read under the row lock.
 
-Step 4 covers the main path: Inventory's ``OrderReserved`` and ``OrderFailed``, Start cooking,
-Reject, Complete, and the stock-check flags. Cancel requests (``HUY_CHO_DON``) are step 5; the
-rows of table 3.2 where Inventory's messages meet a Cancel-pending record are already here.
+Inventory's ``OrderReserved`` and ``OrderFailed`` (step 4), the branches' cancel requests
+(step 5), the three buttons, and the stock-check flags. Each message type is accepted only from
+the topics that carry it: Inventory's from ``kitchen-orders``, cancel requests from
+``cancel-events.<branch>``; one on another topic counts as unreadable (dlq), so that a
+misconfigured branch cannot pass itself off as Inventory (section 13.2).
 """
 
 import logging
@@ -173,18 +175,24 @@ def _release(
 
 
 def _stored_result(
-    conn: psycopg.Connection[Any], rec: Record, clock: Clock, cause: Envelope
+    conn: psycopg.Connection[Any],
+    rec: Record,
+    clock: Clock,
+    cause: Envelope,
+    *,
+    to_branch: str | None = None,
 ) -> None:
     """The last row of table 3.2: a repeat reaching a terminal status gets the stored result
     again, to the origin branch, and never a second release command (section 2 of document 02)."""
-    if rec.origin_branch is None:
+    target = to_branch or rec.origin_branch
+    if target is None:
         return
-    topic = status_events(rec.origin_branch)
+    topic = status_events(target)
     if rec.status == CANCELLED:
         payload = {"cancelled_by": rec.cancelled_by, "reason_code": rec.close_reason}
         _emit(conn, topic, "OrderCancelled", rec, clock, payload, cause)
     elif rec.status == FAILED:
-        payload = {"origin_branch": rec.origin_branch, "reason_code": rec.close_reason}
+        payload = {"origin_branch": rec.origin_branch or target, "reason_code": rec.close_reason}
         _emit(conn, topic, "OrderFailed", rec, clock, payload, cause)
     elif rec.status == COMPLETED:
         _emit(conn, topic, "OrderCompleted", rec, clock, {}, cause)
@@ -195,6 +203,7 @@ def _stored_result(
 
 def make_order_reserved_handler(clock: Clock) -> Handler:
     def handle(conn: psycopg.Connection[Any], message: Incoming) -> None:
+        _from_inventory(message)
         env = message.envelope
         order_id = _order_id(env)
         payload = env.payload
@@ -261,6 +270,7 @@ def make_order_reserved_handler(clock: Clock) -> Handler:
 
 def make_order_failed_handler(clock: Clock) -> Handler:
     def handle(conn: psycopg.Connection[Any], message: Incoming) -> None:
+        _from_inventory(message)
         env = message.envelope
         order_id = _order_id(env)
         origin = env.payload.get("origin_branch")
@@ -319,10 +329,15 @@ def make_cancel_requested_handler(clock: Clock) -> Handler:
         if branch is None:
             raise ValueError("CancelRequested arrived on a topic that names no branch")
         raw_reason = env.payload.get("reason_code")
-        reason = raw_reason if isinstance(raw_reason, str) else None
+        reason = raw_reason if raw_reason in reasons.CUSTOMER_CANCEL else None
         if reason is None:
+            # The branch validates the reason (BR9); a request without a customer-cancel reason
+            # is still decided, never sent to the dlq, and logged.
             log.warning(
-                "order_id=%s event_id=%s cancel request without a reason", order_id, env.event_id
+                "order_id=%s event_id=%s cancel request without a customer-cancel reason: %r",
+                order_id,
+                env.event_id,
+                raw_reason,
             )
         rec = _lock(conn, order_id, create=True)
         assert rec is not None
@@ -355,19 +370,22 @@ def make_cancel_requested_handler(clock: Clock) -> Handler:
                 "order_id=%s event_id=%s cancel pending: order not arrived", order_id, env.event_id
             )
         elif rec.status == CANCEL_PENDING:
-            if branch not in rec.cancel_branches:
+            # A new branch joins the list. A repeat from a listed branch gets the stored result;
+            # its reason never overwrites the first one, but fills it in if there was none.
+            listed = branch in rec.cancel_branches
+            if not listed or (reason and branch not in rec.cancel_reasons):
                 reasons_by_branch = dict(rec.cancel_reasons)
-                if reason:
+                if reason and branch not in reasons_by_branch:
                     reasons_by_branch[branch] = reason
+                branches = rec.cancel_branches if listed else [*rec.cancel_branches, branch]
                 _set(
                     conn,
                     rec,
                     CANCEL_PENDING,
                     clock,
-                    cancel_branches=[*rec.cancel_branches, branch],
+                    cancel_branches=branches,
                     cancel_reasons=reasons_by_branch,
                 )
-            # A repeat from a listed branch gets the stored result; its reason is not overwritten.
             _cancel_pending(conn, rec, branch, clock, env)
         elif rec.status == QUEUED:
             close = reason or reasons.CHANGED_MIND
@@ -398,9 +416,10 @@ def make_cancel_requested_handler(clock: Clock) -> Handler:
             log.info(
                 "order_id=%s event_id=%s cancel refused: %s", order_id, env.event_id, rec.status
             )
-        # 3. Cancelled or Failed: the stored result.
+        # 3. Cancelled or Failed: the stored result. A Failed record with no origin (from a
+        # malformed OrderFailed) answers the branch that asked.
         else:
-            _stored_result(conn, rec, clock, env)
+            _stored_result(conn, rec, clock, env, to_branch=rec.origin_branch or branch)
 
     return handle
 
@@ -570,6 +589,14 @@ def _wrong_branch_alert(
         source_offset=source.offset,
         detail={"origin_branch": origin, "dismissed": dismissed},
     )
+
+
+def _from_inventory(message: Incoming) -> None:
+    """Inventory's messages travel on ``kitchen-orders``, a topic that names no branch."""
+    if message.source_branch is not None:
+        raise ValueError(
+            f"{message.envelope.event_type} arrived on a branch topic, not from Inventory"
+        )
 
 
 def _order_id(env: Envelope) -> uuid.UUID:

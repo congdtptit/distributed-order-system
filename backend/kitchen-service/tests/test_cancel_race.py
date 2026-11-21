@@ -41,12 +41,15 @@ def race(actions: list[Callable[[], None]]) -> list[str]:
             results[i] = "won"
         except ActionError as exc:
             results[i] = str(exc.status_code)
+        except BaseException as exc:  # anything else is a failure, not a lost race
+            results[i] = f"error: {exc!r}"
 
     threads = [threading.Thread(target=run, args=(i,)) for i in range(len(actions))]
     for t in threads:
         t.start()
     for t in threads:
         t.join(30)
+    assert not [r for r in results if not r or r.startswith("error")], results
     return results
 
 
@@ -161,13 +164,14 @@ def test_order_and_cancel_request_at_two_instances_at_the_same_time_give_one_rec
         assert count == (1,)
         rec = record(kdb, order.order_id)
         assert rec is not None and (rec["status"], rec["cancelled_by"]) == ("DA_HUY", "CUSTOMER")
-        types = [s.event_type for s in outbox(kdb) if s.key == str(order.order_id)]
-        if types[0] == "CancelPending":
+        sent = [(s.topic, s.event_type) for s in outbox(kdb) if s.key == str(order.order_id)]
+        result = [("stock-commands", "ReleaseRequested"), ("status-events.POS01", "OrderCancelled")]
+        if sent[0][1] == "CancelPending":
             seen["cancel first"] += 1
-            assert types == ["CancelPending", "ReleaseRequested", "OrderCancelled"]
+            assert sent == [("status-events.POS01", "CancelPending"), *result]
         else:
             seen["order first"] += 1
-            assert types == ["ReleaseRequested", "OrderCancelled"]
+            assert sent == result
     assert seen["order first"] > 0 and seen["cancel first"] > 0, seen
 
 
@@ -216,5 +220,9 @@ def test_spoiled_reject_and_the_origin_cancel_at_the_same_time_one_release_by_th
             wins["cancel"] += 1
             assert results[1] == "409" and rec["cancelled_by"] == "CUSTOMER"
             assert (after.wasted - wasted_before, after.needs_check) == (0, False)
+            # Release everything: the record leaves Held and every line goes back to stock.
+            inv_rec = inv.order_record(idb, order.order_id)
+            assert inv_rec is not None and inv_rec[0] == "DA_TRA"
+            assert set(inv.line_outcomes(idb, order.order_id).values()) == {"DA_HOAN"}
         inv.assert_invariants(idb)
     assert wins["reject"] > 0 and wins["cancel"] > 0, wins

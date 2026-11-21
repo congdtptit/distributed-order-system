@@ -372,3 +372,16 @@ def test_only_the_spoiled_reason_writes_anything_off(inv: str) -> None:
     assert set(line_outcomes(inv, order.order_id).values()) == {"DA_HOAN"}
     assert check_changed(inv) == []
     assert_invariants(inv)
+
+
+def test_kitchen_commands_on_a_branch_topic_are_refused(inv: str) -> None:
+    """Section 13.2: a branch writing the Kitchen's command types to its own topic must not
+    move stock; the message counts as unreadable (dlq)."""
+    order = reserve(inv)
+    held = stock(inv)
+    for command in (release_requested(order.order_id), stock_consumed(order.order_id)):
+        with pytest.raises(ValueError):
+            deliver(inv, command, topic="order-events.POS01")
+    assert stock(inv) == held
+    record = order_record(inv, order.order_id)
+    assert record is not None and record[0] == "DANG_GIU"

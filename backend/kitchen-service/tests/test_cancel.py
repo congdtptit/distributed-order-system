@@ -129,6 +129,10 @@ def test_the_order_arriving_again_after_a_cancel_creates_no_ticket_and_no_second
     ]
     rec = record(kdb, order.order_id)
     assert rec is not None and rec["status"] == "DA_HUY"
+    release_at_inventory(kdb, idb)
+    inv_rec = inv.order_record(idb, order.order_id)
+    assert inv_rec is not None and inv_rec[0] == "DA_TRA"
+    inv.assert_invariants(idb)
 
 
 @pytest.mark.kb(8)
@@ -140,10 +144,13 @@ def test_a_cancel_pending_order_failed_by_inventory_ends_failed(kdb: str, idb: s
     inv.set_available(idb, "THIT_BO", inv.D("0"))
     order = inv.order_created()
     deliver(kdb, cancel_requested(order.order_id))
+    pending = record(kdb, order.order_id)
+    assert pending is not None and pending["status"] == "HUY_CHO_DON"
     deliver(kdb, through_inventory(idb, order))
     rec = record(kdb, order.order_id)
     assert rec is not None
     assert (rec["status"], rec["close_reason"]) == ("THAT_BAI", reasons.INSUFFICIENT_INGREDIENTS)
+    inv.assert_invariants(idb)
     # The branch hears Failed from Inventory ...
     [to_branch] = sent_envelopes(idb, "OrderFailed", "status-events.POS01")
     assert to_branch.payload["reason_code"] == reasons.INSUFFICIENT_INGREDIENTS
@@ -154,7 +161,8 @@ def test_a_cancel_pending_order_failed_by_inventory_ends_failed(kdb: str, idb: s
 @pytest.mark.kb(23)
 def test_a_cancel_request_while_cooking_is_refused(kdb: str) -> None:
     """Scenario 23: a cancel request arrives while the ticket is Cooking. The branch sees
-    "Cannot cancel: the kitchen has started cooking" and the status is unchanged."""
+    "Cannot cancel: the kitchen has started cooking" and the status is unchanged. "The branch
+    sees" is checked as CancelRejected on status-events.POS01; the branch showing it is step 6."""
     env = order_reserved()
     deliver(kdb, env)
     assert env.order_id is not None
@@ -225,7 +233,8 @@ def test_a_cancel_from_another_branch_on_a_terminal_record_is_ignored_too(kdb: s
 def test_failed_first_then_the_cancel_request_gets_failed_and_no_cancel_pending(kdb: str) -> None:
     """Scenario 33: Inventory's Failed report reaches the Kitchen first, and the cancel request
     for that order arrives later. The Kitchen has a Failed record; no Cancel-pending record is
-    created; the branch sees Failed."""
+    created; the branch sees Failed. "The branch sees" is checked as OrderFailed on
+    status-events.POS01; the branch applying it is step 6."""
     failed = order_failed(reason=reasons.ORDER_EXPIRED)
     deliver(kdb, failed)
     request = cancel_requested(failed.order_id)
@@ -283,7 +292,18 @@ def test_the_origin_branch_cancelling_too_before_the_order_cancels_it(kdb: str, 
     rec = record(kdb, order.order_id)
     assert rec is not None
     # Cancelled with the origin branch's own reason, not the other branch's.
-    assert (rec["status"], rec["close_reason"]) == ("DA_HUY", reasons.WAITED_TOO_LONG)
+    assert (rec["status"], rec["cancelled_by"], rec["close_reason"]) == (
+        "DA_HUY",
+        "CUSTOMER",
+        reasons.WAITED_TOO_LONG,
+    )
+    # Each branch gets its commitment; only the origin branch gets Cancelled.
+    assert [(r.topic, r.event_type) for r in outbox(kdb)] == [
+        ("status-events.POS02", "CancelPending"),
+        ("status-events.POS01", "CancelPending"),
+        ("stock-commands", "ReleaseRequested"),
+        ("status-events.POS01", "OrderCancelled"),
+    ]
     release_at_inventory(kdb, idb)
     assert len(sent_envelopes(kdb, "ReleaseRequested")) == 1
     assert inv.stock(idb) == before
@@ -313,3 +333,50 @@ def test_a_cancel_request_on_a_cancelled_order_gets_the_stored_result(kdb: str) 
     deliver(kdb, cancel_requested(env.order_id))
     deliver(kdb, cancel_requested(env.order_id))
     assert [e for _, e, _ in sent(kdb)] == ["ReleaseRequested", "OrderCancelled", "OrderCancelled"]
+
+
+def test_inventory_messages_on_a_branch_topic_are_refused(kdb: str) -> None:
+    """Section 13.2: a branch writing Inventory's message types to its own topic (a bug or a
+    misconfiguration) must not decide an order; the message counts as unreadable (dlq)."""
+    order_id = uuid.uuid4()
+    with pytest.raises(ValueError):
+        deliver(kdb, order_failed(order_id, origin="POS02"), topic="cancel-events.POS02")
+    with pytest.raises(ValueError):
+        deliver(kdb, order_reserved(order_id, origin="POS02"), topic="cancel-events.POS02")
+    assert record(kdb, order_id) is None
+    deliver(kdb, order_reserved(order_id))  # the real one still queues a ticket
+    rec = record(kdb, order_id)
+    assert rec is not None and rec["status"] == "CHO_NAU"
+
+
+def test_a_cancel_on_a_failed_record_without_origin_answers_the_asking_branch(kdb: str) -> None:
+    """Table 3.2, last row: the stored result. A malformed OrderFailed leaves no origin, so the
+    answer goes to the branch that asked."""
+    failed = order_failed()
+    failed.payload.pop("origin_branch")
+    deliver(kdb, failed)
+    deliver(kdb, cancel_requested(failed.order_id, branch="ONLINE"))
+    assert [(r.topic, r.event_type) for r in outbox(kdb)] == [
+        ("status-events.ONLINE", "OrderFailed")
+    ]
+
+
+def test_a_reason_outside_the_customer_group_is_not_used(kdb: str) -> None:
+    env = order_reserved()
+    deliver(kdb, env)
+    deliver(kdb, cancel_requested(env.order_id, reason=reasons.SPOILED_INGREDIENT))
+    rec = record(kdb, env.order_id)
+    assert rec is not None and rec["close_reason"] == reasons.CHANGED_MIND
+    [release] = sent_envelopes(kdb, "ReleaseRequested")
+    assert release.payload["spoiled_ingredients"] == []
+
+
+def test_a_repeat_fills_in_a_missing_reason(kdb: str) -> None:
+    order_id = uuid.uuid4()
+    first = cancel_requested(order_id)
+    first.payload.pop("reason_code")
+    deliver(kdb, first)
+    deliver(kdb, cancel_requested(order_id, reason=reasons.WAITED_TOO_LONG))
+    deliver(kdb, cancel_requested(order_id, reason=reasons.CHANGED_MIND))
+    rec = record(kdb, order_id)
+    assert rec is not None and rec["cancel_reasons"] == {"POS01": reasons.WAITED_TOO_LONG}
