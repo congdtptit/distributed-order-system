@@ -35,7 +35,7 @@ if [ -z "$chrome" ]; then
 fi
 
 if ! curl -fs -o /dev/null --max-time 3 "$base"; then
-  echo "Nothing answers at $base. Start the dev server first: ./bin/frontend npm run dev" >&2
+  echo "Nothing answers at $base. Start the system first: docker compose up -d --wait" >&2
   exit 1
 fi
 

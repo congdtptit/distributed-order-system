@@ -26,7 +26,7 @@ A screen shows what the services decide; it decides nothing itself. Everything b
 ## Step 2: tests first
 
 1. For each row of the state table, write a Vitest test in `frontend/src/screens/<screen>/` with Testing Library, and stub the API with MSW using the generated types. One row, one test; name the test after the row.
-2. Run `./bin/frontend npx --no-install vitest run src/screens/<screen>` and confirm the new tests fail because the screen is missing, not because of a setup error.
+2. Run `docker compose exec frontend npx --no-install vitest run src/screens/<screen>` and confirm the new tests fail because the screen is missing, not because of a setup error.
 
 ## Step 3: build
 
@@ -35,12 +35,12 @@ A screen shows what the services decide; it decides nothing itself. Everything b
 3. For a specific UX concern that `references/design.md` does not settle (for example keyboard behaviour in a modal), you may run one targeted search in the ui-ux-pro-max data:
    `python3 .claude/skills/ui-ux-pro-max/scripts/search.py "<2–5 words>" --domain ux`
    Treat the result as a suggestion. `references/design.md` and `.claude/rules/frontend.md` win over it. Never run its `--design-system` or `--persist` modes for this project.
-4. Run the screen's tests until they pass, then `./bin/frontend npx --no-install tsc --noEmit` and `./bin/frontend npx --no-install biome check src`.
+4. Run the screen's tests until they pass, then `docker compose exec frontend npx --no-install tsc --noEmit` and `docker compose exec frontend npx --no-install biome check src`.
 
 ## Step 4: check and look
 
 1. Go through `references/checklist.md` item by item. Fix what fails; for an item that does not apply, say why in one line.
-2. With the Vite server running (`./bin/frontend npm run dev`, or the `frontend-dev` container), take screenshots at the sizes the screen's entry names:
+2. With the Vite server running (the `frontend` container of `compose.yaml` serves it), take screenshots at the sizes the screen's entry names:
    `.claude/skills/screen/scripts/screenshot.sh <route> <width>x<height> <output.png>`
    Write them to the scratchpad or `/tmp`, never into the repository. Look at each screenshot and fix what is visibly wrong once; do not loop.
 

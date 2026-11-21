@@ -19,21 +19,22 @@ except Exception:
 [ "$active" = "True" ] && exit 0
 
 MODULES="common order-service inventory-service kitchen-service query-service"
-running() {
-  [ -n "$(docker compose -f "$ROOT/infra/compose.yaml" --profile dev ps -q --status running "$1" 2>/dev/null)" ]
-}
+compose=(docker compose -f "$ROOT/compose.yaml")
+running() { [ -n "$("${compose[@]}" ps -q --status running "$1" 2>/dev/null)" ]; }
+in_tools() { "${compose[@]}" exec -T tools "$@"; }
+in_frontend() { "${compose[@]}" exec -T frontend "$@"; }
 fail=""
 
 # ---------- frontend/ ----------
 if [ -n "$(git -C "$ROOT" status --porcelain --untracked-files=all -- frontend 2>/dev/null)" ]; then
-  if ! running frontend-dev; then
-    fail="Files changed in frontend/, but the frontend-dev container is not running, so tsc and Vitest were not run. Start it with ./bin/frontend true and run them, or tell the user they were not run."
+  if ! running frontend; then
+    fail="Files changed in frontend/, but the frontend container is not running, so tsc and Vitest were not run. Start the system with docker compose up -d and run them, or tell the user they were not run."
   else
-    if ! out=$("$ROOT/bin/frontend" npx --no-install tsc --noEmit 2>&1); then
+    if ! out=$(in_frontend npx --no-install tsc --noEmit 2>&1); then
       fail="tsc reports errors in frontend/
 $(printf '%s\n' "$out" | tail -n 40)"
     fi
-    if ! out=$("$ROOT/bin/frontend" npx --no-install vitest run 2>&1); then
+    if ! out=$(in_frontend npx --no-install vitest run 2>&1); then
       fail="$fail
 Vitest fails in frontend/
 $(printf '%s\n' "$out" | tail -n 60)"
@@ -63,15 +64,15 @@ for top in $check_dirs; do
   esac
 done
 
-if [ -n "$check_dirs" ] && ! running backend-dev; then
+if [ -n "$check_dirs" ] && ! running tools; then
   fail="$fail
-Python files changed in backend/:$check_dirs, but the backend-dev container is not running, so the type check and the tests were not run. Start it with ./bin/backend true and run them, or tell the user they were not run."
+Python files changed in backend/:$check_dirs, but the tools container is not running, so the type check and the tests were not run. Start the system with docker compose up -d and run them, or tell the user they were not run."
   check_dirs=""
   test_dirs=""
 fi
 
 # shellcheck disable=SC2086
-if [ -n "$check_dirs" ] && ! out=$("$ROOT/bin/backend" uv run --no-sync pyright $check_dirs 2>&1); then
+if [ -n "$check_dirs" ] && ! out=$(in_tools pyright $check_dirs 2>&1); then
   fail="$fail
 pyright reports errors in backend/:$check_dirs
 $(printf '%s\n' "$out" | tail -n 40)"
@@ -82,7 +83,7 @@ if [ -n "$test_dirs" ]; then
     [ -d "$ROOT/backend/$m/tests" ] && targets="$targets $m/tests"
   done
   # shellcheck disable=SC2086
-  if [ -n "$targets" ] && ! out=$("$ROOT/bin/backend" uv run --no-sync pytest -m "not tier3" -q -p no:cacheprovider $targets 2>&1); then
+  if [ -n "$targets" ] && ! out=$(in_tools pytest -m "not tier3" -q -p no:cacheprovider $targets 2>&1); then
     fail="$fail
 Tier 1 and 2 tests fail in backend/:$targets
 $(printf '%s\n' "$out" | tail -n 60)"

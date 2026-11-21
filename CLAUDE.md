@@ -18,24 +18,29 @@ Course project on distributed systems: order taking for a restaurant chain. Bran
 
 | Path | Content |
 |---|---|
-| `backend/` | Python 3.12 uv workspace: `common/`, `order-service/`, `inventory-service/`, `kitchen-service/`, `query-service/`, each with `src/`, `tests/`, `migrations/`; `scripts/` for infrastructure scripts |
+| `compose.yaml` | The whole system in Docker Compose: 3 Kafka brokers, 7 databases (6 + `test-db`), 7 service containers, the screens, Kafka UI, Adminer, the `tools` container |
+| `backend/` | Python 3.12 uv workspace and its `Dockerfile` (one image for every Python container): `common/`, `order-service/`, `inventory-service/`, `kitchen-service/`, `query-service/`, each with `src/`, `tests/`, `migrations/`; `scripts/` for the init jobs and tools |
 | `frontend/` | TypeScript screens: React, Vite, Mantine, TanStack Query |
-| `infra/` | `compose.yaml` (3 Kafka brokers, 6 PostgreSQL, the two dev containers), `dev.Dockerfile` |
-| `bin/` | `backend` and `frontend`: run a command in the matching dev container |
+| `bin/chaos` | Fault injection on the running cluster: a branch offline, a broker or service stopped, replication cut |
 
-Every tool runs in Docker; nothing is installed on the host. `./bin/backend` runs in `backend/`, `./bin/frontend` in `frontend/`; both start their container if needed.
+Everything runs in Docker; nothing is installed on the host. Source is mounted into the containers, so a code change reloads the service; a change to `pyproject.toml` or `uv.lock` needs `docker compose build`. Section 2 of `docs/03-implementation-plan.md` explains the containers and networks.
 
 | Task | Command |
 |---|---|
-| Start Kafka and the databases | `docker compose -f infra/compose.yaml up -d --wait` |
-| Create the Kafka topics (idempotent) | `./bin/backend uv run --no-sync python scripts/create_topics.py` |
-| Backend tests, tiers 1 and 2 | `./bin/backend uv run --no-sync pytest -m "not tier3"` |
-| Backend tier 3 tests | the `test-runner` subagent, or `./bin/backend uv run --no-sync pytest -m tier3` |
-| Backend format, lint, types | `./bin/backend uv run --no-sync ruff format .`, `… ruff check .`, `… pyright` |
-| Frontend tests, types, format and lint | `./bin/frontend npx --no-install vitest run`, `… tsc --noEmit`, `… biome check --write .` |
-| Screens in the browser | `http://localhost:5173`, served by the `frontend-dev` container |
-| API types for the screens | `./bin/backend uv run --no-sync python scripts/dump_openapi.py`, then `./bin/frontend npm run gen:api` |
-| Apply a module's migrations | `./bin/backend uv run --no-sync python -m common.migrate <dsn> <module>/migrations` |
+| Start / stop everything | `docker compose up -d --wait` / `docker compose down` (topics, migrations and replication set themselves up) |
+| Follow services | `docker compose logs -f kitchen inventory-1 inventory-2` |
+| Backend tests, tiers 1 and 2 | `docker compose exec tools pytest -m "not tier3"` |
+| Backend tier 3 tests | the `test-runner` subagent, or `docker compose exec tools pytest -m tier3` |
+| Backend format, lint, types | `docker compose exec tools ruff format .`, `… ruff check .`, `… pyright` |
+| Frontend tests, types, format and lint | `docker compose exec frontend npx --no-install vitest run`, `… tsc --noEmit`, `… biome check --write .` |
+| Faults | `bin/chaos offline pos01`, `bin/chaos stop kafka2`, `bin/chaos cut-replication pos01`, `bin/chaos status` |
+| API types for the screens | `docker compose exec tools python scripts/dump_openapi.py`, then `docker compose exec frontend npm run gen:api` |
+
+| URL | What |
+|---|---|
+| `http://localhost:5173` | The screens |
+| `http://localhost:8080` / `:8081` | Kafka UI (topics, messages, consumer lag) / Adminer (log in to `inventory-db`, `pos01-db`…, user and password `app`) |
+| `http://localhost:8101`, `8102`, `8201`, `8301`–`8303`, `8401` | inventory-1, inventory-2, kitchen, pos01, pos02, online, query; each has `/health` and `/docs` |
 
 Hooks format each edited file (ruff, Biome) and refuse to end a turn while changed code fails pyright, tsc or the tier 1 and 2 tests of its module.
 

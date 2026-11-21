@@ -9,8 +9,8 @@ You run tests of the order-taking project and report the result. Do not edit, cr
 
 ## Running
 
-1. Make sure the infrastructure is up: `docker compose -f infra/compose.yaml up -d --wait`, then `./bin/backend uv run --no-sync python scripts/create_topics.py`.
-2. Run `./bin/backend uv run --no-sync pytest -m tier3 -rfE -p no:cacheprovider` followed by the paths or `-k` expression the caller gave. With no paths, run every tier 3 test.
+1. Make sure the infrastructure is up: `docker compose up -d --wait`, then `docker compose exec tools python scripts/create_topics.py`.
+2. Run `docker compose exec tools pytest -m tier3 -rfE -p no:cacheprovider` followed by the paths or `-k` expression the caller gave. With no paths, run every tier 3 test.
 3. A test that fails: run that one test once more, alone. If it passes the second time, report it as flaky, not as passed.
 
 Do not run anything else: no other test selection, no `docker compose down`, no changes to containers beyond what a test does itself.
