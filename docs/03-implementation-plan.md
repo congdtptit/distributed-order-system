@@ -1,8 +1,17 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 11 · 22 Nov 2026
+Revision 12 · 22 Nov 2026
 
-This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the documentation phase and no code has been written. Where this document disagrees with the specification or the detailed design, those two documents are right.
+This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the implementation phase; section 7 records what has been built so far. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 12
+
+| Section | Change | Reason |
+|---|---|---|
+| Introduction | No longer says that no code has been written | Out of date since step 0 |
+| 2, 3 | The `tools` container mounts the Docker socket; the `chaos` fixture of `backend/conftest.py` stops, kills and starts containers from inside a tier 3 test | Scenario 31 must stop a broker during the test itself; `bin/chaos` stays for manual runs and the demo |
+| 4 | Step 1 is done | Scenarios 26, 29 and 31 pass on 22 Nov 2026 |
+| 7 | New section "Progress": the state of each step, what step 1 built, how it was checked, and an estimate of how much of the project is done | @Naul asked for a record of what has been done; it is also the starting point for the next session |
 
 ## Changes in revision 11
 
@@ -138,7 +147,7 @@ Nothing is installed on the host machine beyond Docker. The containers, by file:
 | `services.yml` | `replication-init` | Creates the publication of each running branch DB and its subscription at the central DB (section 5 of the design), then exits; it runs again when the `full` profile starts |
 | `frontend.yml` | `frontend` | Vite dev server on port 5173, heap capped at 512 MB; forwards `/api/<service>` to the services. `inventory` resolves to every running instance |
 | `tools.yml` | `kafka-ui` (8080), `adminer` (8081) | Topics, messages and consumer lag; the content of every database |
-| `tools.yml` | `tools` | Tests, lint and type checks: `docker compose exec tools pytest`. It also builds the backend image |
+| `tools.yml` | `tools` | Tests, lint and type checks: `docker compose exec tools pytest`. It also builds the backend image, and mounts the Docker socket so that tier 3 tests can stop, kill and start containers of the project (the `chaos` fixture of `backend/conftest.py`) |
 
 **Profiles.** Without a profile Compose starts the core, enough for daily work and most scenarios: the three brokers, `inventory-1`, `kitchen`, `pos01`, `query`, their databases, `test-db`, `frontend`, `tools` and the two init jobs. `--profile full` adds `inventory-2` (scenario 42), `pos02` and `online` with their databases (scenario 35 and the cross-branch cases), Kafka UI and Adminer. The demo and the tier 3 run use `full`.
 
@@ -190,7 +199,7 @@ Section 12 of the specification requires an automated test for every scenario. T
 |---|---|---|
 | 1. Handler and a real PostgreSQL | The test calls handlers in the order it wants | 1, 2, 5–9, 15, 16, 19–23, 27, 30, 33–35, 39, 43, 44, 48–50, 53, 54 (27 scenarios) |
 | 2. Races | Two threads on two connections, repeated many times | 3, 28, 37, 42, 51, 52 |
-| 3. Real Kafka, replication and fault injection | On the running compose cluster, with `bin/chaos` to stop containers and cut networks; slow, so run separately | 4, 10, 12, 18, 24–26, 29, 31, 36, 55 |
+| 3. Real Kafka, replication and fault injection | On the running compose cluster; a test injects its own faults through the `chaos` fixture (Docker socket), the same faults `bin/chaos` injects by hand; slow, so run separately | 4, 10, 12, 18, 24–26, 29, 31, 36, 55 |
 
 Conventions for every test:
 
@@ -209,7 +218,7 @@ The order follows the steps and phase 2 in section 7 of the detailed design; the
 | Step | Content | How to work with Claude Code |
 |---|---|---|
 | 0. Preparation | Project skeleton, compose files, topic creation script, CI, the remaining Claude Code configuration of section 5.7. Done on 21 Nov 2026 | One session in plan mode; a person reviews closely |
-| 1. Shared | The `common` module | One session; reviewed by a reviewer running in a fresh context |
+| 1. Shared | The `common` module. Done on 22 Nov 2026 (section 7) | One session; reviewed by a reviewer running in a fresh context |
 | 2–3. Inventory | Reserve, release, waste, consumed, the stock-check flag | A separate worktree, one scenario at a time |
 | 4–5. Kitchen | Table 3.2, cancel requests, origin branch | A separate worktree, one scenario at a time |
 | 6. Branch | Send queue, local cancel, applying messages by rank | A separate worktree, one scenario at a time |
@@ -324,3 +333,41 @@ Every part was created on 21 Nov 2026, in step 0 or before it. What is left belo
 - **Resources of the demo machine.** Measured on 22 Nov 2026, idle, on a Docker Desktop with 4 CPUs and 5.8 GB of memory: about 2.5 GB for the core profile and 3.1 GB for `full`. The three brokers take about 300–350 MB each (384 MB heap), Kafka UI about 330 MB, each service container about 80 MB, each database about 25–30 MB, the frontend container about 200 MB (without the heap cap Vite held 1 GB). Measure again in step 7, when the services consume and produce.
 - **A second toolchain.** Node and npm run in their own container, like the Python tools. Their `node_modules` stay inside the container, so the editor sees the TypeScript types only when the project is opened in the dev container. Major versions move fast there: step 0 found that TypeScript 7 breaks `openapi-typescript`.
 - **Tier 3 scenarios tend to be flaky.** They depend on when containers stop and start; they need explicit wait conditions instead of waiting on time.
+
+## 7. Progress
+
+Updated 22 Nov 2026. A step is done when its scenarios pass, the code passes Ruff and Pyright, and the reviews of section 5.3 are closed.
+
+| Step | State | Scenarios passing |
+|---|---|---|
+| 0. Preparation | Done 21–22 Nov 2026: compose cluster (21 containers in `full`), topics, migrations, replication, CI, Claude Code configuration, frontend skeleton, dish catalogue | – |
+| 1. Shared | Done 22 Nov 2026 | 26, 29, 31 |
+| 2–3. Inventory | Next; can start now | 0 of 14 |
+| 4–5. Kitchen | Can start now, in parallel | 0 of 17 |
+| 6. Branch | Can start now, in parallel | 0 of 7 |
+| 6b. Screens | After steps 2–6 | – |
+| 7. Integration | After step 6 | 0 of 1 (scenario 55), plus the end-to-end versions |
+| Phase 2 | After phase 1 | 0 of 4 |
+
+**Scenarios:** 3 of 44 pass (7 %). **Estimate of work done:** about 25 % of the whole project, weighting each step by its expected effort: preparation 15 %, step 1 10 %, Inventory 15 %, Kitchen 15 %, branch 12 %, screens 13 %, integration and reporting 10 %, phase 2 6 %, demo 4 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.
+
+### What step 1 built
+
+`backend/common/src/common/`, used by every service from step 2:
+
+| File | Content |
+|---|---|
+| `envelope.py` | The envelope of section 9 of the specification: `new_envelope`, `encode`, `decode` (raises `UnreadableMessage`), the 13 event types, `SCHEMA_VERSION = 1` |
+| `consumer.py` | `MessageConsumer` with the five steps of section 13.3, retries, dlq and alerts, following the note "The shared consumer" in section 2 of the design. A service gives it a `ConsumerSettings` (name, `event_type` → handler, deciding or display-only); a handler receives one open transaction and one `Incoming` (envelope and the branch taken from the topic name) |
+| `outbox.py` | `enqueue` (in the caller's transaction) and `OutboxRelay` for Inventory and the Kitchen |
+| `kafka.py` | The only module that uses confluent-kafka: `Sender`, `Receiver`, the mandatory client settings, and topic tools for scripts and tests |
+| `alerts.py`, `topics.py`, `clock.py` | `alerts` rows with ON CONFLICT DO NOTHING; topic names and `branch_from_topic`; the replaceable clock |
+
+Not built yet: starting the consumers and the relay inside each service process (each service does it in its own step), and the branch's send queue with the "send attempted" flag (step 6).
+
+### How step 1 was checked
+
+- **Tests:** 62 backend tests pass: 53 in tiers 1 and 2, 9 in tier 3 against the three brokers. Scenario 26 stops a real consumer process between the DB commit and the offset commit; scenario 29 covers an unknown `event_type` and a higher `schema_version`; scenario 31 kills (SIGKILL) the leader broker of a partition while the relay has messages in flight, and passed three runs in a row.
+- **The tests can fail:** removing the deduplication check fails scenario 26; skipping unknown types instead of the dlq, or not writing the alert, fails scenario 29; removing the read-again step fails its test. Scenario 31 has no such check: a wrong producer setting loses messages only by chance.
+- **Reviews:** the test audit found scenario 31 too gentle (a clean stop with nothing in flight), which led to the kill. The specification review found one fault, fixed: a failed dlq send let a message pass with no dlq copy and no alert. Its other findings were choices the documents did not state; they are now in revision 9 of the design.
+- **For the next steps:** each service's own scenario tests of 26 and 29 count its real effects and run the Inventory invariants; scenario 31 gets a test of the branch's send queue in step 6.

@@ -1,8 +1,17 @@
 # Detailed design – Kafka events, DB schemas and API
 
-Revision 8 · 22 Nov 2026 · @Naul · follows business specification v1.5
+Revision 9 · 22 Nov 2026 · @Naul · follows business specification v1.5
 
 This document turns business specification v1.5 (the lean edition) into three things to code against: the Kafka event catalogue, each service's DB schema, and the API. There is no existing codebase to align with: the base flow is built in this project as well, so the event names, table names, column names and API paths here are the ones to use.
+
+## Changes in revision 9
+
+| Section | Change | Reason |
+|---|---|---|
+| 2 | New note "The shared consumer": which errors count as transient, that handlers turn invalid order data into business results instead of raising, the dlq header names, Kafka client settings beyond section 13.1 of the specification, and that a message whose processing stopped part-way is read again | Built in step 1 (22 Nov 2026). The specification gives the categories of section 9 but not which errors fall in each; these choices are now fixed in code and tests |
+| 2 | The skip rule for known types not meant for a service applies on every topic, not only on `menu-events` | The consumer looks handlers up by `event_type`; a known type on another topic is a configuration error, not an unknown message |
+| 2 | Known limit: the attempt counter is kept in memory | A message that kills the process is redelivered after each restart and never reaches the dlq; the lean edition accepts this (section 15 of the specification) |
+| 3 | `outbox_events.payload` holds the whole envelope; the relay holds the row locks while it waits for Kafka; one instance can also send rows out of order | Built in step 1; the schema did not say what `payload` holds |
 
 ## Changes in revision 8
 
@@ -123,8 +132,15 @@ Notes on the table:
 - **Names travel with the order.** The branch copies each dish's name from its `dishes` table into `items[]` of `OrderCreated`; Inventory passes `items[]` on and copies each ingredient's `name` and `unit` from `stock` into `reserved[]` of `OrderReserved`. Names are for display only: no rule reads them, and an order keeps the names it was placed with.
 - A cancel request from a branch other than the origin branch gets no reply message; the Kitchen writes an `alerts` row of kind `HUY_SAI_CHI_NHANH` (section 13.2 of the specification).
 - Messages on `menu-events` belong to no order: `order_id` is `null`, the partition key is `dish_id` or `ingredient_id`, and `Heartbeat` alone uses the fixed key `heartbeat`.
-- Each side handles only the message types meant for it on `menu-events`: the Kitchen handles `IngredientCheckChanged`, and branches handle `DishStatusChanged` and `Heartbeat`. The other types in this catalogue are known types: the receiver ignores them, does not write `processed_events` and does not move them to the dlq.
-- A message going to the dlq keeps its original content and gains headers: original topic, partition, offset, consumer name, error. The consumer sends this message straight to the dlq, not through the outbox, because the content may not be JSON. The order is: send to the dlq and wait for Kafka's acknowledgement, write an `alerts` row of kind `CAN_KIEM_TRA`, and only then commit the offset.
+- Each side handles only the message types meant for it on `menu-events`: the Kitchen handles `IngredientCheckChanged`, and branches handle `DishStatusChanged` and `Heartbeat`. The other types in this catalogue are known types: the receiver ignores them, does not write `processed_events` and does not move them to the dlq. The same holds on every topic: a known type that a service has no handler for is skipped this way (revision 9).
+- A message going to the dlq keeps its original key and content and gains headers: `original_topic`, `original_partition`, `original_offset`, `consumer`, `error`. The consumer sends this message straight to the dlq, not through the outbox, because the content may not be JSON. The order is: send to the dlq and wait for Kafka's acknowledgement, write an `alerts` row of kind `CAN_KIEM_TRA`, and only then commit the offset.
+- **The shared consumer** (`backend/common`, built in step 1) applies the five steps of section 13.3 of the specification and the table in its section 9 as follows:
+  - *Transient error*: a PostgreSQL `OperationalError` (lost connection, timeout, deadlock, serialization failure, lock timeout). Retried without limit with growing backoff, not counted as an attempt.
+  - *Permanent error*: any other exception, an unreadable message included. Tried 5 times (section 10 of the specification), each time in a new transaction that is rolled back, then moved to the dlq. A handler therefore never raises for invalid order data: it records the business result itself (BR12, scenario 39), and an exception means a bug.
+  - *Unknown `event_type` or higher `schema_version`*: on the deciding side, moved to the dlq at once, without the 5 attempts.
+  - *Interrupted processing*: if a message's steps stop part-way on a Kafka error (the dlq send, the offset commit), the consumer moves its read position back to that message; if the DB commit had happened, step 2 blocks the repeat. The attempt counter lives in memory, so a message that kills the process is retried after every restart and never reaches the dlq (known limit).
+  - *Client settings* beyond section 13.1: consumer `auto.offset.reset=earliest`, `session.timeout.ms=10000` (a stopped instance's partitions move after 10 s), `topic.metadata.refresh.interval.ms=30000` (a new branch topic is seen within 30 s); producer `message.timeout.ms=30000` (after that a send counts as failed and the outbox row stays unsent).
+  - *Branch alerts*: the branch DB has no `alerts` table, so the display-only side writes its "raise an alert" as an error log line for now. Where branches keep these alerts is open (README, pending work).
 
 The branch applies status messages as follows:
 
@@ -243,7 +259,7 @@ Rules that go with the schema:
 - **Dish version**: each time a dish changes status, or an ingredient's stock-check flag changes, the transaction runs `UPDATE menu_version SET seq = seq + 1 RETURNING epoch, seq`. Locking this row makes the `seq` order match the commit order; a PostgreSQL `SEQUENCE` does not guarantee that.
 - **Bumping `epoch`** (after restoring Inventory from a backup): one transaction locks every `dish_status` row, runs `UPDATE menu_version SET epoch = epoch + 1, seq = seq + 1`, and only then reads stock, recomputes and rewrites every `dish_status` row with the new `epoch` and `seq`, including dishes whose status did not change. The transaction emits `IngredientCheckChanged` for every ingredient so that the Kitchen has flags for the new generation, and does not emit `DishStatusChanged`: branches see the new `epoch` in the next `Heartbeat` and then fetch the snapshot themselves.
 - **Invariants** (run after every test): an ingredient's `stock.reserved` equals the sum of `quantity` over the `inventory_reservations` rows with `outcome IS NULL`; and every row with `outcome IS NULL` belongs to an order currently at `DANG_GIU`.
-- **Outbox relay with 2 instances**: read in ascending `id` with `FOR UPDATE SKIP LOCKED`. The two instances may relay out of order relative to each other; this is acceptable because every receiver processes by the state table, not by message order. At the branch, the condition of operation (4) in section 5 is what guarantees this.
+- **Outbox relay with 2 instances**: read in ascending `id` with `FOR UPDATE SKIP LOCKED`. The two instances may relay out of order relative to each other, and so may one instance, since a row Kafka did not acknowledge stays unsent while later rows of the same batch are marked sent; this is acceptable because every receiver processes by the state table, not by message order. The row locks are held while the relay waits for Kafka (up to `message.timeout.ms`), which blocks no business transaction because those only insert outbox rows. `payload` holds the whole envelope, which is the Kafka message value; `msg_key` is the order ID, or the dish or ingredient ID on `menu-events`. At the branch, the condition of operation (4) in section 5 is what guarantees this.
 
 ## 4. Kitchen DB schema
 

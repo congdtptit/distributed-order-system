@@ -24,6 +24,21 @@ The `paths` above follow the module names in section 2 of `docs/03-implementatio
 - Every log line carries `order_id`.
 - Time is read through a replaceable clock, never straight from the system clock.
 
+## Code map (built in step 1)
+
+| File | Use it for |
+|---|---|
+| `envelope.py` | `new_envelope(type, order_id=, branch_id=, clock=, payload=, causation_id=)`, `encode`, `decode`; `EVENT_TYPES`, `SCHEMA_VERSION` |
+| `consumer.py` | `MessageConsumer(ConsumerSettings(name, handlers={event_type: handler}, deciding=…), Receiver(...), Sender(...), connect)`; `run(stop)` in a thread. A handler is `(conn, Incoming) -> None`: it runs inside the open transaction, writes the state change and calls `enqueue`, and never commits |
+| `outbox.py` | `enqueue(conn, topic, envelope, key=None)`; `OutboxRelay(connect, Sender(...), clock).run(stop)` in a thread |
+| `kafka.py` | The only place that imports confluent-kafka. `Sender`, `Receiver`, the client settings; `create_topic`, `partition_leaders`, `committed_offset`, `end_offset` for scripts and tests |
+| `alerts.py` | `write_alert(conn, kind, ...)`, kinds `NEEDS_REVIEW`, `UNMATCHED_COMMAND`, `WRONG_BRANCH_CANCEL` |
+| `topics.py`, `clock.py` | Topic names, `branch_from_topic`; `SystemClock`, `FixedClock` |
+
+A handler must not raise for invalid order data: it records the business result (BR12). Any exception other than a PostgreSQL `OperationalError` counts as a failed attempt, and after 5 the message goes to the dlq (note "The shared consumer" in section 2 of document 02).
+
+Tests: `backend/common/tests/`. Tier 3 tests use the fixtures `new_topic` (throwaway `test.*` topics), `kafka_bootstrap` and `chaos` (stop, kill, start containers) of `backend/conftest.py`, and `migrated("<module>")` for a fresh database with a module's schema.
+
 ## Scenarios of this module
 
-26, 29, 31 (step 1 in section 7 of document 02).
+26, 29, 31 (step 1 in section 7 of document 02). All three pass since 22 Nov 2026; each service adds its own version with its real handler in its step.
