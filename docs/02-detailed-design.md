@@ -1,8 +1,16 @@
 # Detailed design – Kafka events, DB schemas and API
 
-Revision 11 · 22 Nov 2026 · @Naul · follows business specification v1.5
+Revision 12 · 22 Nov 2026 · @Naul · follows business specification v1.5
 
 This document turns business specification v1.5 (the lean edition) into three things to code against: the Kafka event catalogue, each service's DB schema, and the API. There is no existing codebase to align with: the base flow is built in this project as well, so the event names, table names, column names and API paths here are the ones to use.
+
+## Changes in revision 12
+
+| Section | Change | Reason |
+|---|---|---|
+| 2 | The Kitchen's stored result for a Completed record is `OrderCompleted` | The note named only Cancel-pending, Cancelled and Failed; built in step 4 |
+| 4 | The staff buttons lock the existing row and do not insert a `CHUA_CO` row; no row means 404 | The rule said all three entry points insert the placeholder. A button acts on a ticket that already exists, and inserting rows for unknown order IDs would only leave junk; the spec review of step 4 found the mismatch |
+| 4 | New rule "Tickets in practice": `OrderFailed` reaching a Queued or Cooking ticket, malformed messages from Inventory, the reason when a Cancel-pending record has none for the origin branch, the input rules of Reject, the answers of the buttons and of `GET /tickets` | Built in step 4; the spec review listed what the documents did not state |
 
 ## Changes in revision 11
 
@@ -158,7 +166,7 @@ The system has 13 event types across 6 topic groups, not counting the dlq. Every
 Notes on the table:
 
 - `OrderReserved` and `OrderFailed` going to two topics are two outbox rows with two different `event_id` values, written in the same Inventory transaction.
-- "Return the stored result" means re-emitting the event type that matches the stored status, with a new `event_id`. The Kitchen emits `CancelPending` when at Cancel-pending, `OrderCancelled` when at Cancelled, and `OrderFailed` when at Failed, with `reason_code` taken from `close_reason`. How Inventory returns the stored result is described in section 3. Receivers already tolerate duplicate messages thanks to the rank rule (section 3.1 of the specification) and BR12.
+- "Return the stored result" means re-emitting the event type that matches the stored status, with a new `event_id`. The Kitchen emits `CancelPending` when at Cancel-pending, `OrderCancelled` when at Cancelled, `OrderFailed` when at Failed, with `reason_code` taken from `close_reason`, and `OrderCompleted` when at Completed. How Inventory returns the stored result is described in section 3. Receivers already tolerate duplicate messages thanks to the rank rule (section 3.1 of the specification) and BR12.
 - **Names travel with the order.** The branch copies each dish's name from its `dishes` table into `items[]` of `OrderCreated`; Inventory passes `items[]` on and copies each ingredient's `name` and `unit` from `stock` into `reserved[]` of `OrderReserved`. Names are for display only: no rule reads them, and an order keeps the names it was placed with.
 - A cancel request from a branch other than the origin branch gets no reply message; the Kitchen writes an `alerts` row of kind `HUY_SAI_CHI_NHANH` (section 13.2 of the specification).
 - Messages on `menu-events` belong to no order: `order_id` is `null`, the partition key is `dish_id` or `ingredient_id`, and `Heartbeat` alone uses the fixed key `heartbeat`.
@@ -339,13 +347,21 @@ CREATE TABLE flagged_ingredients (                -- from IngredientCheckChanged
 
 Rules that go with the schema:
 
-- **One entry point for every change**: messages from `kitchen-orders`, messages from `cancel-events` and the three staff buttons all run the same sequence: insert a `CHUA_CO` row if none exists, `SELECT ... FOR UPDATE`, apply table 3.2, write the outbox, commit (section 13.4 of the specification).
+- **One entry point for every change**: messages from `kitchen-orders`, messages from `cancel-events` and the three staff buttons all run the same sequence (the buttons skip the first step: they act only on a row that exists, and answer 404 otherwise): insert a `CHUA_CO` row if none exists, `SELECT ... FOR UPDATE`, apply table 3.2, write the outbox, commit (section 13.4 of the specification).
 - **The branch that sent a cancel request** is taken from the topic name, not from `branch_id` in the message, and is then added to `cancel_branches` if it is not already there. That branch's reason is written to `cancel_reasons`; a repeated request from the same branch does not overwrite the existing reason.
 - **When `OrderReserved` reaches a `HUY_CHO_DON` row**: if `origin_branch = ANY(cancel_branches)`, the row moves to `DA_HUY`, `close_reason` takes the origin branch's reason from `cancel_reasons`, and `ReleaseRequested` is emitted together with `OrderCancelled`. Otherwise `cancel_branches` and `cancel_reasons` are cleared, the row moves to `CHO_NAU`, and an `alerts` row of kind `HUY_SAI_CHI_NHANH` is written with the list of dismissed branches.
 - **A wrong-branch cancel request** that arrives when the row already has `origin_branch`: keep the status, send no reply, and write an `alerts` row of kind `HUY_SAI_CHI_NHANH`.
 - **The `alerts` table**: the Kitchen uses two kinds, `CAN_KIEM_TRA` and `HUY_SAI_CHI_NHANH`, inserted the same way as at Inventory.
 - **The red warning on the ticket** is a display-time join between the `reserved` of `CHO_NAU` tickets and the `flagged_ingredients` rows with `needs_check = TRUE`. A `flagged_ingredients` row is overwritten only when the message's `(epoch, seq)` is greater.
 - **The release command is stored durably before it is sent**: `ReleaseRequested` sits in `outbox_events` in the same transaction as the `status` change, so if Inventory is down the command is still there (scenario 4).
+- **Tickets in practice** (built in step 4):
+  - `OrderFailed` reaching a Queued or Cooking ticket changes nothing and is logged: table 3.2 has no such row, and Inventory keeps one result per order (BR12). Reaching a Cancel-pending record it gives Failed and nothing more, as table 3.2 says, without comparing the recorded cancel branches with the origin branch.
+  - An `OrderReserved` without `origin_branch` cannot be recorded and counts as unreadable (5 attempts, then the dlq). An `OrderFailed` with a missing field is still recorded as `THAT_BAI`, with NULL in that column, because recording the result matters more (prohibition 11). A `created_at` that cannot be read is kept as NULL `order_created_at`.
+  - When a Cancel-pending record becomes Cancelled but holds no reason for the origin branch, `close_reason` is `CHANGED_MIND`.
+  - Reject takes a reason from the Kitchen-rejection group of section 1, otherwise 400. Spoiled ingredients go only with `SPOILED_INGREDIENT` (400 otherwise), at least one is needed, each must be on the ticket's `reserved[]`; the list is stored and sent without repeats, sorted. The reason is checked before the ticket's status.
+  - The buttons answer 404 when there is no ticket (no row, or `CHUA_CO`), 409 with `{message, status}` when the record is in any other status than the one required (Cancel-pending and Failed records included), and 200 with the updated ticket. Emitted messages carry the origin branch as `branch_id`; those from a button have no `causation_id`.
+  - `GET /tickets` lists Queued and Cooking tickets by `order_created_at` (unknown last), then by order ID. `warnings` holds the flagged ingredient IDs of a Queued ticket, sorted; a Cooking ticket has none.
+  - `IngredientCheckChanged` with a malformed payload counts as unreadable. The first message about an ingredient creates its row even when `needs_check` is false.
 
 ## 5. Branch DB schema (POS and Online)
 
@@ -512,7 +528,7 @@ Each service exposes only the APIs that a person or a screen needs; services do 
 | Reporting | `GET /reports/summary` | For each branch: the "data as of" time, the number of orders by status, and the number by reason for Cancelled and Failed orders; reads the Central Order Replica only | 200 |
 
 - **The screens** (the `frontend` module in section 2 of document 03) are a client of the APIs in this table and use nothing else: no direct DB access, no Kafka. They show the statuses the services return and decide none of their own; the only rule enforced on screen alone is point 5 in section 8. Each service publishes the OpenAPI document that FastAPI generates, and the screens' TypeScript types are generated from it.
-- **The three Kitchen buttons** run the same row-locking sequence as the consumer (section 4). A 409 here is the normal outcome of the race between Cancel and Start cooking (BR7); the UI only needs to reload the ticket.
+- **The three Kitchen buttons** run the same row-locking sequence as the consumer, without inserting a `CHUA_CO` row (section 4). A 409 here is the normal outcome of the race between Cancel and Start cooking (BR7); the UI only needs to reload the ticket.
 - **`POST /orders` does not wait for Inventory**: the Reserved or Failed result comes later through `status-events`. The UI re-reads the order with `GET /orders/{id}`.
 - **`counted_on_hand` of `clear-check`** is the on-hand stock, that is, available stock plus reserved (section 3.3 of the specification). Inventory sets `available = counted_on_hand − reserved`. If the result is negative it returns 409: the tickets still holding that ingredient must first be rejected through Flow A. If `counted_on_hand` is not sent, `available` stays unchanged.
 - **`clear-check` and `receipts`** can both make a dish change status, so they rerun Flow C's dish-status computation in the same transaction. `clear-check` also emits `IngredientCheckChanged`.

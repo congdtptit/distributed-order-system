@@ -1,6 +1,6 @@
 # Document set of the distributed-order-system project
 
-Updated 22 Nov 2026. The project is in the implementation phase: steps 0 (preparation), 1 (the shared module), 2 and 3 (Inventory) of document 03 are done; the Kitchen and the branch are next. Section 7 of document 03 records the progress.
+Updated 22 Nov 2026. The project is in the implementation phase: steps 0 (preparation), 1 (the shared module), 2 and 3 (Inventory) and 4 (Kitchen tickets) of document 03 are done; step 5 (Kitchen cancel requests) and the branch are next. Document 04 compares the project with the lecturer's report template. Section 7 of document 03 records the progress.
 
 The repository is `https://github.com/congdtptit/distributed-order-system`, default branch `main`. It holds this document set, the code in `backend/` and `frontend/`, and the Claude Code configuration.
 
@@ -13,8 +13,9 @@ Read them in number order. When two documents disagree, the lower-numbered one i
 | # | Document | Answers the question | State |
 |---|---|---|---|
 | 01 | [Business specification v1.5](01-business-spec.md) | What the system must do: rules BR1–BR12, four state machines, four flows, 44 test scenarios, deployment assumptions | Master copy of the specification from v1.5, after three review rounds. 2 points still await team confirmation (section 11); both are configuration values |
-| 02 | [Detailed design, revision 11](02-detailed-design.md) | What to code against: 13 Kafka event types, the three DB schemas, replication and reporting, the API, the implementation order | Follows specification v1.5. The SQL was trial-run on PostgreSQL (section 9). All 12 points in section 8 were confirmed on 21 Nov 2026 |
-| 03 | [Implementation plan, revision 14](03-implementation-plan.md) | What to build with and how: Python and its libraries, the TypeScript frontend, modules, three test tiers, order of work, how to use Claude Code | Libraries verified in step 0; section 7 records the progress |
+| 02 | [Detailed design, revision 12](02-detailed-design.md) | What to code against: 13 Kafka event types, the three DB schemas, replication and reporting, the API, the implementation order | Follows specification v1.5. The SQL was trial-run on PostgreSQL (section 9). All 12 points in section 8 were confirmed on 21 Nov 2026 |
+| 03 | [Implementation plan, revision 15](03-implementation-plan.md) | What to build with and how: Python and its libraries, the TypeScript frontend, modules, three test tiers, order of work, how to use Claude Code | Libraries verified in step 0; section 7 records the progress |
+| 04 | [Course report, revision 1](04-course-report.md) | What the lecturer's report template asks for, where the project already has the material, and what is missing | Written on 22 Nov 2026 from the template "Mẫu PTTK"; the required HLD model, database diagram and performance test are still missing (planned in steps 7 and 8 of document 03) |
 
 ## Pending work
 
@@ -25,6 +26,8 @@ Read them in number order. When two documents disagree, the lower-numbered one i
 - [x] Settle the language. Done on 21 Nov 2026: @Naul chose Python; the project is built from scratch, with no B5 baseline.
 - [x] Move the project to the implementation phase and run step 0 of document 03. Done on 21 Nov 2026: @Naul changed `.claude/project-phase` to `code`.
 - [ ] Decide where a branch keeps the alert for a message it moved to the dlq or could not recognise (section 9 of document 01 says "raise an alert", but the branch DB has no `alerts` table). Until then the branch writes an error log line (section 2 of document 02). Needed before step 6.
+- [ ] Decide who writes Part I of the report (the unit, the market, the conclusion; section 2 of document 04): @Naul, or Claude drafts it from research.
+- [ ] Decide whether the report includes a security test (section 2 of document 04): the template lists Acunetix but does not mark it as required; a free scanner such as OWASP ZAP could stand in.
 - [x] Decide where the order form gets its list of dishes in phase 1. Done on 22 Nov 2026: @Naul chose a seed file, `backend/seed/menu.json`, loaded into a `dishes` table at each branch and served by `GET /dishes` (section 1 of document 02).
 
 ## Claude Code configuration

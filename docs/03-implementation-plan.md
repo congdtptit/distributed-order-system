@@ -1,8 +1,15 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 14 · 22 Nov 2026
+Revision 15 · 22 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the implementation phase; section 7 records what has been built so far. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 15
+
+| Section | Change | Reason |
+|---|---|---|
+| 4 | Step 7 gains a performance test with Apache JMeter; a new step 8 prepares the report material | The lecturer's report template (document 04, 22 Nov 2026) requires a performance test, an HLD model and an overall database diagram, among others |
+| 4, 7 | Step 4 is done; progress and estimate updated, with the weights rescaled for the template's extra work; what step 4 built and how it was checked | Scenarios 4, 50, 52 and the Kitchen parts of 6 and 48 pass on 22 Nov 2026 |
 
 ## Changes in revision 14
 
@@ -233,10 +240,11 @@ The order follows the steps and phase 2 in section 7 of the detailed design; the
 | 0. Preparation | Project skeleton, compose files, topic creation script, CI, the remaining Claude Code configuration of section 5.7. Done on 21 Nov 2026 | One session in plan mode; a person reviews closely |
 | 1. Shared | The `common` module. Done on 22 Nov 2026 (section 7) | One session; reviewed by a reviewer running in a fresh context |
 | 2–3. Inventory | Reserve, release, waste, consumed, the stock-check flag. Steps 2 and 3 done on 22 Nov 2026 (section 7) | A separate worktree, one scenario at a time |
-| 4–5. Kitchen | Table 3.2, cancel requests, origin branch | A separate worktree, one scenario at a time |
+| 4–5. Kitchen | Table 3.2, cancel requests, origin branch. Step 4 done on 22 Nov 2026 (section 7) | A separate worktree, one scenario at a time |
 | 6. Branch | Send queue, local cancel, applying messages by rank | A separate worktree, one scenario at a time |
 | 6b. Screens | The `frontend` screens for the branch, the Kitchen, Inventory and monitoring, and the demo page, against the APIs of steps 2–6 | One session, one screen at a time with the `/screen` skill |
-| 7. Integration | Tier 3 scenarios, Flow D (`/monitor`, `/alerts`), the Order Query Service and its report (scenario 55; replication itself runs since step 0), the Management screen | One main session; slow test runs are delegated to a subagent |
+| 7. Integration | Tier 3 scenarios, Flow D (`/monitor`, `/alerts`), the Order Query Service and its report (scenario 55; replication itself runs since step 0), the Management screen; the performance test with Apache JMeter (section 2 of document 04) | One main session; slow test runs are delegated to a subagent |
+| 8. Report material | What the report template needs beyond the code (section 3 of document 04): the HLD drawing, the function list, use-case cards and activity diagrams, database diagrams, table details generated from the live schema, the test tables | One session after step 7; @Naul writes Part I and assembles the Vietnamese report |
 | Phase 2 | Flow C, including blocking a Sold-out dish on the branch screen while the data is fresh and the "may be sold out" warning when it is stale | One session, scenarios 18–21 |
 | Demo | Scenarios 1, 3, 4, 10, 36 on all services | One repeatable demo script |
 
@@ -349,7 +357,7 @@ Every part was created on 21 Nov 2026, in step 0 or before it. What is left belo
 
 ## 7. Progress
 
-Updated 22 Nov 2026, after step 3. A step is done when its scenarios pass, the code passes Ruff and Pyright, and the reviews of section 5.3 are closed.
+Updated 22 Nov 2026, after step 4. A step is done when its scenarios pass, the code passes Ruff and Pyright, and the reviews of section 5.3 are closed.
 
 | Step | State | Scenarios passing |
 |---|---|---|
@@ -357,13 +365,15 @@ Updated 22 Nov 2026, after step 3. A step is done when its scenarios pass, the c
 | 1. Shared | Done 22 Nov 2026 | 26, 29, 31 |
 | 2. Inventory: receiving orders | Done 22 Nov 2026 | 9, 15, 16, 24, 30, 39, 42, 44 |
 | 3. Inventory: release, consumed, waste, stock check | Done 22 Nov 2026 | 5, 22, 43, 49; the Inventory parts of 6 and 48 |
-| 4–5. Kitchen | Can start now, in parallel | 0 of 17 |
+| 4. Kitchen: tickets, buttons, warnings | Done 22 Nov 2026 | 4, 50, 52; the Kitchen parts of 6 and 48 |
+| 5. Kitchen: cancel requests | Next | 0 of 12 |
 | 6. Branch | Can start now, in parallel | 0 of 7 |
 | 6b. Screens | After steps 2–6 | – |
-| 7. Integration | After step 6 | 0 of 1 (scenario 55), plus the end-to-end versions |
+| 7. Integration | After step 6 | 0 of 1 (scenario 55), plus the end-to-end versions and the performance test |
+| 8. Report material | After step 7 | – |
 | Phase 2 | After phase 1 | 0 of 4 |
 
-**Scenarios:** 15 of 44 pass in full (34 %); 6 and 48 pass their Inventory part and wait for the Kitchen (step 4) and phase 2. **Estimate of work done:** about 40 % of the whole project, weighting each step by its expected effort: preparation 15 %, step 1 10 %, Inventory 15 %, Kitchen 15 %, branch 12 %, screens 13 %, integration and reporting 10 %, phase 2 6 %, demo 4 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.
+**Scenarios:** 18 of 44 pass in full (41 %); 6 and 48 pass every phase 1 part and wait for phase 2. **Estimate of work done:** about 41 % of the whole project, weighting each step by its expected effort. The report template added a performance test and report material, so the weights were rescaled on 22 Nov 2026: preparation 13 %, step 1 9 %, Inventory 13 %, Kitchen 13 % (step 4 counts for 6 %), branch 11 %, screens 11 %, integration and reporting 9 %, performance test 5 %, report material 8 %, phase 2 5 %, demo 3 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.
 
 ### What step 1 built
 
@@ -421,3 +431,18 @@ Shared pieces added to `common`: the reason codes (`reasons.py`), the seed reade
 - **Tests:** 111 backend tests pass (99 in tiers 1 and 2, 12 in tier 3). The step 3 scenarios are tier 1; the APIs run through FastAPI's test client on the test DB. A smoke run sent `StockConsumed` through the real brokers to the running service. Scenarios 26 and 29 also run in tier 3 with Inventory's real handler, which the step 1 review asked for.
 - **The tests can fail:** leaving Held without the status condition, releasing a spoiled ingredient instead of writing it off, deducting available stock on Consumed, keeping the flag on `clear-check`, or skipping the unmatched alert each fails at least one test.
 - **Reviews:** the test audit asked for the stock after reserving in scenario 49, proof that the recipe change hit a row, and no messages on duplicates in scenario 5; all added. The specification review found no certain violation and three suspected ones, all fixed: writing off now depends on the reason (BR6), a malformed spoiled list no longer strands a reservation in the dlq, and the APIs commit before they answer. Its list of unstated behaviour is now in revision 11 of the design.
+
+### What step 4 built
+
+| File | Content |
+|---|---|
+| `kitchen_service/tickets.py` | The row-lock sequence and table 3.2 without cancel requests: `OrderReserved` queues a ticket or meets a Cancel-pending record, `OrderFailed` is recorded even without a record, repeats on a terminal status get the stored result and never a second release command; the buttons Start cooking, Reject, Complete; `flagged_ingredients` by version; the ticket warning (rule "Tickets in practice" in section 4 of the design) |
+| `kitchen_service/app.py` | The consumer of `kitchen-orders` and `menu-events` (not `cancel-events.*` yet: without its handler the requests would be skipped and committed) and the outbox relay; `GET /tickets` and the three buttons |
+
+`common/api.py` holds the request-scoped DB connection and clock of every API. The `migrated` fixture now gives a new database per call, so one test can run Inventory's and the Kitchen's real code side by side.
+
+### How step 4 was checked
+
+- **Tests:** 133 backend tests pass (120 in tiers 1 and 2, 13 in tier 3). Scenario 50 runs through the HTTP API. Scenario 52 races Reject against Start cooking 100 times on two connections; the order is reserved by Inventory's real handler and the Kitchen's command goes back to it, so "leaves Held exactly once" is checked on Inventory's side; both buttons won in some runs. Scenario 4 runs on the cluster: the order passes through the real services, every Inventory instance is stopped, the ticket is rejected over HTTP, `OrderCancelled` reaches `status-events.POS01` at once, and when Inventory is back it releases exactly once. The warning test of 6 and 48 hands each service's real messages to the other.
+- **The tests can fail:** ignoring the required status, dropping the row lock and the conditional write (both buttons then win), overwriting flags whatever the version, dropping the warning join, or not recording Inventory's Failed each fails at least one test.
+- **Reviews:** the test audit found that the warning test started from a hand-built message; it now uses Inventory's real one. The specification review found one fault, fixed: an order meeting a Cancel-pending record of other branches could never become a ticket (a JSONB value written to a `TEXT[]` column), which no test reached because Cancel-pending records come in step 5; three tests now cover those rows. It also found that the documents said the buttons insert a `CHUA_CO` row; the documents were corrected (revision 12 of the design).

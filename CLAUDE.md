@@ -11,7 +11,7 @@ Course project on distributed systems: order taking for a restaurant chain. Bran
 ## Current phase: implementation
 
 - `.claude/project-phase` contains `code`. Only the user changes that file; a hook blocks edits to it.
-- The order of work is section 4 of `docs/03-implementation-plan.md`; steps 0 (preparation), 1 (the shared `common` module), 2 and 3 (Inventory) are done, and section 7 there records the progress. Next: the Kitchen (steps 4–5) and the branch (step 6), which can run in parallel. Business code is written one scenario at a time with `/scenario <n>`, screens one at a time with `/screen <name>`.
+- The order of work is section 4 of `docs/03-implementation-plan.md`; steps 0 (preparation), 1 (the shared `common` module), 2 and 3 (Inventory) and 4 (Kitchen tickets) are done, and section 7 there records the progress. Next: the Kitchen's cancel requests (step 5) and the branch (step 6). The final report follows the lecturer's template; document 04 says what it needs. Business code is written one scenario at a time with `/scenario <n>`, screens one at a time with `/screen <name>`.
 - The project is built from scratch, with no existing codebase to follow.
 
 ## Layout and commands
@@ -54,6 +54,7 @@ Hooks format each edited file (ruff, Biome) and refuse to end a turn while chang
 | `docs/01-business-spec.md` | The business: rules BR1–BR12, four state machines, the flows, the test scenarios, deployment assumptions |
 | `docs/02-detailed-design.md` | Kafka events, the three DB schemas, the API, the implementation order, the confirmed design choices |
 | `docs/03-implementation-plan.md` | Technology, modules, the three test tiers, how Claude Code is used |
+| `docs/04-course-report.md` | The lecturer's report template, what the project covers, what is missing for the report |
 | `docs/README.md` | Index, pending work, conventions for editing the documents |
 
 - When two documents disagree, the lower-numbered one is right; fix the higher-numbered one.
@@ -72,6 +73,7 @@ Hooks format each edited file (ruff, Biome) and refuse to end a turn while chang
 | Message types, topics, payloads | 02 section 2; 01 section 13.1 |
 | Consumers, deduplication, dlq | 01 sections 9 and 13.3; 02 sections 2 (note "The shared consumer") and 3; the code is `backend/common/src/common/`, mapped in `.claude/rules/common.md` |
 | What is built, what is next | 03 section 7 |
+| What the final report needs | 04 |
 | Reason codes (`reason_code`) | 02 section 1; `backend/common/src/common/reasons.py` |
 | One test scenario | 01 section 12; its step in 02 section 7; its tier in 03 section 3 |
 | What the system promises and does not promise | 01 sections 14 and 15 |

@@ -14,7 +14,7 @@ The `paths` above follow the module names in section 2 of `docs/03-implementatio
 
 ## Rules
 
-- One entry point: messages from `kitchen-orders`, messages from `cancel-events` and the three staff buttons all run the same code. It inserts a `CHUA_CO` row if none exists, runs `SELECT ... FOR UPDATE`, applies table 3.2, writes the outbox, then commits.
+- One entry point: messages from `kitchen-orders`, messages from `cancel-events` and the three staff buttons all run the same code. It inserts a `CHUA_CO` row if none exists (messages only; a button answers 404 instead), runs `SELECT ... FOR UPDATE`, applies table 3.2, writes the outbox, then commits.
 - Exactly one row per order id in `kitchen_orders`. Cancel-pending and the Failed result are values of the `status` column, not separate tables. Never delete a row.
 - Never answer "Cancelled" for an order that has not arrived. A cancel request that arrives before the order only creates `HUY_CHO_DON` and emits `CancelPending`.
 - The branch that sent a cancel request is taken from the topic name. `origin_branch` is written only from an Inventory message.
@@ -26,6 +26,14 @@ The `paths` above follow the module names in section 2 of `docs/03-implementatio
 - `flagged_ingredients` is overwritten only when the message's `(epoch, seq)` is greater.
 - On `menu-events` the Kitchen handles `IngredientCheckChanged` only; `DishStatusChanged` and `Heartbeat` are skipped, not sent to the dlq.
 
+## Code map
+
+| File | Content |
+|---|---|
+| `src/kitchen_service/tickets.py` | `_lock` (the row-lock sequence), the handlers of `OrderReserved`, `OrderFailed`, `IngredientCheckChanged`; the buttons `start_cooking`, `reject`, `complete`; `list_tickets` with warnings. Step 5 adds the `CancelRequested` handler here |
+| `src/kitchen_service/app.py` | Consumer (`kitchen-orders`, `menu-events`; add `cancel-events.*` with the step 5 handler, never before) and outbox relay threads; `GET /tickets` and the three buttons |
+| `tests/kitchen_support.py` | Inventory's messages, `deliver` (through `handle_once`), `sent_envelopes` to hand real messages between the services, readers of the Kitchen DB |
+
 ## Scenarios of this module
 
-Steps 4 and 5 in section 7 of document 02: 1, 2, 3, 4, 6, 8, 23, 25, 27, 28, 33, 34, 35, 48, 50, 51, 52.
+Steps 4 and 5 in section 7 of document 02: 1, 2, 3, 4, 6, 8, 23, 25, 27, 28, 33, 34, 35, 48, 50, 51, 52. Step 4 (4, 50, 52, and the warning parts of 6 and 48) passes since 22 Nov 2026.
