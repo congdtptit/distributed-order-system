@@ -2,8 +2,8 @@
 
 The two invariants come from section 3 of docs/02-detailed-design.md.
 Exits 0 with a one-line summary when every check returns no rows; exits 1 and
-prints the rows otherwise. Run inside the backend-dev container:
-    ./bin/backend uv run --no-sync python scripts/check_invariants.py [DSN]
+prints the rows otherwise. Run inside the tools container:
+    docker compose exec tools python scripts/check_invariants.py [DSN]
 """
 
 import sys

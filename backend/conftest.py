@@ -1,31 +1,32 @@
 """Fixtures shared by every module's tests.
 
-One PostgreSQL container serves the whole test session, and each test gets a new, empty
-database in it. Tests never delete rows to reset state: prohibition 1 in section 9 of
-docs/01-business-spec.md forbids deleting order records, so a clean state means a new database.
+The tests run against the ``test-db`` PostgreSQL of compose.yaml (in CI, a PostgreSQL service
+of the workflow), and each test gets a new, empty database in it. Tests never delete rows to
+reset state: prohibition 1 in section 9 of docs/01-business-spec.md forbids deleting order
+records, so a clean state means a new database.
+
+``TEST_DATABASE_URL`` points at the server's default database.
 """
 
+import os
 import uuid
-from collections.abc import Iterator
 from pathlib import Path
 
 import psycopg
 import pytest
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
-from testcontainers.community.postgres import PostgresContainer
 
 from common.migrate import apply_migrations
 
-POSTGRES_IMAGE = "postgres:16.14"
 ROOT = Path(__file__).parent
+DEFAULT_TEST_DATABASE_URL = "postgresql://app:app@test-db:5432/postgres"
 
 
 @pytest.fixture(scope="session")
-def postgres_server() -> Iterator[str]:
-    """Connection string of the session's PostgreSQL server (its default database)."""
-    with PostgresContainer(POSTGRES_IMAGE, driver=None) as container:
-        yield container.get_connection_url()
+def postgres_server() -> str:
+    """Connection string of the test server's default database."""
+    return os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
 
 
 @pytest.fixture

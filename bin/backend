@@ -1,6 +1,0 @@
-#!/bin/bash
-# Run a command in the backend-dev container (Python 3.12, uv), from backend/.
-#   ./bin/backend uv run pytest -m "not tier3"
-#   ./bin/backend uv run python scripts/create_topics.py
-#   ./bin/backend true          start the container only
-exec "$(dirname "$0")/_in-container" backend-dev /workspace/backend "$@"

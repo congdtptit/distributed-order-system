@@ -1,6 +1,6 @@
 # uv workspace of the Python services (section 2 of docs/03-implementation-plan.md).
-# Every command runs in the backend-dev container, from this directory:
-#   ./bin/backend uv run <command>
+# Commands run in the tools container of compose.yaml, from this directory:
+#   docker compose exec tools pytest
 [project]
 name = "order-system-backend"
 version = "0.1.0"
@@ -16,7 +16,6 @@ dependencies = [
 [dependency-groups]
 dev = [
   "pytest>=8.3",
-  "testcontainers>=4.8",
   "ruff>=0.8",
   "pyright[nodejs]>=1.1.390",
 ]

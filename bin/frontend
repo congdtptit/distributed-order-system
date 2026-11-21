@@ -1,6 +1,0 @@
-#!/bin/bash
-# Run a command in the frontend-dev container (Node), from frontend/.
-#   ./bin/frontend npm run dev
-#   ./bin/frontend npx --no-install vitest run
-#   ./bin/frontend true          start the container only
-exec "$(dirname "$0")/_in-container" frontend-dev /workspace/frontend "$@"

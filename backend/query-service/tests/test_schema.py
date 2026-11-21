@@ -1,5 +1,5 @@
-"""The migrations of this service create exactly the tables of docs/02-detailed-design.md section 5
-(the Central Order Replica).
+"""The migrations of this service create exactly the tables of
+docs/02-detailed-design.md section 5 (the Central Order Replica).
 """
 
 from pathlib import Path

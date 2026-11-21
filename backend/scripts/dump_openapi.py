@@ -1,9 +1,10 @@
 """Write each service's OpenAPI document to frontend/src/api/openapi/<service>.json.
 
 The screens' TypeScript types are generated from these files (section 6 of
-docs/02-detailed-design.md). Run after changing an API, then ./bin/frontend npm run gen:api.
+docs/02-detailed-design.md). Run after changing an API:
 
-    ./bin/backend uv run python scripts/dump_openapi.py
+    docker compose exec tools python scripts/dump_openapi.py
+    docker compose exec frontend npm run gen:api
 """
 
 import json

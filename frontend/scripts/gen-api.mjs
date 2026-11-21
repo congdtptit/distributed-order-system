@@ -1,6 +1,6 @@
 // Generate the TypeScript API types from the services' OpenAPI documents.
-//   1. ./bin/backend uv run python scripts/dump_openapi.py   writes src/api/openapi/<service>.json
-//   2. ./bin/frontend npm run gen:api                       writes src/api/generated/<service>.ts
+//   1. docker compose exec tools python scripts/dump_openapi.py   writes src/api/openapi/<service>.json
+//   2. docker compose exec frontend npm run gen:api                       writes src/api/generated/<service>.ts
 // The generated files are committed and never edited by hand (.claude/rules/frontend.md).
 
 import { execFileSync } from "node:child_process";

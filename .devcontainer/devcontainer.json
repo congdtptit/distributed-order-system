@@ -1,15 +1,14 @@
 {
-  "name": "distributed-order-system (Python)",
-  "dockerComposeFile": ["../infra/compose.yaml"],
-  "service": "backend-dev",
-  "runServices": ["backend-dev", "frontend-dev"],
-  "workspaceFolder": "/workspace",
+  "name": "distributed-order-system (backend tools)",
+  "dockerComposeFile": ["../compose.yaml"],
+  "service": "tools",
+  "workspaceFolder": "/app",
   "customizations": {
     "vscode": {
       "settings": {
         "python.defaultInterpreterPath": "/opt/venv/bin/python"
       },
-      "extensions": ["ms-python.python", "charliermarsh.ruff", "biomejs.biome"]
+      "extensions": ["ms-python.python", "charliermarsh.ruff"]
     }
   }
 }

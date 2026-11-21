@@ -19,6 +19,7 @@ import psycopg
 from psycopg.rows import TupleRow
 
 _FILE_NAME = re.compile(r"^(\d{3})_[a-z0-9_]+\.sql$")
+_LOCK_KEY = 7_420_001  # any fixed number; only this runner takes this advisory lock
 
 _CREATE_LEDGER = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -65,6 +66,18 @@ def apply_migrations(conn: psycopg.Connection[TupleRow], directory: Path) -> lis
     Returns the file names applied by this call.
     """
     migrations = discover(directory)
+    # Two instances of one service (Inventory runs two) start at the same time; the session
+    # lock makes the second wait until the first has applied everything.
+    conn.execute("SELECT pg_advisory_lock(%s)", (_LOCK_KEY,))
+    try:
+        return _apply(conn, directory, migrations)
+    finally:
+        conn.execute("SELECT pg_advisory_unlock(%s)", (_LOCK_KEY,))
+
+
+def _apply(
+    conn: psycopg.Connection[TupleRow], directory: Path, migrations: list[Migration]
+) -> list[str]:
     with conn.transaction():
         conn.execute(_CREATE_LEDGER)
         rows = conn.execute("SELECT version, name, checksum FROM schema_migrations").fetchall()

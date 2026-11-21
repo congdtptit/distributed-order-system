@@ -8,9 +8,9 @@ point 6 in section 8 of docs/02-detailed-design.md. Topics are never auto-create
 The script can run any number of times: a topic that exists is checked, not recreated. It
 exits 1 if an existing topic has different settings; such a topic must be fixed by hand.
 
-    ./bin/backend uv run python scripts/create_topics.py
+    docker compose exec tools python scripts/create_topics.py
 
-Environment: KAFKA_BOOTSTRAP (set in the backend-dev container),
+Environment: KAFKA_BOOTSTRAP (set in the tools container),
 BRANCHES (default POS01,POS02,ONLINE).
 """
 # pyright: basic, reportPrivateImportUsage=false
@@ -87,8 +87,14 @@ def main() -> int:
             future.result()
             print(f"created {name}")
 
-    problems: list[str] = []
+    # A broker answers metadata from its own cache, which lags a just-created topic.
+    deadline = time.monotonic() + 30
     topics = admin.list_topics(timeout=10).topics
+    while not all(name in topics for name in wanted) and time.monotonic() < deadline:
+        time.sleep(1)
+        topics = admin.list_topics(timeout=10).topics
+
+    problems: list[str] = []
     resources = [ConfigResource(ResourceType.TOPIC, name) for name in wanted]
     configs = {res.name: fut.result() for res, fut in admin.describe_configs(resources).items()}
     for name, parts in wanted.items():
