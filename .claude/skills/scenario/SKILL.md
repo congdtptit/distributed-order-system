@@ -37,4 +37,6 @@ When the documents do not cover a situation you meet, stop and ask the user. Do 
 
 ## Step 4: report
 
-Give the user, in Vietnamese: the commands you ran, the test output before and after the implementation, what the subagents reported and what you did about each finding, the files changed, and any part not done. Do not commit unless the user asks.
+If the scenario finishes a transaction or a step, update its sections in `report/` (CLAUDE.md, working rules).
+
+Give the user, in Vietnamese: the commands you ran, the test output before and after the implementation, what the subagents reported and what you did about each finding, the files changed, and any part not done. Commit the scenario as one commit (CLAUDE.md, working rules).

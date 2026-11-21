@@ -35,6 +35,16 @@ ROOT = Path(__file__).parent
 DEFAULT_TEST_DATABASE_URL = "postgresql://app:app@test-db:5432/postgres"
 
 
+@pytest.fixture(autouse=True)
+def _scenario_number(
+    request: pytest.FixtureRequest, record_property: Callable[[str, object], None]
+) -> None:
+    """Write each test's ``kb(<n>)`` scenario numbers into the JUnit XML report, so that
+    scripts/report_tests.py can count results per scenario for the course report."""
+    for marker in request.node.iter_markers("kb"):
+        record_property("kb", marker.args[0])
+
+
 @pytest.fixture(scope="session")
 def postgres_server() -> str:
     """Connection string of the test server's default database."""

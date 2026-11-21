@@ -13,6 +13,9 @@ services:
       - ../backend:/app
       # scripts/dump_openapi.py writes the services' OpenAPI documents for the screens here.
       - ../frontend/src/api/openapi:/openapi
+      # The course report: scripts/report_*.py read the documents and write report/generated/.
+      - ../docs:/docs:ro
+      - ../report:/report
       # Tier 3 tests stop and start containers of this project (a broker for scenario 31),
       # the same faults bin/chaos injects from the host. Course project: no socket proxy.
       - /var/run/docker.sock:/var/run/docker.sock

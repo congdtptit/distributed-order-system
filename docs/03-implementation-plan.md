@@ -1,8 +1,15 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 15 · 22 Nov 2026
+Revision 16 · 22 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the implementation phase; section 7 records what has been built so far. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 16
+
+| Section | Change | Reason |
+|---|---|---|
+| 4, 7 | The report in `report/` grows with every step; step 8 keeps only the final layout and read-through; a step is done only when its report sections are updated | @Naul, 22 Nov 2026: the documentation must follow the report template alongside the code (document 04, revision 2) |
+| 6 | One unidentified flaky failure in a full test run | Seen once on 22 Nov 2026 and not reproduced in four later runs |
 
 ## Changes in revision 15
 
@@ -244,7 +251,7 @@ The order follows the steps and phase 2 in section 7 of the detailed design; the
 | 6. Branch | Send queue, local cancel, applying messages by rank | A separate worktree, one scenario at a time |
 | 6b. Screens | The `frontend` screens for the branch, the Kitchen, Inventory and monitoring, and the demo page, against the APIs of steps 2–6 | One session, one screen at a time with the `/screen` skill |
 | 7. Integration | Tier 3 scenarios, Flow D (`/monitor`, `/alerts`), the Order Query Service and its report (scenario 55; replication itself runs since step 0), the Management screen; the performance test with Apache JMeter (section 2 of document 04) | One main session; slow test runs are delegated to a subagent |
-| 8. Report material | What the report template needs beyond the code (section 3 of document 04): the HLD drawing, the function list, use-case cards and activity diagrams, database diagrams, table details generated from the live schema, the test tables | One session after step 7; @Naul writes Part I and assembles the Vietnamese report |
+| 8. Report material | The report in `report/` grows with every step (document 04); step 8 tidies the diagrams, applies the template's page layout and reads it through | One session after step 7; Part I and the cover are @Naul's unless Claude is asked |
 | Phase 2 | Flow C, including blocking a Sold-out dish on the branch screen while the data is fresh and the "may be sold out" warning when it is stale | One session, scenarios 18–21 |
 | Demo | Scenarios 1, 3, 4, 10, 36 on all services | One repeatable demo script |
 
@@ -353,11 +360,11 @@ Every part was created on 21 Nov 2026, in step 0 or before it. What is left belo
 - **How Kafka assigns partitions to the two Inventory instances** needs a trial run (point 6 in section 8 of the design). Scenario 42 therefore takes its handler-level test as the main one.
 - **Resources of the demo machine.** Measured on 22 Nov 2026, idle, on a Docker Desktop with 4 CPUs and 5.8 GB of memory: about 2.5 GB for the core profile and 3.1 GB for `full`. The three brokers take about 300–350 MB each (384 MB heap), Kafka UI about 330 MB, each service container about 80 MB, each database about 25–30 MB, the frontend container about 200 MB (without the heap cap Vite held 1 GB). Measure again in step 7, when the services consume and produce.
 - **A second toolchain.** Node and npm run in their own container, like the Python tools. Their `node_modules` stay inside the container, so the editor sees the TypeScript types only when the project is opened in the dev container. Major versions move fast there: step 0 found that TypeScript 7 breaks `openapi-typescript`.
-- **Tier 3 scenarios tend to be flaky.** They depend on when containers stop and start; they need explicit wait conditions instead of waiting on time.
+- **Tier 3 scenarios tend to be flaky.** They depend on when containers stop and start; they need explicit wait conditions instead of waiting on time. On 22 Nov 2026 one full run had one failure that could not be identified (the summary did not name it) and four later runs passed; runs now use `-rf` so that a failure is named.
 
 ## 7. Progress
 
-Updated 22 Nov 2026, after step 4. A step is done when its scenarios pass, the code passes Ruff and Pyright, and the reviews of section 5.3 are closed.
+Updated 22 Nov 2026, after step 4. A step is done when its scenarios pass, the code passes Ruff and Pyright, the reviews of section 5.3 are closed, and its sections of the report in `report/` are updated.
 
 | Step | State | Scenarios passing |
 |---|---|---|

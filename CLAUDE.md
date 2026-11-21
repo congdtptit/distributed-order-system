@@ -6,6 +6,7 @@ Course project on distributed systems: order taking for a restaurant chain. Bran
 
 - Reply to the user in Vietnamese.
 - Write every project document in English: everything in `docs/`, this file, and the files under `.claude/`.
+- The one exception is the course report in `report/`: Vietnamese, following the lecturer's template (@Naul, 22 Nov 2026). Technical names stay in English and are never translated: component names (Inventory Service, Kafka, outboxâ€¦), databases, tables, columns, topics, events, API paths, status and reason codes.
 - The user talks about the domain in Vietnamese. The glossary below maps their words to the terms used in the documents.
 
 ## Current phase: implementation
@@ -23,6 +24,7 @@ Course project on distributed systems: order taking for a restaurant chain. Bran
 | `backend/` | Python 3.12 uv workspace and its `Dockerfile` (one image for every Python container): `common/`, `order-service/`, `inventory-service/`, `kitchen-service/`, `query-service/`, each with `src/`, `tests/`, `migrations/`; `scripts/` for the init jobs and tools |
 | `frontend/` | TypeScript screens: React, Vite, Mantine, TanStack Query |
 | `bin/chaos` | Fault injection on the running cluster: a branch offline, a broker or service stopped, replication cut |
+| `report/` | The course report in Vietnamese, in the lecturer's template: Markdown with Mermaid diagrams, `generated/` from scripts, `build.sh` exports Word. `report/README.md` says how |
 
 Everything runs in Docker; nothing is installed on the host. Source is mounted into the containers, so a code change reloads the service; a change to `pyproject.toml` or `uv.lock` needs `docker compose build`. Section 2 of `docs/03-implementation-plan.md` explains the containers and networks.
 
@@ -73,7 +75,7 @@ Hooks format each edited file (ruff, Biome) and refuse to end a turn while chang
 | Message types, topics, payloads | 02 section 2; 01 section 13.1 |
 | Consumers, deduplication, dlq | 01 sections 9 and 13.3; 02 sections 2 (note "The shared consumer") and 3; the code is `backend/common/src/common/`, mapped in `.claude/rules/common.md` |
 | What is built, what is next | 03 section 7 |
-| What the final report needs | 04 |
+| What the final report needs | 04; the report itself is `report/` |
 | Reason codes (`reason_code`) | 02 section 1; `backend/common/src/common/reasons.py` |
 | One test scenario | 01 section 12; its step in 02 section 7; its tier in 03 section 3 |
 | What the system promises and does not promise | 01 sections 14 and 15 |
@@ -108,6 +110,7 @@ Event names are English as in 02 section 2 (`OrderCreated`, `CancelRequested`, â
 - Do not use mocks in place of PostgreSQL or Kafka in tests.
 - Mark each test `@pytest.mark.kb(<number>)` with the scenario number from 01 section 12.
 - Edit the documents following the conventions in `docs/README.md`. A `Stop` hook checks that the document set is still consistent before a turn ends.
+- When a step of section 4 of `docs/03-implementation-plan.md` is finished, update its sections in `report/` in the same commit: the function list, the use-case cards and activity diagrams, the database part (`scripts/report_schema.py`), the scenario table (`scripts/report_tests.py`). Section 1 of `report/README.md` lists the sections.
 - Git: the remote is `origin`, the default branch is `main`. Commit each part as soon as it is finished and its checks pass (a scenario, a step, a fix, a documents update), without asking; one commit per part (@Naul, 22 Nov 2026). Push only when the user asks. Never commit `.env` files or `.claude/settings.local.json`.
 
 ## Twelve things that must not be done

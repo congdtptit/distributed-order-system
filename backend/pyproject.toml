@@ -75,6 +75,8 @@ extraPaths = [
 addopts = ["--strict-markers", "--import-mode=importlib", "-ra"]
 # Test helper modules shared by the test files of one module; their names are unique.
 pythonpath = ["inventory-service/tests", "kitchen-service/tests"]
+# xunit1 keeps the kb(<n>) properties that scripts/report_tests.py reads.
+junit_family = "xunit1"
 testpaths = [
   "common/tests",
   "order-service/tests",
