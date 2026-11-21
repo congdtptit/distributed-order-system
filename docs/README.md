@@ -1,8 +1,8 @@
 # Document set of the distributed-order-system project
 
-Updated 21 Nov 2026. The project is in the documentation phase: there is no code, and coding does not start until the project is moved to the implementation phase (see "Pending work").
+Updated 21 Nov 2026. The project is in the implementation phase: step 0 (preparation) of document 03 is done, and the business code is next, starting with step 1.
 
-The repository is `https://github.com/congdtptit/distributed-order-system`, default branch `main`. It holds this document set and the Claude Code configuration.
+The repository is `https://github.com/congdtptit/distributed-order-system`, default branch `main`. It holds this document set, the code in `backend/` and `frontend/`, and the Claude Code configuration.
 
 Project documents are written in English. They were written in Vietnamese until 21 Nov 2026; the Vietnamese originals of that date are kept, frozen, in `archive/vi-2026-11-21/`.
 
@@ -13,8 +13,8 @@ Read them in number order. When two documents disagree, the lower-numbered one i
 | # | Document | Answers the question | State |
 |---|---|---|---|
 | 01 | [Business specification v1.5](01-business-spec.md) | What the system must do: rules BR1–BR12, four state machines, four flows, 44 test scenarios, deployment assumptions | Master copy of the specification from v1.5, after three review rounds. 2 points still await team confirmation (section 11); both are configuration values |
-| 02 | [Detailed design, revision 5](02-detailed-design.md) | What to code against: 13 Kafka event types, the three DB schemas, replication and reporting, the API, the implementation order | Follows specification v1.5. The SQL was trial-run on PostgreSQL (section 9). All 12 points in section 8 were confirmed on 21 Nov 2026 |
-| 03 | [Implementation plan, revision 6](03-implementation-plan.md) | What to build with and how: Python and its libraries, the TypeScript frontend, modules, three test tiers, order of work, how to use Claude Code | The language is settled; the libraries are proposals to verify in step 0 |
+| 02 | [Detailed design, revision 6](02-detailed-design.md) | What to code against: 13 Kafka event types, the three DB schemas, replication and reporting, the API, the implementation order | Follows specification v1.5. The SQL was trial-run on PostgreSQL (section 9). All 12 points in section 8 were confirmed on 21 Nov 2026 |
+| 03 | [Implementation plan, revision 7](03-implementation-plan.md) | What to build with and how: Python and its libraries, the TypeScript frontend, modules, three test tiers, order of work, how to use Claude Code | The language is settled; the libraries are proposals to verify in step 0 |
 
 ## Pending work
 
@@ -23,7 +23,8 @@ Read them in number order. When two documents disagree, the lower-numbered one i
 - [x] Confirm points 1–11 in section 8 of document 02. Done on 21 Nov 2026: @Naul agreed to all eleven as proposed.
 - [x] Confirm point 12 in section 8 of document 02 (replication and reporting). Done on 21 Nov 2026: @Naul agreed to the proposal, PostgreSQL logical replication.
 - [x] Settle the language. Done on 21 Nov 2026: @Naul chose Python; the project is built from scratch, with no B5 baseline.
-- [ ] Move the project to the implementation phase: change `.claude/project-phase` to `code`, then run step 0 of document 03.
+- [x] Move the project to the implementation phase and run step 0 of document 03. Done on 21 Nov 2026: @Naul changed `.claude/project-phase` to `code`.
+- [ ] Decide where the order form gets its list of dishes in phase 1: `GET /menu` belongs to phase 2, and section 6 of document 02 has no other source. Needed before the branch screen in step 6b.
 
 ## Claude Code configuration
 
@@ -32,8 +33,8 @@ The configuration is in `CLAUDE.md` at the project root and in the `.claude/` di
 Two things to know when working on the documents:
 
 - After editing a file in this directory, run `python3 .claude/skills/doc-check/scripts/check_docs.py` from the project root, or call `/doc-check` in Claude Code. It checks tables, links, the scenario list and the version numbers across the files.
-- The file `.claude/project-phase` contains `docs`. While it does, Claude Code is blocked from creating files outside `docs/`, `.claude/` and `.github/`. Change its content to `code` when implementation starts.
-- On GitHub, the `docs` workflow runs the same check on every push to `main` and every pull request.
+- The file `.claude/project-phase` contains `code`. Only a person changes it; a hook stops Claude Code from editing it.
+- On GitHub, the `docs` workflow runs the same check on every push to `main` and every pull request; the `ci` workflow checks the code.
 
 ## Documents outside this set
 

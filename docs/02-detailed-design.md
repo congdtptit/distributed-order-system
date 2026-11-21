@@ -1,8 +1,15 @@
 # Detailed design – Kafka events, DB schemas and API
 
-Revision 5 · 21 Nov 2026 · @Naul · follows business specification v1.5
+Revision 6 · 21 Nov 2026 · @Naul · follows business specification v1.5
 
 This document turns business specification v1.5 (the lean edition) into three things to code against: the Kafka event catalogue, each service's DB schema, and the API. There is no existing codebase to align with: the base flow is built in this project as well, so the event names, table names, column names and API paths here are the ones to use.
+
+## Changes in revision 6
+
+| Section | Change | Reason |
+|---|---|---|
+| 5, 9 | Logical replication to the Central Order Replica was trial-run; the result is in section 9 | Risk 2 in section 6 of document 03, assigned to step 0 |
+| 6 | The screens' module is named `frontend` | The repository was split into `backend/` and `frontend/` (section 2 of document 03) |
 
 ## Changes in revision 5
 
@@ -358,7 +365,7 @@ UPDATE orders SET cancel_flag = 'KHONG', cancel_message = :msg
 
 ### Replication to the Central Order Replica
 
-The specification requires the branch order DBs to replicate asynchronously to the Central Order Replica (section 13.5) and the Management report to show a "data as of" time for each branch (section 8). There is no existing reporting service to reuse, so both are built in this project. This part is the choice of point 12 in section 8, agreed on 21 Nov 2026; it has not been trial-run.
+The specification requires the branch order DBs to replicate asynchronously to the Central Order Replica (section 13.5) and the Management report to show a "data as of" time for each branch (section 8). There is no existing reporting service to reuse, so both are built in this project. This part is the choice of point 12 in section 8, agreed on 21 Nov 2026. The publication and subscription below were trial-run on 21 Nov 2026 (section 9); the Order Query Service was not.
 
 - **What replicates:** only `orders` and `replication_heartbeat`. The send queue, the dish cache and `processed_events` stay local.
 - **Mechanism:** PostgreSQL logical replication. Each branch DB runs with `wal_level=logical` and publishes the two tables. The central DB has the same two tables and one subscription per branch.
@@ -405,7 +412,7 @@ Each service exposes only the APIs that a person or a screen needs; services do 
 | Inventory | `POST /admin/epoch/bump` (phase 2) | Runs the `epoch` bump procedure in section 3; used after restoring Inventory and for scenario 20 | 200 with the new `epoch` |
 | Reporting | `GET /reports/summary` | For each branch: the "data as of" time, the number of orders by status, and the number by reason for Cancelled and Failed orders; reads the Central Order Replica only | 200 |
 
-- **The screens** (the `web` module in section 2 of document 03) are a client of the APIs in this table and use nothing else: no direct DB access, no Kafka. They show the statuses the services return and decide none of their own; the only rule enforced on screen alone is point 5 in section 8. Each service publishes the OpenAPI document that FastAPI generates, and the screens' TypeScript types are generated from it.
+- **The screens** (the `frontend` module in section 2 of document 03) are a client of the APIs in this table and use nothing else: no direct DB access, no Kafka. They show the statuses the services return and decide none of their own; the only rule enforced on screen alone is point 5 in section 8. Each service publishes the OpenAPI document that FastAPI generates, and the screens' TypeScript types are generated from it.
 - **The three Kitchen buttons** run the same row-locking sequence as the consumer (section 4). A 409 here is the normal outcome of the race between Cancel and Start cooking (BR7); the UI only needs to reload the ticket.
 - **`POST /orders` does not wait for Inventory**: the Reserved or Failed result comes later through `status-events`. The UI re-reads the order with `GET /orders/{id}`.
 - **`counted_on_hand` of `clear-check`** is the on-hand stock, that is, available stock plus reserved (section 3.3 of the specification). Inventory sets `available = counted_on_hand − reserved`. If the result is negative it returns 409: the tickets still holding that ingredient must first be rejected through Flow A. If `counted_on_hand` is not sent, `available` stays unchanged.
@@ -466,6 +473,7 @@ The run on 21 Nov 2026 used PostgreSQL 16.2 and a temporary script that is not p
 | Branch, races | 200 runs of the sender and the cancel button at the same time (83 local cancels, 117 through the Kitchen); 200 runs of two cancel commands at the same time; 200 runs of a cancel and a Completed message at the same time. The first version's approach reproduces both defects described above | 37 |
 | Kitchen | Cancel arriving before the order; duplicate order arrival; wrong-branch cancel before and after the order arrives; reason per branch; cancel while Cooking; the ticket warning; the "needs review" mark is not duplicated | 1, 2, 6, 23, 27, 29, 34, 35 |
 | Kitchen, races | 200 runs of Cancel and Start cooking at the same time (cooking won 98 times, cancel won 102 times); 200 runs of an order and a cancel request for the same order ID arriving at the same time | 3, 28 |
+| Replication (separate run, step 0) | On PostgreSQL 16.14, the publication and subscription at the end of section 5 between a branch DB and the central DB: an order and a heartbeat arrive in about 0.2 s; with the subscription disabled for 5 s the central `beat_at` stays still while the branch keeps beating, then catches up in about 0.2 s; with the central DB paused for 5 s, three orders written meanwhile arrive once it is back. Script: `backend/scripts/replication_trial.py` | 55 (the "data as of" part) |
 
 Not yet checked:
 
@@ -475,6 +483,6 @@ Not yet checked:
 - Scenarios 9, 18, 21, 33, 39 and the new scenarios 48–55.
 - The APIs in section 6.
 - The `IngredientCheckChanged` emission part of the `epoch` bump procedure.
-- Logical replication to the Central Order Replica (the publication and subscription at the end of section 5) and `GET /reports/summary`.
+- `GET /reports/summary`. Logical replication itself was trial-run separately; see the last row of the table above.
 
 These trial runs only confirm the design; they do not replace the automated tests that section 12 of the specification requires.
