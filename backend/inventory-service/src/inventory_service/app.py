@@ -10,7 +10,7 @@ The APIs are in section 6 of docs/02-detailed-design.md.
 
 import logging
 import os
-from collections.abc import AsyncGenerator, Iterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from decimal import Decimal
@@ -20,6 +20,7 @@ import psycopg
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from common.api import get_clock, get_conn
 from common.clock import Clock, SystemClock
 from common.consumer import ConsumerSettings, MessageConsumer
 from common.kafka import Receiver, Sender
@@ -100,16 +101,6 @@ def health() -> dict[str, Any]:
 
 
 # ---------- the APIs of section 6 of docs/02-detailed-design.md ----------
-
-
-def get_conn() -> Iterator[psycopg.Connection[Any]]:
-    """One transaction per request: committed when the handler returns, rolled back on error."""
-    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
-        yield conn
-
-
-def get_clock() -> Clock:
-    return SystemClock()
 
 
 Conn = Annotated[psycopg.Connection[Any], Depends(get_conn)]

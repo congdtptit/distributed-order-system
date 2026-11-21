@@ -64,9 +64,23 @@ def migrated_db(dsn: str, module: str) -> str:
 
 
 @pytest.fixture
-def migrated(fresh_db: str) -> Callable[[str], str]:
-    """``migrated("inventory-service")``: a new database with that module's schema."""
-    return lambda module: migrated_db(fresh_db, module)
+def migrated(postgres_server: str) -> Iterator[Callable[[str], str]]:
+    """``migrated("inventory-service")``: a new database with that module's schema. Each call
+    gives another database (a test may need Inventory's and the Kitchen's); all are dropped
+    after the test."""
+    names: list[str] = []
+
+    def make(module: str) -> str:
+        name = f"t_{uuid.uuid4().hex[:16]}"
+        with psycopg.connect(postgres_server, autocommit=True) as conn:
+            conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+        names.append(name)
+        return migrated_db(make_conninfo(postgres_server, dbname=name), module)
+
+    yield make
+    with psycopg.connect(postgres_server, autocommit=True) as conn:
+        for name in names:
+            conn.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))
 
 
 # ---------- tier 3: real Kafka ----------
