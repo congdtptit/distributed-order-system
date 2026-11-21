@@ -1,8 +1,7 @@
 """HTTP entry point of the Kitchen service, and its background workers.
 
-On start: the consumer of ``kitchen-orders`` and ``menu-events`` and the outbox relay run in
-threads. ``cancel-events.*`` joins in step 5, with its handler: subscribing earlier would skip
-and commit the cancel requests.
+On start: the consumer of ``kitchen-orders``, ``cancel-events.*`` and ``menu-events`` and the
+outbox relay run in threads. Two instances share the consumer group ``kitchen``.
 
 The APIs are in section 6 of docs/02-detailed-design.md.
 """
@@ -25,12 +24,13 @@ from common.kafka import Receiver, Sender
 from common.outbox import OutboxRelay
 from common.runtime import Workers, configure_logging, instance_name
 from common.service import identity
-from common.topics import KITCHEN_ORDERS, MENU_EVENTS
+from common.topics import CANCEL_EVENTS_PATTERN, KITCHEN_ORDERS, MENU_EVENTS
 from kitchen_service.tickets import (
     ActionError,
     Record,
     complete,
     list_tickets,
+    make_cancel_requested_handler,
     make_check_changed_handler,
     make_order_failed_handler,
     make_order_reserved_handler,
@@ -47,6 +47,7 @@ def kitchen_handlers(clock: Clock) -> dict[str, Handler]:
     return {
         "OrderReserved": make_order_reserved_handler(clock),
         "OrderFailed": make_order_failed_handler(clock),
+        "CancelRequested": make_cancel_requested_handler(clock),
         "IngredientCheckChanged": make_check_changed_handler(),
     }
 
@@ -60,7 +61,12 @@ def start_workers(dsn: str, bootstrap: str) -> Workers:
 
     consumer = MessageConsumer(
         ConsumerSettings(name=f"kitchen@{name}", handlers=kitchen_handlers(clock), deciding=True),
-        Receiver(bootstrap, CONSUMER_GROUP, [KITCHEN_ORDERS, MENU_EVENTS], f"{name}-consumer"),
+        Receiver(
+            bootstrap,
+            CONSUMER_GROUP,
+            [KITCHEN_ORDERS, CANCEL_EVENTS_PATTERN, MENU_EVENTS],
+            f"{name}-consumer",
+        ),
         Sender(bootstrap, f"{name}-dlq"),
         connect,
     )

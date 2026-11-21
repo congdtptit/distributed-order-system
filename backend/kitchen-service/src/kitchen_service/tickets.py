@@ -297,6 +297,132 @@ def make_order_failed_handler(clock: Clock) -> Handler:
     return handle
 
 
+# ---------- cancel requests from the branches on cancel-events.<branch> ----------
+
+
+def make_cancel_requested_handler(clock: Clock) -> Handler:
+    """Table 3.2 and the Kitchen decision table of Flow B (section 6 of the specification), in
+    the order of precedence below table 3.2:
+
+    1. a request from a branch other than the origin branch, wherever the origin is known:
+       ignored, no reply, a ``HUY_SAI_CHI_NHANH`` alert (section 13.2);
+    2. the rows that name the status and the event;
+    3. the last row: a repeat reaching Cancel-pending or a terminal status gets the stored result.
+
+    The requesting branch comes from the topic name, never from the message body.
+    """
+
+    def handle(conn: psycopg.Connection[Any], message: Incoming) -> None:
+        env = message.envelope
+        order_id = _order_id(env)
+        branch = message.source_branch
+        if branch is None:
+            raise ValueError("CancelRequested arrived on a topic that names no branch")
+        raw_reason = env.payload.get("reason_code")
+        reason = raw_reason if isinstance(raw_reason, str) else None
+        if reason is None:
+            log.warning(
+                "order_id=%s event_id=%s cancel request without a reason", order_id, env.event_id
+            )
+        rec = _lock(conn, order_id, create=True)
+        assert rec is not None
+
+        # 1. Wrong branch, wherever the origin is known.
+        if rec.origin_branch is not None and branch != rec.origin_branch:
+            _wrong_branch_alert(conn, message, rec.origin_branch, [branch])
+            log.warning(
+                "order_id=%s event_id=%s cancel request from %s ignored: origin is %s",
+                order_id,
+                env.event_id,
+                branch,
+                rec.origin_branch,
+            )
+            return
+
+        # 2. The explicit rows.
+        if rec.status == NONE:
+            _set(
+                conn,
+                rec,
+                NONE,
+                clock,
+                status=CANCEL_PENDING,
+                cancel_branches=[branch],
+                cancel_reasons={branch: reason} if reason else {},
+            )
+            _cancel_pending(conn, rec, branch, clock, env)
+            log.info(
+                "order_id=%s event_id=%s cancel pending: order not arrived", order_id, env.event_id
+            )
+        elif rec.status == CANCEL_PENDING:
+            if branch not in rec.cancel_branches:
+                reasons_by_branch = dict(rec.cancel_reasons)
+                if reason:
+                    reasons_by_branch[branch] = reason
+                _set(
+                    conn,
+                    rec,
+                    CANCEL_PENDING,
+                    clock,
+                    cancel_branches=[*rec.cancel_branches, branch],
+                    cancel_reasons=reasons_by_branch,
+                )
+            # A repeat from a listed branch gets the stored result; its reason is not overwritten.
+            _cancel_pending(conn, rec, branch, clock, env)
+        elif rec.status == QUEUED:
+            close = reason or reasons.CHANGED_MIND
+            _set(
+                conn,
+                rec,
+                QUEUED,
+                clock,
+                status=CANCELLED,
+                cancelled_by=CUSTOMER,
+                close_reason=close,
+                cancel_branches=[branch],
+                cancel_reasons={branch: close},
+            )
+            _release(conn, rec, clock, cancelled_by=CUSTOMER, reason=close, spoiled=[], cause=env)
+            log.info("order_id=%s event_id=%s cancelled before cooking", order_id, env.event_id)
+        elif rec.status in (COOKING, COMPLETED):
+            assert rec.origin_branch is not None
+            _emit(
+                conn,
+                status_events(rec.origin_branch),
+                "CancelRejected",
+                rec,
+                clock,
+                {"kitchen_status": rec.status},
+                env,
+            )
+            log.info(
+                "order_id=%s event_id=%s cancel refused: %s", order_id, env.event_id, rec.status
+            )
+        # 3. Cancelled or Failed: the stored result.
+        else:
+            _stored_result(conn, rec, clock, env)
+
+    return handle
+
+
+def _cancel_pending(
+    conn: psycopg.Connection[Any], rec: Record, branch: str, clock: Clock, cause: Envelope
+) -> None:
+    """The commitment "kitchen will not cook", to the branch that asked (section 2 of
+    document 02, point 2 in section 8)."""
+    enqueue(
+        conn,
+        status_events(branch),
+        new_envelope(
+            "CancelPending",
+            order_id=rec.order_id,
+            branch_id=branch,
+            clock=clock,
+            causation_id=cause.event_id,
+        ),
+    )
+
+
 # ---------- flags from Inventory on menu-events ----------
 
 

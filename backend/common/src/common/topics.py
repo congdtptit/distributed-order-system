@@ -10,6 +10,8 @@ MENU_EVENTS = "menu-events"
 DLQ = "dlq"
 ORDER_EVENTS_PATTERN = r"^order-events\..*"
 """Inventory subscribes to every branch's order topic by this pattern (section 13.1)."""
+CANCEL_EVENTS_PATTERN = r"^cancel-events\..*"
+"""The Kitchen subscribes to every branch's cancel topic by this pattern."""
 
 # Topic families that carry the branch in their name: <family>.<branch>.
 BRANCH_FAMILIES = ("order-events", "cancel-events", "status-events")
