@@ -8,12 +8,36 @@ Course project on distributed systems: order taking for a restaurant chain. Bran
 - Write every project document in English: everything in `docs/`, this file, and the files under `.claude/`.
 - The user talks about the domain in Vietnamese. The glossary below maps their words to the terms used in the documents.
 
-## Current phase: documentation
+## Current phase: implementation
 
-- The project has no code. Do not create source code, build configuration or infrastructure until the user says clearly that implementation starts. A `PreToolUse` hook blocks this while `.claude/project-phase` contains `docs`; only the user decides to change it to `code`. Repository configuration (`.gitignore`, `.gitattributes`, `.github/`) is allowed.
-- The work still pending before coding is listed in `docs/README.md`.
-- The services are written in Python 3.12 and the screens (`web/`) in TypeScript; the libraries of both are listed in section 2 of `docs/03-implementation-plan.md`. The project is built from scratch, with no existing codebase to follow.
-- There are no build, test or format commands yet. Record them in this section in step 0, when the project skeleton exists.
+- `.claude/project-phase` contains `code`. Only the user changes that file; a hook blocks edits to it.
+- The order of work is section 4 of `docs/03-implementation-plan.md`; step 0 (preparation) is done. Business code is written one scenario at a time with `/scenario <n>`, screens one at a time with `/screen <name>`.
+- The project is built from scratch, with no existing codebase to follow.
+
+## Layout and commands
+
+| Path | Content |
+|---|---|
+| `backend/` | Python 3.12 uv workspace: `common/`, `order-service/`, `inventory-service/`, `kitchen-service/`, `query-service/`, each with `src/`, `tests/`, `migrations/`; `scripts/` for infrastructure scripts |
+| `frontend/` | TypeScript screens: React, Vite, Mantine, TanStack Query |
+| `infra/` | `compose.yaml` (3 Kafka brokers, 6 PostgreSQL, the two dev containers), `dev.Dockerfile` |
+| `bin/` | `backend` and `frontend`: run a command in the matching dev container |
+
+Every tool runs in Docker; nothing is installed on the host. `./bin/backend` runs in `backend/`, `./bin/frontend` in `frontend/`; both start their container if needed.
+
+| Task | Command |
+|---|---|
+| Start Kafka and the databases | `docker compose -f infra/compose.yaml up -d --wait` |
+| Create the Kafka topics (idempotent) | `./bin/backend uv run --no-sync python scripts/create_topics.py` |
+| Backend tests, tiers 1 and 2 | `./bin/backend uv run --no-sync pytest -m "not tier3"` |
+| Backend tier 3 tests | the `test-runner` subagent, or `./bin/backend uv run --no-sync pytest -m tier3` |
+| Backend format, lint, types | `./bin/backend uv run --no-sync ruff format .`, `… ruff check .`, `… pyright` |
+| Frontend tests, types, format and lint | `./bin/frontend npx --no-install vitest run`, `… tsc --noEmit`, `… biome check --write .` |
+| Screens in the browser | `http://localhost:5173`, served by the `frontend-dev` container |
+| API types for the screens | `./bin/backend uv run --no-sync python scripts/dump_openapi.py`, then `./bin/frontend npm run gen:api` |
+| Apply a module's migrations | `./bin/backend uv run --no-sync python -m common.migrate <dsn> <module>/migrations` |
+
+Hooks format each edited file (ruff, Biome) and refuse to end a turn while changed code fails pyright, tsc or the tier 1 and 2 tests of its module.
 
 ## The documents are the source of truth
 

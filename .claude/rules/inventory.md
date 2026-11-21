@@ -1,6 +1,6 @@
 ---
 paths:
-  - "inventory-service/**"
+  - "backend/inventory-service/**"
 ---
 
 # Inventory

@@ -1,6 +1,6 @@
 ---
 paths:
-  - "common/**"
+  - "backend/common/**"
 ---
 
 # Shared module: message envelope, outbox, consumer, dlq

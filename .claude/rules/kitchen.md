@@ -1,6 +1,6 @@
 ---
 paths:
-  - "kitchen-service/**"
+  - "backend/kitchen-service/**"
 ---
 
 # Kitchen

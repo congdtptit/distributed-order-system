@@ -1,13 +1,58 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(./bin/backend uv run pytest *)",
+      "Bash(./bin/backend uv run --no-sync pytest *)",
+      "Bash(./bin/backend uv run ruff *)",
+      "Bash(./bin/backend uv run --no-sync ruff *)",
+      "Bash(./bin/backend uv run pyright *)",
+      "Bash(./bin/backend uv run --no-sync pyright *)",
+      "Bash(./bin/backend uv run --no-sync python scripts/create_topics.py)",
+      "Bash(./bin/backend uv run --no-sync python scripts/check_invariants.py *)",
+      "Bash(./bin/backend true)",
+      "Bash(./bin/frontend npx --no-install tsc *)",
+      "Bash(./bin/frontend npx --no-install vitest *)",
+      "Bash(./bin/frontend npx --no-install biome *)",
+      "Bash(./bin/frontend true)",
+      "Bash(docker compose -f infra/compose.yaml ps *)",
+      "Bash(docker compose -f infra/compose.yaml logs *)",
+      "Bash(docker compose -f infra/compose.yaml up *)",
+      "Bash(python3 .claude/skills/doc-check/scripts/check_docs.py)",
+      "Bash(python3 .claude/skills/ui-ux-pro-max/scripts/search.py *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/.env)",
+      "Read(./**/.env.*)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Edit|Write|NotebookEdit",
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
         "hooks": [
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/phase-guard.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/code-guard.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/format.sh",
+            "timeout": 60
           }
         ]
       }
@@ -19,6 +64,11 @@
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/docs-check.sh",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/test-gate.sh",
+            "timeout": 600
           }
         ]
       }

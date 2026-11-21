@@ -1,6 +1,6 @@
 ---
 paths:
-  - "order-service/**"
+  - "backend/order-service/**"
 ---
 
 # Branch (POS and Online)
