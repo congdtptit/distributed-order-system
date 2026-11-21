@@ -214,6 +214,48 @@ def partition_leaders(bootstrap: str, topic: str) -> dict[int, int]:
     return {p.id: p.leader for p in meta.partitions.values()}
 
 
+class TopicTail:
+    """Reads what is written to some topics from the moment it is created, without a consumer
+    group (no offsets committed). For end-to-end tests on the shared topics."""
+
+    def __init__(self, bootstrap: str, topics: Sequence[str]) -> None:
+        self._consumer = Consumer(consumer_config(bootstrap, "tail", "tail"))
+        assignment: list[TopicPartition] = []
+        meta = self._consumer.list_topics(timeout=10)
+        for topic in topics:
+            for partition in meta.topics[topic].partitions:
+                _low, high = self._consumer.get_watermark_offsets(
+                    TopicPartition(topic, partition), timeout=10
+                )
+                assignment.append(TopicPartition(topic, partition, high))
+        self._consumer.assign(assignment)
+
+    def read(self, seconds: float) -> list[Record]:
+        """Everything that arrives within ``seconds``."""
+        records: list[Record] = []
+        deadline = time.monotonic() + seconds
+        while (left := deadline - time.monotonic()) > 0:
+            msg = self._consumer.poll(min(left, 0.5))
+            if msg is None or msg.error() is not None:
+                continue
+            topic, partition, offset = msg.topic(), msg.partition(), msg.offset()
+            assert topic is not None and partition is not None and offset is not None
+            key, value = msg.key(), msg.value()
+            records.append(
+                Record(
+                    topic=topic,
+                    partition=partition,
+                    offset=offset,
+                    key=key.encode() if isinstance(key, str) else key,
+                    value=value.encode() if isinstance(value, str) else value,
+                )
+            )
+        return records
+
+    def close(self) -> None:
+        self._consumer.close()
+
+
 def end_offset(bootstrap: str, topic: str, partition: int) -> int:
     """The offset the next message written to the partition will get."""
     consumer = Consumer(consumer_config(bootstrap, "inspect-watermarks", "inspect-watermarks"))

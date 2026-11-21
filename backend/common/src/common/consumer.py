@@ -99,6 +99,27 @@ class _DeadLetter(Exception):
     pass
 
 
+def handle_once(conn: psycopg.Connection[Any], handler: Handler, message: Incoming) -> bool:
+    """Steps 1 to 4 of section 13.3 on an autocommit connection: one transaction that records
+    the ``event_id`` and runs the handler. False if the ``event_id`` was already processed (the
+    transaction is rolled back and the handler does not run).
+
+    The consumer calls this for every message; handler-level tests call it directly, so they
+    run the same deduplication as the consumer without Kafka.
+    """
+    duplicate = False
+    with conn.transaction():  # step 1
+        inserted = conn.execute(  # step 2
+            "INSERT INTO processed_events (event_id) VALUES (%s) ON CONFLICT DO NOTHING",
+            (message.envelope.event_id,),
+        ).rowcount
+        if inserted == 0:
+            duplicate = True
+            raise psycopg.Rollback()
+        handler(conn, message)  # steps 3 and 4
+    return not duplicate
+
+
 class MessageConsumer:
     def __init__(
         self,
@@ -219,17 +240,7 @@ class MessageConsumer:
             return Outcome.SKIPPED
 
         conn = self._connection()
-        duplicate = False
-        with conn.transaction():  # step 1
-            inserted = conn.execute(  # step 2
-                "INSERT INTO processed_events (event_id) VALUES (%s) ON CONFLICT DO NOTHING",
-                (envelope.event_id,),
-            ).rowcount
-            if inserted == 0:
-                duplicate = True
-                raise psycopg.Rollback()
-            handler(conn, Incoming(envelope, branch_from_topic(record.topic)))  # steps 3 and 4
-        if duplicate:
+        if not handle_once(conn, handler, Incoming(envelope, branch_from_topic(record.topic))):
             return Outcome.DUPLICATE
         if self._after_db_commit is not None:
             self._after_db_commit(record)
