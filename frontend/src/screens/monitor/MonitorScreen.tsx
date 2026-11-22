@@ -14,13 +14,16 @@ import {
   Stack,
   Table,
   Text,
-  Title,
 } from "@mantine/core";
 import {
   IconAlertTriangle,
+  IconBell,
   IconCircleCheck,
   IconClockExclamation,
+  IconInbox,
+  IconPlugConnected,
   IconPlugConnectedX,
+  IconServer,
 } from "@tabler/icons-react";
 import { type UseQueryResult, useQueries, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -30,6 +33,7 @@ import { inventoryApi } from "../../api/inventory";
 import type { ConsumerMonitor } from "../../api/kitchen";
 import { kitchenApi } from "../../api/kitchen";
 import { clock, duration, TABULAR } from "../../components/common";
+import { Empty, Figures, PageHeader, Panel } from "../../components/layout";
 import { ALERT_KIND } from "../../labels";
 
 interface AnyAlert {
@@ -72,41 +76,71 @@ export function MonitorScreen() {
     { service: "Kho", query: inventory },
     { service: "Bếp", query: kitchen },
   ];
+  const services = [...branches.map((b) => b.query), inventory, kitchen];
+  const offline = branches.filter((b) => b.query.data?.connection.connected === false).length;
+  const waiting = branches.reduce((sum, b) => sum + (b.query.data?.waiting_to_send ?? 0), 0);
 
   return (
-    <Stack gap="md">
-      <Title order={1}>Giám sát</Title>
-      <Text size="sm" c="dimmed">
-        Màn hình chỉ báo động; hệ thống không tự đổi trạng thái đơn nào vì đơn đã chờ lâu.
-      </Text>
+    <Stack gap="lg">
+      <PageHeader
+        title="Giám sát"
+        description="Màn hình chỉ báo động; hệ thống không tự đổi trạng thái đơn nào vì đơn đã chờ lâu."
+      />
+      <Figures
+        figures={[
+          {
+            label: "Dịch vụ có trả lời",
+            value: `${services.filter((q) => !q.isError).length}/${services.length}`,
+            icon: IconServer,
+            color: services.some((q) => q.isError) ? "red" : "green",
+          },
+          {
+            label: "Chi nhánh mất Kafka",
+            value: offline,
+            icon: offline ? IconPlugConnectedX : IconPlugConnected,
+            color: offline ? "red" : "green",
+          },
+          {
+            label: "Mục chờ gửi ở chi nhánh",
+            value: waiting,
+            icon: IconInbox,
+            color: waiting ? "orange" : "gray",
+          },
+          {
+            label: "Cảnh báo đang có",
+            value: alerts.length,
+            icon: IconBell,
+            color: alerts.length ? "orange" : "gray",
+          },
+        ]}
+      />
 
-      <Title order={2} size="h4">
-        Các dịch vụ
-      </Title>
-      <Table.ScrollContainer minWidth={760}>
-        <Table verticalSpacing="xs">
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Dịch vụ</Table.Th>
-              <Table.Th>Tình trạng</Table.Th>
-              <Table.Th>Kafka</Table.Th>
-              <Table.Th>Chi tiết</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {branches.map(({ branch, query }) => (
-              <ServiceRow key={branch} name={branch} query={query}>
-                {(data) => <BranchDetail monitor={data} />}
-              </ServiceRow>
-            ))}
-            {consumers.map(({ service, query }) => (
-              <ServiceRow key={service} name={service} query={query}>
-                {(data) => <ConsumerDetail monitor={data} />}
-              </ServiceRow>
-            ))}
-          </Table.Tbody>
-        </Table>
-      </Table.ScrollContainer>
+      <Panel title="Các dịch vụ" flush>
+        <Table.ScrollContainer minWidth={760}>
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Dịch vụ</Table.Th>
+                <Table.Th>Tình trạng</Table.Th>
+                <Table.Th>Kafka</Table.Th>
+                <Table.Th>Chi tiết</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {branches.map(({ branch, query }) => (
+                <ServiceRow key={branch} name={branch} query={query}>
+                  {(data) => <BranchDetail monitor={data} />}
+                </ServiceRow>
+              ))}
+              {consumers.map(({ service, query }) => (
+                <ServiceRow key={service} name={service} query={query}>
+                  {(data) => <ConsumerDetail monitor={data} />}
+                </ServiceRow>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      </Panel>
 
       <SlowConsumers consumers={consumers} />
       <Alerts alerts={alerts} />
@@ -143,7 +177,6 @@ function ServiceRow<T extends BranchMonitor | ConsumerMonitor>({
         ) : (
           <Badge
             color={answering ? "green" : "red"}
-            variant="light"
             leftSection={
               answering ? (
                 <IconCircleCheck size={12} aria-hidden />
@@ -151,7 +184,6 @@ function ServiceRow<T extends BranchMonitor | ConsumerMonitor>({
                 <IconPlugConnectedX size={12} aria-hidden />
               )
             }
-            styles={{ label: { textTransform: "none" } }}
           >
             {answering ? "Đang trả lời" : "Không trả lời"}
           </Badge>
@@ -159,7 +191,7 @@ function ServiceRow<T extends BranchMonitor | ConsumerMonitor>({
       </Table.Td>
       <Table.Td>
         {answering && connected !== undefined && (
-          <Text size="sm" c={connected ? "dark" : "red.8"}>
+          <Text size="sm" c={connected ? "dark" : "red.8"} fw={connected ? 400 : 600}>
             {connected === true
               ? "Đã kết nối"
               : connected === false
@@ -220,9 +252,9 @@ function SlowConsumers({
       .map((t) => ({ ...t, service, limit: query.data?.slow_after_s ?? 0 })),
   );
   return (
-    <section aria-label="Consumer chậm">
+    <Panel title="Consumer chậm" count={slow.length}>
       {slow.length > 0 ? (
-        <Alert color="orange" icon={<IconClockExclamation aria-hidden />} title="Consumer chậm">
+        <Alert color="orange" icon={<IconClockExclamation aria-hidden />} title="Có topic đọc chậm">
           <List spacing={4} size="sm">
             {slow.map((t) => (
               <List.Item key={`${t.service}-${t.topic}`}>
@@ -239,11 +271,14 @@ function SlowConsumers({
           </List>
         </Alert>
       ) : (
-        <Text size="sm" c="dimmed">
-          Không có consumer nào chậm: mọi tin chưa đọc đều mới hơn ngưỡng 5 phút.
-        </Text>
+        <Group gap="xs">
+          <IconCircleCheck size={18} color="var(--mantine-color-green-7)" aria-hidden />
+          <Text size="sm" c="dimmed">
+            Không có consumer nào chậm: mọi tin chưa đọc đều mới hơn ngưỡng 5 phút.
+          </Text>
+        </Group>
       )}
-    </section>
+    </Panel>
   );
 }
 
@@ -253,41 +288,49 @@ function Alerts({ alerts }: { alerts: AnyAlert[] }) {
   const [kind, setKind] = useState<string>("ALL");
   const shown = kind === "ALL" ? alerts : alerts.filter((a) => a.kind === kind);
   return (
-    <section aria-label="Cảnh báo">
-      <Stack gap="xs">
-        <Group justify="space-between" wrap="wrap">
-          <Title order={2} size="h4">
-            Cảnh báo ({shown.length})
-          </Title>
-          <SegmentedControl
-            aria-label="Lọc theo loại cảnh báo"
-            value={kind}
-            onChange={setKind}
-            data={KINDS.map((k) => ({
-              value: k,
-              label: k === "ALL" ? "Tất cả" : ALERT_KIND[k],
-            }))}
-          />
-        </Group>
-        {shown.length === 0 ? (
-          <Text size="sm" c="dimmed">
-            Không có cảnh báo nào{kind === "ALL" ? "" : " thuộc loại này"}. Tin không đọc được, lệnh
-            không khớp và yêu cầu hủy sai chi nhánh sẽ hiện ở đây.
-          </Text>
-        ) : (
-          <List spacing={4} size="sm" icon={<IconAlertTriangle size={14} aria-hidden />}>
-            {shown.map((a) => (
-              <List.Item key={`${a.service}-${a.source_topic}-${a.created_at}-${a.kind}`}>
-                <Text size="sm" style={TABULAR}>
-                  {clock(a.created_at)} · {a.service} ·{" "}
-                  {ALERT_KIND[a.kind as keyof typeof ALERT_KIND] ?? a.kind}
-                  {a.order_id ? ` · đơn ${a.order_id.slice(0, 8)}` : ""} · {a.source_topic}
-                </Text>
-              </List.Item>
-            ))}
-          </List>
-        )}
-      </Stack>
-    </section>
+    <Panel
+      title="Cảnh báo"
+      count={shown.length}
+      flush
+      actions={
+        <SegmentedControl
+          aria-label="Lọc theo loại cảnh báo"
+          size="xs"
+          value={kind}
+          onChange={setKind}
+          data={KINDS.map((k) => ({
+            value: k,
+            label: k === "ALL" ? "Tất cả" : ALERT_KIND[k],
+          }))}
+        />
+      }
+    >
+      {shown.length === 0 ? (
+        <Empty icon={IconBell}>
+          Không có cảnh báo nào{kind === "ALL" ? "" : " thuộc loại này"}. Tin không đọc được, lệnh
+          không khớp và yêu cầu hủy sai chi nhánh sẽ hiện ở đây.
+        </Empty>
+      ) : (
+        <Stack gap={0}>
+          {shown.map((a) => (
+            <Group
+              key={`${a.service}-${a.source_topic}-${a.created_at}-${a.kind}`}
+              gap="sm"
+              px="md"
+              py="xs"
+              wrap="nowrap"
+              style={{ borderBottom: "1px solid var(--mantine-color-gray-2)" }}
+            >
+              <IconAlertTriangle size={16} color="var(--mantine-color-orange-7)" aria-hidden />
+              <Text size="sm" style={TABULAR}>
+                {clock(a.created_at)} · {a.service} ·{" "}
+                {ALERT_KIND[a.kind as keyof typeof ALERT_KIND] ?? a.kind}
+                {a.order_id ? ` · đơn ${a.order_id.slice(0, 8)}` : ""} · {a.source_topic}
+              </Text>
+            </Group>
+          ))}
+        </Stack>
+      )}
+    </Panel>
   );
 }

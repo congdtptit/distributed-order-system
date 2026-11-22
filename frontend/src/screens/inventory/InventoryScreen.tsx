@@ -5,21 +5,29 @@
 import {
   Alert,
   Button,
+  Center,
   Group,
   List,
   Loader,
   Stack,
   Table,
   Text,
-  Title,
   VisuallyHidden,
 } from "@mantine/core";
-import { IconAlertCircle } from "@tabler/icons-react";
+import {
+  IconAlertCircle,
+  IconAlertTriangle,
+  IconBell,
+  IconBox,
+  IconChecklist,
+  IconPackageImport,
+} from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { InventoryAlert, StockItem } from "../../api/inventory";
 import { amount, inventoryApi } from "../../api/inventory";
 import { clock, ServiceBanner, StatusBadge, TABULAR } from "../../components/common";
+import { Empty, Figures, PageHeader, Panel } from "../../components/layout";
 import { ALERT_KIND, STOCK_CHECK } from "../../labels";
 import { ClearCheckModal, ReceiptModal } from "./StockDialogs";
 
@@ -33,78 +41,121 @@ export function InventoryScreen() {
   const items = [...(stock.data ?? [])].sort(
     (a, b) => Number(b.needs_check) - Number(a.needs_check),
   );
+  const flaggedCount = items.filter((i) => i.needs_check).length;
 
   return (
-    <Stack gap="md">
-      <Title order={1}>Kho</Title>
+    <Stack gap="lg">
+      <PageHeader
+        title="Kho"
+        description="Tồn kho toàn chuỗi theo bốn lượng của mỗi nguyên liệu. Kho giữ nguyên liệu cho đơn trước khi Bếp nấu."
+      />
       {(stock.isError || alerts.isError) && (
         <ServiceBanner
           service="Kho"
           lastAnswer={Math.max(stock.dataUpdatedAt, alerts.dataUpdatedAt)}
         />
       )}
-      <InventoryAlerts alerts={alerts.data ?? []} />
-      <Title order={2} size="h4">
-        Tồn kho toàn chuỗi
-      </Title>
-      {stock.isPending && !stock.isError ? (
-        <Loader size="sm" aria-label="Đang tải tồn kho" />
-      ) : items.length === 0 ? (
-        <Text c="dimmed">
-          Chưa có nguyên liệu nào. Kho nạp nguyên liệu từ file seed khi khởi động lần đầu.
-        </Text>
-      ) : (
-        <Table.ScrollContainer minWidth={820}>
-          <Table verticalSpacing="xs" highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Nguyên liệu</Table.Th>
-                <Table.Th ta="right">Có thể giữ</Table.Th>
-                <Table.Th ta="right">Đang giữ</Table.Th>
-                <Table.Th ta="right">Đã dùng</Table.Th>
-                <Table.Th ta="right">Hao hụt</Table.Th>
-                <Table.Th>Kiểm kho</Table.Th>
-                <Table.Th>Thao tác</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {items.map((item) => (
-                <Table.Tr key={item.ingredient_id}>
-                  <Table.Td>
-                    <Text size="sm" fw={600}>
-                      {item.name}
-                    </Text>
-                  </Table.Td>
-                  {[item.available, item.reserved, item.consumed, item.wasted].map((value, i) => (
-                    <Table.Td
-                      key={["available", "reserved", "consumed", "wasted"][i]}
-                      ta="right"
-                      style={TABULAR}
-                    >
-                      {amount(value)} {item.unit}
-                    </Table.Td>
-                  ))}
-                  <Table.Td>
-                    {item.needs_check && <StatusBadge code="CHO_KIEM_KHO" table={STOCK_CHECK} />}
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs" wrap="nowrap">
-                      <Button size="xs" variant="light" onClick={() => setReceiving(item)}>
-                        Nhập kho
-                      </Button>
-                      {item.needs_check && (
-                        <Button size="xs" color="teal" onClick={() => setClearing(item)}>
-                          Kiểm kho xong
-                        </Button>
-                      )}
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
+      {stock.data && (
+        <Figures
+          figures={[
+            {
+              label: "Nguyên liệu",
+              value: stock.data.length,
+              icon: IconBox,
+              color: "indigo",
+            },
+            {
+              label: "Nguyên liệu đang chờ kiểm",
+              value: flaggedCount,
+              icon: IconAlertTriangle,
+              color: flaggedCount ? "red" : "gray",
+              hint: flaggedCount
+                ? "Món dùng nguyên liệu này tạm Hết"
+                : "Không nguyên liệu nào bị cờ",
+            },
+            {
+              label: "Cảnh báo của Kho",
+              value: alerts.data?.length ?? 0,
+              icon: IconBell,
+              color: alerts.data?.length ? "orange" : "gray",
+            },
+          ]}
+        />
       )}
+      <InventoryAlerts alerts={alerts.data ?? []} />
+      <Panel title="Tồn kho toàn chuỗi" flush>
+        {stock.isPending && !stock.isError ? (
+          <Center py="xl">
+            <Loader size="sm" aria-label="Đang tải tồn kho" />
+          </Center>
+        ) : items.length === 0 ? (
+          <Empty icon={IconBox}>
+            Chưa có nguyên liệu nào. Kho nạp nguyên liệu từ file seed khi khởi động lần đầu.
+          </Empty>
+        ) : (
+          <Table.ScrollContainer minWidth={820}>
+            <Table highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Nguyên liệu</Table.Th>
+                  <Table.Th ta="right">Có thể giữ</Table.Th>
+                  <Table.Th ta="right">Đang giữ</Table.Th>
+                  <Table.Th ta="right">Đã dùng</Table.Th>
+                  <Table.Th ta="right">Hao hụt</Table.Th>
+                  <Table.Th>Kiểm kho</Table.Th>
+                  <Table.Th ta="right">Thao tác</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {items.map((item) => (
+                  <Table.Tr key={item.ingredient_id} bg={item.needs_check ? "red.0" : "white"}>
+                    <Table.Td>
+                      <Text size="sm" fw={600}>
+                        {item.name}
+                      </Text>
+                    </Table.Td>
+                    {[item.available, item.reserved, item.consumed, item.wasted].map((value, i) => (
+                      <Table.Td
+                        key={["available", "reserved", "consumed", "wasted"][i]}
+                        ta="right"
+                        style={TABULAR}
+                        {...(i === 0 ? { fw: 600 } : { c: "gray.7" })}
+                      >
+                        {amount(value)} {item.unit}
+                      </Table.Td>
+                    ))}
+                    <Table.Td>
+                      {item.needs_check && <StatusBadge code="CHO_KIEM_KHO" table={STOCK_CHECK} />}
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap="xs" wrap="nowrap" justify="flex-end">
+                        {item.needs_check && (
+                          <Button
+                            size="xs"
+                            color="teal"
+                            leftSection={<IconChecklist size={14} aria-hidden />}
+                            onClick={() => setClearing(item)}
+                          >
+                            Kiểm kho xong
+                          </Button>
+                        )}
+                        <Button
+                          size="xs"
+                          variant="default"
+                          leftSection={<IconPackageImport size={14} aria-hidden />}
+                          onClick={() => setReceiving(item)}
+                        >
+                          Nhập kho
+                        </Button>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
+        )}
+      </Panel>
       <ReceiptModal
         key={`r-${receiving?.ingredient_id ?? ""}`}
         item={receiving}

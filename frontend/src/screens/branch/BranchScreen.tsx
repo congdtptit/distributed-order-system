@@ -5,13 +5,12 @@
 import {
   Badge,
   Button,
-  Grid,
+  Center,
   Group,
   Loader,
   SegmentedControl,
   Stack,
   Text,
-  Title,
   VisuallyHidden,
 } from "@mantine/core";
 import { IconPlugConnected, IconPlugConnectedX, IconQuestionMark } from "@tabler/icons-react";
@@ -21,6 +20,7 @@ import { useNavigate, useParams } from "react-router";
 import type { BranchId, Monitor, Order } from "../../api/branch";
 import { BRANCHES, branchApi, isBranch } from "../../api/branch";
 import { ServiceBanner } from "../../components/common";
+import { PageHeader, Panel } from "../../components/layout";
 import { ORDER_STATUS } from "../../labels";
 import { BranchAlerts } from "./BranchAlerts";
 import { CancelModal } from "./CancelModal";
@@ -63,19 +63,28 @@ export function BranchPanel({
   const announcement = useStatusAnnouncer(orders.data);
 
   return (
-    <Stack gap="md">
-      <Group justify="space-between" wrap="wrap" gap="sm">
-        <Title order={embedded ? 2 : 1}>Chi nhánh {branch}</Title>
-        <Group gap="sm" wrap="wrap">
-          <Connection monitor={monitor.data} answering={!monitor.isError} />
-          <SegmentedControl
-            aria-label="Chọn chi nhánh"
-            data={[...BRANCHES]}
-            value={branch}
-            onChange={(value) => navigate(`/${embedded ? "demo" : "branch"}/${value}`)}
-          />
-        </Group>
-      </Group>
+    <Stack gap="lg">
+      <PageHeader
+        title={`Chi nhánh ${branch}`}
+        level={embedded ? 2 : 1}
+        {...(embedded
+          ? {}
+          : {
+              description:
+                "Quầy thu ngân: tạo đơn, theo dõi trạng thái Kho và Bếp trả về, hủy đơn.",
+            })}
+        actions={
+          <>
+            <Connection monitor={monitor.data} answering={!monitor.isError} />
+            <SegmentedControl
+              aria-label="Chọn chi nhánh"
+              data={[...BRANCHES]}
+              value={branch}
+              onChange={(value) => navigate(`/${embedded ? "demo" : "branch"}/${value}`)}
+            />
+          </>
+        }
+      />
 
       {(orders.isError || monitor.isError) && (
         <ServiceBanner
@@ -86,37 +95,33 @@ export function BranchPanel({
 
       {monitor.data && <BranchAlerts monitor={monitor.data} onCancel={setCancelling} />}
 
-      <Grid gap="md">
-        <Grid.Col span={embedded ? 12 : { base: 12, lg: 3 }} style={{ minWidth: 0 }}>
-          <OrderForm
-            branch={branch}
-            headingLevel={embedded ? 3 : 2}
-            offline={monitor.data?.connection.connected === false}
-          />
-        </Grid.Col>
-        <Grid.Col span={embedded ? 12 : { base: 12, lg: 9 }} style={{ minWidth: 0 }}>
-          <Stack gap="xs">
-            <Title order={embedded ? 3 : 2} size="h4">
-              Đơn của chi nhánh
-            </Title>
-            {orders.isPending && !orders.isError ? (
-              <Loader size="sm" aria-label="Đang tải đơn" />
-            ) : (
-              <>
-                <OrdersTable orders={orders.data ?? []} onCancel={setCancelling} />
-                {(orders.data?.length ?? 0) >= limit && limit < MAX_ORDERS && (
-                  <Button
-                    variant="light"
-                    onClick={() => setLimit((l) => Math.min(l + PAGE, MAX_ORDERS))}
-                  >
-                    Xem thêm {PAGE} đơn cũ hơn
-                  </Button>
-                )}
-              </>
+      <OrderForm
+        branch={branch}
+        headingLevel={embedded ? 3 : 2}
+        offline={monitor.data?.connection.connected === false}
+      />
+
+      <Panel title="Đơn của chi nhánh" level={embedded ? 3 : 2} flush>
+        {orders.isPending && !orders.isError ? (
+          <Center py="xl">
+            <Loader size="sm" aria-label="Đang tải đơn" />
+          </Center>
+        ) : (
+          <>
+            <OrdersTable orders={orders.data ?? []} onCancel={setCancelling} />
+            {(orders.data?.length ?? 0) >= limit && limit < MAX_ORDERS && (
+              <Center p="sm">
+                <Button
+                  variant="subtle"
+                  onClick={() => setLimit((l) => Math.min(l + PAGE, MAX_ORDERS))}
+                >
+                  Xem thêm {PAGE} đơn cũ hơn
+                </Button>
+              </Center>
             )}
-          </Stack>
-        </Grid.Col>
-      </Grid>
+          </>
+        )}
+      </Panel>
 
       <CancelModal branch={branch} orderId={cancelling} onClose={() => setCancelling(null)} />
       <VisuallyHidden>
@@ -139,18 +144,13 @@ function Connection({ monitor, answering }: { monitor: Monitor | undefined; answ
         : { color: "gray", label: "Chưa rõ kết nối Kafka", Icon: IconQuestionMark };
   return (
     <Group gap="xs">
-      <Badge
-        color={badge.color}
-        variant="light"
-        leftSection={<badge.Icon size={12} aria-hidden />}
-        styles={{ label: { textTransform: "none" } }}
-      >
+      <Badge color={badge.color} size="lg" leftSection={<badge.Icon size={14} aria-hidden />}>
         {badge.label}
       </Badge>
       {monitor && (
-        <Text size="sm" style={{ fontVariantNumeric: "tabular-nums" }}>
+        <Badge color="gray" size="lg" style={{ fontVariantNumeric: "tabular-nums" }}>
           {monitor.waiting_to_send} mục chờ gửi
-        </Text>
+        </Badge>
       )}
     </Group>
   );

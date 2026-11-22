@@ -2,8 +2,14 @@
 // warning for a flagged ingredient (Flow A step 6), and the buttons table 3.2 allows in its
 // status. Buttons are at least 44px high with 8px between them (design.md, "Sizes").
 
-import { Alert, Button, Card, Group, Stack, Text } from "@mantine/core";
-import { IconAlertTriangle } from "@tabler/icons-react";
+import { Alert, Badge, Button, Card, Divider, Group, Stack, Text } from "@mantine/core";
+import {
+  IconAlertTriangle,
+  IconCheck,
+  IconClock,
+  IconPlayerPlay,
+  IconX,
+} from "@tabler/icons-react";
 import type { Ticket } from "../../api/kitchen";
 import { ticketItems } from "../../api/kitchen";
 import { clock, OrderId, StatusBadge, TABULAR } from "../../components/common";
@@ -15,6 +21,9 @@ function quantity(value: number | null | undefined, unit: string | null | undefi
   if (value === null || value === undefined) return "";
   return ` ${value.toLocaleString("vi-VN")}${unit ? ` ${unit}` : ""}`;
 }
+
+/** design.md, "Sizes": Kitchen buttons at least 44px high, 8px apart. */
+const KITCHEN_BUTTON = { h: 44, size: "md", style: { flex: 1 } } as const;
 
 export function TicketCard({
   ticket,
@@ -31,22 +40,39 @@ export function TicketCard({
   const queued = ticket.status === "CHO_NAU";
 
   return (
-    <Card withBorder padding="md" data-ticket={ticket.order_id}>
-      <Stack gap="xs">
+    <Card
+      padding="md"
+      data-ticket={ticket.order_id}
+      style={{
+        borderLeft: `4px solid var(--mantine-color-${queued ? "indigo" : "yellow"}-5)`,
+      }}
+    >
+      <Stack gap="sm">
         <Group justify="space-between" wrap="nowrap">
           <OrderId id={ticket.order_id} />
           <StatusBadge code={ticket.status} table={KITCHEN_STATUS} />
         </Group>
-        <Text size="sm" c="dimmed" style={TABULAR}>
-          Chi nhánh {ticket.origin_branch ?? "?"}
-          {ticket.order_created_at ? ` · đặt lúc ${clock(ticket.order_created_at)}` : ""}
-        </Text>
-        <Text fw={600}>
-          {ticketItems(ticket)
-            .map((item) => `${item.name} ×${item.quantity}`)
-            .join(", ")}
-        </Text>
-        <Text size="sm" style={TABULAR}>
+        <Group gap={6} wrap="wrap">
+          <Badge color="gray" variant="outline">
+            Chi nhánh {ticket.origin_branch ?? "?"}
+          </Badge>
+          {ticket.order_created_at && (
+            <Group gap={4} c="dimmed">
+              <IconClock size={14} aria-hidden />
+              <Text size="sm" c="dimmed" style={TABULAR}>
+                đặt lúc {clock(ticket.order_created_at)}
+              </Text>
+            </Group>
+          )}
+        </Group>
+        <Stack gap={2}>
+          {ticketItems(ticket).map((item) => (
+            <Text key={item.dish_id || item.name} fw={650} size="lg" lh={1.35}>
+              {`${item.name} ×${item.quantity}`}
+            </Text>
+          ))}
+        </Stack>
+        <Text size="xs" c="dimmed" style={TABULAR}>
           Nguyên liệu đã giữ:{" "}
           {ticket.reserved
             .map((r) => `${r.name ?? r.ingredient_id}${quantity(r.quantity, r.unit)}`)
@@ -55,20 +81,25 @@ export function TicketCard({
         {flagged.length > 0 && (
           <Alert
             color="red"
-            variant="filled"
+            variant="light"
             icon={<IconAlertTriangle aria-hidden />}
             role="alert"
             p="xs"
+            styles={{ root: { borderLeft: "3px solid var(--mantine-color-red-6)" } }}
           >
-            {flagged.join(", ")} đang chờ kiểm kho. Kiểm tra trước khi nấu; nếu hỏng thật thì từ
-            chối phiếu với lý do Nguyên liệu hỏng.
+            <Text size="sm" c="red.9">
+              {flagged.join(", ")} đang chờ kiểm kho. Kiểm tra trước khi nấu; nếu hỏng thật thì từ
+              chối phiếu với lý do Nguyên liệu hỏng.
+            </Text>
           </Alert>
         )}
-        <Group gap="xs" mt={4}>
+        <Divider color="gray.2" />
+        <Group gap="xs" wrap="nowrap">
           {queued ? (
             <>
               <Button
-                size="lg"
+                {...KITCHEN_BUTTON}
+                leftSection={<IconPlayerPlay size={18} aria-hidden />}
                 onClick={() => onAction("start")}
                 loading={busy === "start"}
                 disabled={busy !== null && busy !== "start"}
@@ -76,9 +107,11 @@ export function TicketCard({
                 Bắt đầu nấu
               </Button>
               <Button
-                size="lg"
+                {...KITCHEN_BUTTON}
+                style={{ flex: "0 0 auto" }}
                 color="red"
-                variant="light"
+                variant="outline"
+                leftSection={<IconX size={18} aria-hidden />}
                 onClick={() => onAction("reject")}
                 disabled={busy !== null}
               >
@@ -87,8 +120,9 @@ export function TicketCard({
             </>
           ) : (
             <Button
-              size="lg"
+              {...KITCHEN_BUTTON}
               color="green"
+              leftSection={<IconCheck size={18} aria-hidden />}
               onClick={() => onAction("complete")}
               loading={busy === "complete"}
             >

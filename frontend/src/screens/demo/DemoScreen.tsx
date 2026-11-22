@@ -3,9 +3,11 @@
 // screens and keeps no state of its own; the guide below is fixed text from section 12 of the
 // specification. Specified in .claude/skills/screen/references/screens.md ("demo").
 
-import { Accordion, Code, Grid, List, Stack, Text, Title } from "@mantine/core";
+import { Accordion, Badge, Code, Grid, Group, List, Paper, Stack, Text } from "@mantine/core";
+import { IconTerminal2 } from "@tabler/icons-react";
 import { useParams } from "react-router";
 import { isBranch } from "../../api/branch";
+import { PageHeader, Panel } from "../../components/layout";
 import { BranchPanel } from "../branch/BranchScreen";
 import { KitchenScreen } from "../kitchen/KitchenScreen";
 
@@ -15,15 +17,22 @@ export function DemoScreen() {
     return <Text>Không có chi nhánh {branchId}.</Text>;
   }
   return (
-    <Stack gap="md">
-      <Title order={1}>Demo</Title>
+    <Stack gap="lg">
+      <PageHeader
+        title="Demo"
+        description="Chi nhánh và Bếp đặt cạnh nhau để trình diễn các kịch bản tranh chấp và mất mạng. Mở một kịch bản để xem các bước."
+      />
       <Guide branch={branchId.toLowerCase()} />
       <Grid gap="lg">
         <Grid.Col span={{ base: 12, lg: 6 }} style={{ minWidth: 0 }}>
-          <BranchPanel key={branchId} branch={branchId} embedded />
+          <Paper p="md" bg="gray.0" shadow="none">
+            <BranchPanel key={branchId} branch={branchId} embedded />
+          </Paper>
         </Grid.Col>
         <Grid.Col span={{ base: 12, lg: 6 }} style={{ minWidth: 0 }}>
-          <KitchenScreen embedded />
+          <Paper p="md" bg="gray.0" shadow="none">
+            <KitchenScreen embedded />
+          </Paper>
         </Grid.Col>
       </Grid>
     </Stack>
@@ -97,33 +106,42 @@ function scenarios(branch: string): Scenario[] {
 
 function Guide({ branch }: { branch: string }) {
   return (
-    <section aria-label="Kịch bản demo">
-      <Accordion variant="contained" chevronPosition="left">
+    <Panel title="Kịch bản demo" flush>
+      <Accordion chevronPosition="left">
         {scenarios(branch).map((s) => (
           <Accordion.Item key={s.n} value={String(s.n)}>
             <Accordion.Control>
-              <Text span fw={600}>{`Kịch bản ${s.n}`}</Text>
-              <Text span> · {s.title}</Text>
+              <Group gap="sm" wrap="nowrap">
+                <Badge variant="filled" color="indigo" w={44} style={{ flex: "none" }}>
+                  {s.n}
+                </Badge>
+                <Text size="sm">
+                  <Text span fw={600}>{`Kịch bản ${s.n}`}</Text>
+                  <Text span> · {s.title}</Text>
+                </Text>
+              </Group>
             </Accordion.Control>
             <Accordion.Panel>
-              <List type="ordered" size="sm" spacing={4}>
+              <List type="ordered" size="sm" spacing={6}>
                 {s.steps.map((step) => (
                   <List.Item key={step}>
                     <Command text={step} />
                   </List.Item>
                 ))}
               </List>
-              <Text size="sm" mt="xs">
-                <Text span fw={600}>
-                  Kết quả mong đợi:
-                </Text>{" "}
-                {s.expected}
-              </Text>
+              <Paper mt="sm" p="sm" bg="green.0" shadow="none" withBorder={false}>
+                <Text size="sm">
+                  <Text span fw={600} c="green.9">
+                    Kết quả mong đợi:
+                  </Text>{" "}
+                  {s.expected}
+                </Text>
+              </Paper>
             </Accordion.Panel>
           </Accordion.Item>
         ))}
       </Accordion>
-    </section>
+    </Panel>
   );
 }
 
@@ -132,7 +150,16 @@ function Command({ text }: { text: string }) {
   const parts = text.split(/(bin\/chaos [a-z]+ [a-z0-9-]+)/).filter(Boolean);
   return (
     <>
-      {parts.map((part) => (part.startsWith("bin/chaos") ? <Code key={part}>{part}</Code> : part))}
+      {parts.map((part) =>
+        part.startsWith("bin/chaos") ? (
+          <Code key={part} fz="xs">
+            <IconTerminal2 size={12} aria-hidden style={{ verticalAlign: -2, marginRight: 4 }} />
+            {part}
+          </Code>
+        ) : (
+          part
+        ),
+      )}
     </>
   );
 }

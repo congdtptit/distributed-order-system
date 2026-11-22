@@ -1,6 +1,6 @@
 # Design of the screens
 
-The decisions every screen follows, so that each screen does not invent its own. The direction: an operations tool, plain and dense, in the "minimalism and Swiss style for enterprise dashboards" family. Change this file, not a single screen, when a decision changes.
+The decisions every screen follows, so that each screen does not invent its own. The direction: a modern operations dashboard, the look of a standard admin console: white panels on a light grey page, one accent colour (indigo), quiet tables, figures at the top of office screens. The first version (plain and dense, titles straight on a white page, buttons of mixed sizes) was judged ugly and non-standard by @Naul on 22 Nov 2026 and reworked into this one. Change this file, not a single screen, when a decision changes. The values live in `frontend/src/theme.ts`; the page pieces in `frontend/src/components/layout.tsx`.
 
 ## Stack inside `frontend/`
 
@@ -12,10 +12,21 @@ The decisions every screen follows, so that each screen does not invent its own.
 
 ## Layout
 
-- `AppShell` with a left navbar listing the six screens, each with an icon and a label; the current screen is highlighted. Below 768px the navbar collapses behind a burger button.
-- The header shows the screen title and, on screens that belong to one branch, the branch selector and the connection indicator from `GET /monitor`.
+- `AppShell` with a header carrying the product mark and name, and a left navbar listing the six screens in three groups (Vận hành: Chi nhánh, Bếp, Kho; Quản trị: Giám sát, Quản lý; Trình diễn: Demo), each with an icon and a label; the current screen is highlighted. Below 768px the navbar collapses behind a burger button.
+- The page is light grey (`gray.0`); content sits on white surfaces with a hairline border, `md` radius and the faintest shadow (`Paper` and `Card` defaults in the theme).
+- Every screen starts with `PageHeader`: the title (level 1, or level 2 inside the demo page), one dimmed line saying what the screen is for, and the screen's controls on the right (on a branch screen: the connection indicator from `GET /monitor`, the entries waiting to be sent, and the branch selector).
+- Office screens (Kho, Giám sát, Quản lý) show a row of `Figures` under the header: three or four counts, each with a label, an icon and a colour that turns from grey to the warning colour when the count needs attention. Every figure is computed from an API response on screen; none is predicted.
+- Lists and tables go in a `Panel`: a title bar (title, a grey count, actions on the right) over the content; a table runs to the panel's edges. An empty panel shows `Empty`: an icon and the sentence of "Empty states" below.
+- The Kitchen is a board: each status column is a grey lane holding white ticket cards, the column's count in a filled badge next to its title. A ticket card has a coloured left edge for its status (indigo Chờ nấu, yellow Đang nấu).
+- The branch order form is a grid of dish tiles: each tile has the dish name, its Flow C status line, and a stepper (minus, quantity, plus) around the quantity field; a picked tile turns indigo. Below the tiles, a summary line of what will be ordered, Xóa chọn and Tạo đơn.
 - A banner at the top of the content when a service the screen needs does not answer: "Không kết nối được tới Bếp" and when it last answered. The rest of the screen keeps the last data it had, marked as possibly stale.
 - Spacing follows Mantine's scale (`xs`…`xl`); no raw pixel margins in components.
+
+## Type and buttons
+
+- One page-title size (24px, weight 650), section titles at 15–18px. Never a heading larger than the page title, and no 34px default `h1`.
+- Table headers are 12px, grey, on a `gray.0` band; numbers use tabular figures.
+- Buttons: `sm` in office screens and tables, with a leading icon for the main actions. A row action that is not destructive is `default` (outlined grey); a destructive one is red `light` or `outline`; the one primary action of a panel is filled indigo. Kitchen buttons are 44px high and share the card's width.
 
 ## Status display
 

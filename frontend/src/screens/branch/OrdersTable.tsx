@@ -3,8 +3,10 @@
 // the specification allows it.
 
 import { Button, Group, Stack, Table, Text } from "@mantine/core";
+import { IconReceipt, IconX } from "@tabler/icons-react";
 import type { Order } from "../../api/branch";
 import { clock, duration, OrderId, StatusBadge, TABULAR } from "../../components/common";
+import { Empty } from "../../components/layout";
 import {
   CANCEL_FLAG,
   CANCEL_MESSAGE,
@@ -30,14 +32,14 @@ export function OrdersTable({
 }) {
   if (!orders.length) {
     return (
-      <Text c="dimmed" size="sm">
+      <Empty icon={IconReceipt}>
         Chưa có đơn nào. Đơn tạo ở chi nhánh này sẽ hiện ở đây, kèm trạng thái Kho và Bếp trả về.
-      </Text>
+      </Empty>
     );
   }
   return (
     <Table.ScrollContainer minWidth={760}>
-      <Table verticalSpacing="xs" highlightOnHover>
+      <Table highlightOnHover>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Đơn</Table.Th>
@@ -45,7 +47,7 @@ export function OrdersTable({
             <Table.Th>Món</Table.Th>
             <Table.Th>Trạng thái</Table.Th>
             <Table.Th>Gửi đi</Table.Th>
-            <Table.Th>Thao tác</Table.Th>
+            <Table.Th ta="right">Thao tác</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -75,9 +77,13 @@ function OrderRow({ order, onCancel }: { order: Order; onCancel: (orderId: strin
       <Table.Td>
         <OrderId id={order.order_id} />
       </Table.Td>
-      <Table.Td style={TABULAR}>{clock(order.created_at)}</Table.Td>
+      <Table.Td style={TABULAR}>
+        <Text size="sm" c="dimmed">
+          {clock(order.created_at)}
+        </Text>
+      </Table.Td>
       <Table.Td>
-        <Text size="sm">
+        <Text size="sm" fw={500}>
           {order.items.map((item) => `${item.name} ×${item.quantity}`).join(", ")}
         </Text>
       </Table.Td>
@@ -108,7 +114,11 @@ function OrderRow({ order, onCancel }: { order: Order; onCancel: (orderId: strin
       </Table.Td>
       <Table.Td>
         <Stack gap={2}>
-          {sendState && <Text size="xs">{sendState}</Text>}
+          {sendState && (
+            <Text size="xs" c="dimmed">
+              {sendState}
+            </Text>
+          )}
           {cancelState && (
             <Text size="xs" c="orange.9">
               {cancelState}
@@ -116,9 +126,15 @@ function OrderRow({ order, onCancel }: { order: Order; onCancel: (orderId: strin
           )}
         </Stack>
       </Table.Td>
-      <Table.Td>
+      <Table.Td ta="right">
         {canCancel && (
-          <Button size="xs" variant="light" color="red" onClick={() => onCancel(order.order_id)}>
+          <Button
+            size="xs"
+            variant="light"
+            color="red"
+            leftSection={<IconX size={14} aria-hidden />}
+            onClick={() => onCancel(order.order_id)}
+          >
             Hủy đơn
           </Button>
         )}

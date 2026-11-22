@@ -1,8 +1,14 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 23 · 22 Nov 2026
+Revision 24 · 22 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the implementation phase; section 7 records what has been built so far. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 24
+
+| Section | Change | Reason |
+|---|---|---|
+| 7 | The screens restyled: a standard admin-console look (design.md) | @Naul, 22 Nov 2026: the screens looked ugly and non-standard |
 
 ## Changes in revision 23
 
@@ -590,3 +596,8 @@ Also: the branch DB's `alerts` table (migration `003`, decided by @Naul on 22 No
 - **The pre-demo review from three angles** (section 5.5): deduplication and stock accounting found no fault. Races found the lock orders and BR7, BR9 right, and one gap against section 13.2: a wrong-branch cancel request raised no warning when the origin branch's own request was also in the list, or when Inventory failed the order; fixed. The deduplication review also found that a dish message of an older epoch, read after the branch had moved to a new one (it could wait in Kafka while the branch was offline), brought back a dish the new generation had hidden; fixed. Both with tests written first. Left as notes: a receipt could in principle push stock past NUMERIC(12,3) (about a billion units), and a message moved to the dlq twice gives two dlq copies (the dlq has no business effect).
 - **One flaky run:** one of four runs of the Kitchen's tier 1–2 tests had a failure the summary did not name; the three runs after it passed. The likely test is the Kitchen's race of scenario 3, which needs both winners to appear and has been timing-sensitive before.
 
+### The screens restyled
+
+- **Why:** @Naul judged the first look ugly and non-standard (22 Nov 2026): headings at the browser's 34px, titles straight on a white page, buttons of four sizes and variants, the order form a single column of number fields.
+- **What changed:** the look only, recorded in `.claude/skills/screen/references/design.md`: theme values in `frontend/src/theme.ts` (indigo accent, grey page, white panels, one type scale, quiet table headers); the page pieces `PageHeader`, `Panel`, `Figures` and `Empty` in `frontend/src/components/layout.tsx`; a grouped navbar; dish tiles with a stepper on the order form; the Kitchen as a board of lanes; figures at the top of Kho, Giám sát and Quản lý. No API call, label, status rule or text a test or the runbook relies on changed.
+- **How it was checked:** the 89 screen tests pass unchanged, with `tsc` and Biome clean; screenshots at 1280, 1024, 1920 and 500 wide.

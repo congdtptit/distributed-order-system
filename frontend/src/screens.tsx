@@ -18,6 +18,8 @@ export interface Screen {
   icon: ComponentType<{ size?: number; stroke?: number }>;
   /** The step of section 4 of docs/03-implementation-plan.md that builds the screen. */
   builtIn: string;
+  /** The navbar group the screen is listed under. */
+  group: string;
 }
 
 export const SCREENS: Screen[] = [
@@ -28,6 +30,7 @@ export const SCREENS: Screen[] = [
     label: "Chi nhánh",
     icon: IconBuildingStore,
     builtIn: "6b",
+    group: "Vận hành",
   },
   {
     name: "kitchen",
@@ -36,6 +39,7 @@ export const SCREENS: Screen[] = [
     label: "Bếp",
     icon: IconChefHat,
     builtIn: "6b",
+    group: "Vận hành",
   },
   {
     name: "inventory",
@@ -44,6 +48,7 @@ export const SCREENS: Screen[] = [
     label: "Kho",
     icon: IconBox,
     builtIn: "6b",
+    group: "Vận hành",
   },
   {
     name: "monitor",
@@ -52,6 +57,7 @@ export const SCREENS: Screen[] = [
     label: "Giám sát",
     icon: IconActivityHeartbeat,
     builtIn: "6b",
+    group: "Quản trị",
   },
   {
     name: "reports",
@@ -60,6 +66,7 @@ export const SCREENS: Screen[] = [
     label: "Quản lý",
     icon: IconReportAnalytics,
     builtIn: "7",
+    group: "Quản trị",
   },
   {
     name: "demo",
@@ -68,5 +75,6 @@ export const SCREENS: Screen[] = [
     label: "Demo",
     icon: IconLayoutColumns,
     builtIn: "6b",
+    group: "Trình diễn",
   },
 ];

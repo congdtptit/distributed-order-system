@@ -7,14 +7,29 @@
 // one general line. A Hidden dish is never shown. This is the one rule enforced only on screen
 // (point 5 in section 8 of document 02): Inventory still decides every order.
 
-import { Alert, Button, Card, NumberInput, SimpleGrid, Stack, Text, Title } from "@mantine/core";
+import {
+  ActionIcon,
+  Alert,
+  Button,
+  Card,
+  Group,
+  NumberInput,
+  SimpleGrid,
+  Skeleton,
+  Stack,
+  Text,
+} from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { IconAlertTriangle, IconMinus, IconPlus, IconSend } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { BranchId } from "../../api/branch";
 import { branchApi } from "../../api/branch";
 import { ApiError, detailMessage } from "../../api/http";
+import { Panel } from "../../components/layout";
 import { DISH_FRESH, DISH_STALE, MENU_STALE_LINE } from "../../labels";
+
+const MAX_QUANTITY = 99;
 
 export function OrderForm({
   branch,
@@ -65,49 +80,104 @@ export function OrderForm({
     },
   });
 
+  const set = (dishId: string, quantity: number) =>
+    setQuantities((current) => ({
+      ...current,
+      [dishId]: Math.max(0, Math.min(MAX_QUANTITY, quantity)),
+    }));
+  const portions = items.reduce((sum, item) => sum + item.quantity, 0);
+  const names = new Map(shown.map((d) => [d.dish_id, d.name]));
+
   return (
-    <Card withBorder padding="md">
-      <Stack gap="sm">
-        <Title order={headingLevel} size="h4">
-          Tạo đơn
-        </Title>
+    <Panel title="Tạo đơn" level={headingLevel}>
+      <Stack gap="md">
         {stale && menu.data && (
-          <Text size="sm" c="orange.9">
+          <Alert color="yellow" variant="light" icon={<IconAlertTriangle aria-hidden />} py="xs">
             {MENU_STALE_LINE}
-          </Text>
+          </Alert>
         )}
         {menu.isPending ? (
-          <Text c="dimmed" size="sm">
-            Đang tải danh mục món…
-          </Text>
+          <Stack gap="xs">
+            <SimpleGrid cols={3} spacing="sm">
+              {[1, 2, 3].map((n) => (
+                <Skeleton key={n} h={96} radius="md" />
+              ))}
+            </SimpleGrid>
+            <Text c="dimmed" size="sm">
+              Đang tải danh mục món…
+            </Text>
+          </Stack>
         ) : (
           <SimpleGrid
-            cols={headingLevel === 3 ? { base: 1, xs: 2, xl: 3 } : { base: 1, sm: 2, lg: 1 }}
-            spacing="xs"
+            cols={headingLevel === 3 ? { base: 2, xl: 3 } : { base: 2, sm: 3, xl: 6 }}
+            spacing="sm"
           >
-            {shown.map((dish) => (
-              <NumberInput
-                key={dish.dish_id}
-                label={dish.name}
-                description={
-                  dish.status === "HET" ? (stale ? DISH_STALE.HET : DISH_FRESH.HET) : undefined
-                }
-                descriptionProps={{ c: stale ? "orange.9" : "red.8", fw: 600 }}
-                disabled={blocked(dish.status)}
-                min={0}
-                max={99}
-                allowDecimal={false}
-                allowNegative={false}
-                placeholder="0"
-                value={blocked(dish.status) ? "" : (quantities[dish.dish_id] ?? "")}
-                onChange={(value) =>
-                  setQuantities((current) => ({
-                    ...current,
-                    [dish.dish_id]: typeof value === "number" ? value : 0,
-                  }))
-                }
-              />
-            ))}
+            {shown.map((dish) => {
+              const off = blocked(dish.status);
+              const quantity = off ? 0 : (quantities[dish.dish_id] ?? 0);
+              const picked = quantity > 0;
+              return (
+                <Card
+                  key={dish.dish_id}
+                  padding="sm"
+                  shadow="none"
+                  bg={off ? "gray.0" : picked ? "indigo.0" : "white"}
+                  style={{
+                    borderColor: picked
+                      ? "var(--mantine-color-indigo-4)"
+                      : "var(--mantine-color-gray-3)",
+                    transition: "background-color 120ms, border-color 120ms",
+                  }}
+                >
+                  <NumberInput
+                    label={dish.name}
+                    description={
+                      dish.status === "HET" ? (stale ? DISH_STALE.HET : DISH_FRESH.HET) : undefined
+                    }
+                    inputWrapperOrder={["label", "description", "input", "error"]}
+                    labelProps={{ fw: 600, mb: 2, c: off ? "dimmed" : "dark" }}
+                    descriptionProps={{ c: stale ? "orange.9" : "red.8", fw: 600, mb: 6 }}
+                    styles={{
+                      root: { display: "flex", flexDirection: "column", height: "100%" },
+                      wrapper: { marginTop: "auto" },
+                      input: { textAlign: "center", fontWeight: 600 },
+                    }}
+                    disabled={off}
+                    min={0}
+                    max={MAX_QUANTITY}
+                    allowDecimal={false}
+                    allowNegative={false}
+                    hideControls
+                    placeholder="0"
+                    value={off ? "" : (quantities[dish.dish_id] ?? "")}
+                    onChange={(value) => set(dish.dish_id, typeof value === "number" ? value : 0)}
+                    leftSectionPointerEvents="all"
+                    rightSectionPointerEvents="all"
+                    leftSection={
+                      <ActionIcon
+                        variant="subtle"
+                        color="gray"
+                        disabled={off || !picked}
+                        onClick={() => set(dish.dish_id, quantity - 1)}
+                        aria-label={`Bớt một ${dish.name}`}
+                      >
+                        <IconMinus size={16} aria-hidden />
+                      </ActionIcon>
+                    }
+                    rightSection={
+                      <ActionIcon
+                        variant="subtle"
+                        disabled={off}
+                        onClick={() => set(dish.dish_id, quantity + 1)}
+                        aria-label={`Thêm một ${dish.name}`}
+                      >
+                        <IconPlus size={16} aria-hidden />
+                      </ActionIcon>
+                    }
+                  />
+                </Card>
+              );
+            })}
           </SimpleGrid>
         )}
         {refused && (
@@ -115,10 +185,33 @@ export function OrderForm({
             {refused}
           </Alert>
         )}
-        <Button onClick={() => place.mutate()} loading={place.isPending} disabled={!items.length}>
-          Tạo đơn
-        </Button>
+        <Group justify="space-between" wrap="wrap" gap="sm">
+          <Text size="sm" c={items.length ? "dark" : "dimmed"} style={{ minWidth: 0, flex: 1 }}>
+            {items.length
+              ? `${portions} phần: ${items
+                  .map((item) => `${names.get(item.dish_id) ?? item.dish_id} ×${item.quantity}`)
+                  .join(", ")}`
+              : "Chọn số lượng món để tạo đơn."}
+          </Text>
+          <Group gap="xs">
+            <Button
+              variant="default"
+              onClick={() => setQuantities({})}
+              disabled={!items.length || place.isPending}
+            >
+              Xóa chọn
+            </Button>
+            <Button
+              onClick={() => place.mutate()}
+              loading={place.isPending}
+              disabled={!items.length}
+              leftSection={<IconSend size={16} aria-hidden />}
+            >
+              Tạo đơn
+            </Button>
+          </Group>
+        </Group>
       </Stack>
-    </Card>
+    </Panel>
   );
 }

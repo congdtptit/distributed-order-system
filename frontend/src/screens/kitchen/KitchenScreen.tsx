@@ -5,24 +5,30 @@
 
 import {
   Alert,
+  Badge,
   Button,
+  Center,
   Grid,
+  Group,
   List,
   Loader,
+  Paper,
   SimpleGrid,
   Stack,
   Text,
+  ThemeIcon,
   Title,
   VisuallyHidden,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconAlertCircle } from "@tabler/icons-react";
+import { IconAlertCircle, IconChefHat, IconClock, IconFlame } from "@tabler/icons-react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, detailMessage } from "../../api/http";
 import type { Alert as KitchenAlert, Ticket } from "../../api/kitchen";
 import { kitchenApi } from "../../api/kitchen";
 import { clock, ServiceBanner, TABULAR } from "../../components/common";
+import { Empty, PageHeader } from "../../components/layout";
 import { ALERT_KIND, KITCHEN_STATUS } from "../../labels";
 import { RejectModal } from "./RejectModal";
 import { type TicketAction, TicketCard } from "./TicketCard";
@@ -111,8 +117,17 @@ export function KitchenScreen({ embedded = false }: { embedded?: boolean } = {})
   const cooking = (tickets.data ?? []).filter((t) => t.status === "DANG_NAU");
 
   return (
-    <Stack gap="md">
-      <Title order={embedded ? 2 : 1}>Bếp</Title>
+    <Stack gap="lg">
+      <PageHeader
+        title="Bếp"
+        level={embedded ? 2 : 1}
+        {...(embedded
+          ? {}
+          : {
+              description:
+                "Phiếu của các đơn Kho đã giữ nguyên liệu. Bếp là bên duy nhất quyết định nấu hay hủy.",
+            })}
+      />
       {(tickets.isError || alerts.isError) && (
         <ServiceBanner
           service="Bếp"
@@ -121,7 +136,9 @@ export function KitchenScreen({ embedded = false }: { embedded?: boolean } = {})
       )}
       <KitchenAlerts alerts={alerts.data ?? []} />
       {tickets.isPending && !tickets.isError ? (
-        <Loader size="sm" aria-label="Đang tải phiếu" />
+        <Center py="xl">
+          <Loader size="sm" aria-label="Đang tải phiếu" />
+        </Center>
       ) : (
         <Grid gap="md">
           <Column
@@ -129,6 +146,8 @@ export function KitchenScreen({ embedded = false }: { embedded?: boolean } = {})
             cards={embedded ? { base: 1 } : { base: 1, xl: 2 }}
             level={embedded ? 3 : 2}
             title="Chờ nấu"
+            icon={IconClock}
+            color="indigo"
             total={counts.data?.CHO_NAU}
             onMore={more}
             empty="Chưa có phiếu nào đang chờ nấu. Đơn Kho đã giữ nguyên liệu sẽ hiện ở đây."
@@ -147,9 +166,11 @@ export function KitchenScreen({ embedded = false }: { embedded?: boolean } = {})
             cards={{ base: 1 }}
             level={embedded ? 3 : 2}
             title="Đang nấu"
+            icon={IconFlame}
+            color="yellow"
             total={counts.data?.DANG_NAU}
             onMore={more}
-            empty="Chưa có phiếu nào đang nấu."
+            empty="Chưa có phiếu nào đang nấu. Phiếu bấm Bắt đầu nấu sẽ chuyển sang đây."
           >
             {cooking.map((t) => (
               <TicketCard
@@ -182,12 +203,15 @@ export function KitchenScreen({ embedded = false }: { embedded?: boolean } = {})
   );
 }
 
-/** One status column. On a wall screen the Queued column is wider and holds two cards a row. */
+/** One status column, a lane on a grey ground. On a wall screen the Queued column is wider and
+ * holds two cards a row. */
 function Column({
   span,
   cards,
   level,
   title,
+  icon: Icon,
+  color,
   total,
   onMore,
   empty,
@@ -197,6 +221,8 @@ function Column({
   cards: { base: number; xl?: number };
   level: 2 | 3;
   title: string;
+  icon: typeof IconClock;
+  color: string;
   /** The column's total from GET /tickets/counts; never shown below the tickets on screen,
    * since the two requests are not one snapshot. */
   total: number | undefined;
@@ -208,25 +234,49 @@ function Column({
   const hidden = count - children.length;
   return (
     <Grid.Col span={span} style={{ minWidth: 0 }}>
-      <section aria-label={title}>
+      <Paper
+        component="section"
+        aria-label={title}
+        bg="gray.1"
+        shadow="none"
+        p="sm"
+        h="100%"
+        style={{ borderColor: "var(--mantine-color-gray-2)" }}
+      >
         <Stack gap="sm">
-          <Title order={level} size="h3">
-            {title} ({count})
-          </Title>
+          <Group gap="xs" px={4} pt={2}>
+            <ThemeIcon variant="light" color={color} size={28} aria-hidden>
+              <Icon size={16} />
+            </ThemeIcon>
+            <Title
+              order={level}
+              size="h4"
+              style={{ display: "flex", alignItems: "center", gap: 8, textWrap: "nowrap" }}
+            >
+              {title}{" "}
+              <Badge component="span" color={color} variant="filled" size="md" circle={count < 10}>
+                <VisuallyHidden>(</VisuallyHidden>
+                {count}
+                <VisuallyHidden>)</VisuallyHidden>
+              </Badge>
+            </Title>
+          </Group>
           {children.length ? (
             <SimpleGrid cols={cards} spacing="sm">
               {children}
             </SimpleGrid>
           ) : (
-            <Text c="dimmed">{empty}</Text>
+            <Paper shadow="none" style={{ borderStyle: "dashed" }}>
+              <Empty icon={IconChefHat}>{empty}</Empty>
+            </Paper>
           )}
           {hidden > 0 && (
-            <Button variant="light" onClick={onMore}>
+            <Button variant="white" onClick={onMore}>
               Xem thêm (còn {hidden} phiếu)
             </Button>
           )}
         </Stack>
-      </section>
+      </Paper>
     </Grid.Col>
   );
 }

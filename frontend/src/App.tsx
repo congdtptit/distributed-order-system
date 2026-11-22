@@ -1,5 +1,6 @@
-import { AppShell, Burger, Group, NavLink, Stack, Text, Title } from "@mantine/core";
+import { AppShell, Burger, Group, NavLink, Stack, Text, ThemeIcon, Title } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
+import { IconToolsKitchen2 } from "@tabler/icons-react";
 import { Navigate, Route, NavLink as RouterLink, Routes, useLocation } from "react-router";
 import { SCREENS, type Screen } from "./screens";
 import { BranchScreen } from "./screens/branch/BranchScreen";
@@ -28,39 +29,61 @@ function Placeholder({ screen }: { screen: Screen }) {
   );
 }
 
+/** The navbar groups, in the order SCREENS first names them. */
+const GROUPS = [...new Set(SCREENS.map((s) => s.group))];
+
 export function App() {
   const [opened, { toggle, close }] = useDisclosure();
   const { pathname } = useLocation();
 
   return (
     <AppShell
-      header={{ height: 56 }}
-      navbar={{ width: 220, breakpoint: "sm", collapsed: { mobile: !opened } }}
-      padding="md"
+      header={{ height: 60 }}
+      navbar={{ width: 240, breakpoint: "sm", collapsed: { mobile: !opened } }}
+      padding="lg"
     >
       <AppShell.Header>
-        <Group h="100%" px="md">
+        <Group h="100%" px="md" gap="sm" wrap="nowrap">
           <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" aria-label="Mở menu" />
-          <Text fw={600}>Hệ thống đặt món</Text>
+          <ThemeIcon size={34} radius="md" variant="filled" aria-hidden>
+            <IconToolsKitchen2 size={20} stroke={1.8} />
+          </ThemeIcon>
+          <Stack gap={0}>
+            <Text fw={700} size="sm" lh={1.25}>
+              Hệ thống đặt món
+            </Text>
+            <Text size="xs" c="dimmed" lh={1.25}>
+              Chuỗi nhà hàng · chi nhánh, Kho và Bếp
+            </Text>
+          </Stack>
         </Group>
       </AppShell.Header>
 
-      <AppShell.Navbar p="xs" aria-label="Các màn hình">
-        {SCREENS.map((screen) => {
-          const Icon = screen.icon;
-          const section = screen.link.split("/")[1] ?? "";
-          return (
-            <NavLink
-              key={screen.name}
-              component={RouterLink}
-              to={screen.link}
-              label={screen.label}
-              leftSection={<Icon size={18} stroke={1.6} aria-hidden="true" />}
-              active={pathname.startsWith(`/${section}`)}
-              onClick={close}
-            />
-          );
-        })}
+      <AppShell.Navbar p="sm" aria-label="Các màn hình">
+        <Stack gap="md">
+          {GROUPS.map((group) => (
+            <Stack key={group} gap={2}>
+              <Text size="xs" fw={600} c="dimmed" px="sm" pb={4} tt="uppercase" lts={0.4}>
+                {group}
+              </Text>
+              {SCREENS.filter((s) => s.group === group).map((screen) => {
+                const Icon = screen.icon;
+                const section = screen.link.split("/")[1] ?? "";
+                return (
+                  <NavLink
+                    key={screen.name}
+                    component={RouterLink}
+                    to={screen.link}
+                    label={screen.label}
+                    leftSection={<Icon size={18} stroke={1.7} aria-hidden="true" />}
+                    active={pathname.startsWith(`/${section}`)}
+                    onClick={close}
+                  />
+                );
+              })}
+            </Stack>
+          ))}
+        </Stack>
       </AppShell.Navbar>
 
       <AppShell.Main>
