@@ -306,10 +306,30 @@ def test_the_origin_branch_cancelling_too_before_the_order_cancels_it(kdb: str, 
         ("stock-commands", "ReleaseRequested"),
         ("status-events.POS01", "OrderCancelled"),
     ]
+    # POS02's request is ignored with a warning (section 13.2: "If they differ, the cancel
+    # request is ignored and a warning is raised"), even though POS01's own request counts.
+    assert alerts(kdb) == [
+        ("HUY_SAI_CHI_NHANH", order.order_id, {"origin_branch": "POS01", "dismissed": ["POS02"]})
+    ]
     release_at_inventory(kdb, idb)
     assert len(sent_envelopes(kdb, "ReleaseRequested")) == 1
     assert inv.stock(idb) == before
     inv.assert_invariants(idb)
+
+
+def test_a_wrong_branch_cancel_on_an_order_inventory_failed_raises_the_warning_too(
+    kdb: str,
+) -> None:
+    """Section 13.2: the origin branch also comes in a Failed message; a cancel request from
+    another branch is ignored and a warning is raised. The record still ends Failed."""
+    order_id = uuid.uuid4()
+    deliver(kdb, cancel_requested(order_id, branch="POS02"))
+    deliver(kdb, order_failed(order_id, origin="POS01"))
+    rec = record(kdb, order_id)
+    assert rec is not None and rec["status"] == "THAT_BAI"
+    assert alerts(kdb) == [
+        ("HUY_SAI_CHI_NHANH", order_id, {"origin_branch": "POS01", "dismissed": ["POS02"]})
+    ]
 
 
 def test_a_repeated_cancel_request_gets_the_commitment_again_and_keeps_the_first_reason(

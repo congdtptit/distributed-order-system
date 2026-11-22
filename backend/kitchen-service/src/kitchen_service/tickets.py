@@ -239,6 +239,9 @@ def make_order_reserved_handler(clock: Clock) -> Handler:
                 _release(
                     conn, rec, clock, cancelled_by=CUSTOMER, reason=reason, spoiled=[], cause=env
                 )
+                wrong = [b for b in rec.cancel_branches if b != origin]
+                if wrong:  # section 13.2: ignored, with a warning, even beside a valid request
+                    _wrong_branch_alert(conn, message, origin, wrong)
                 log.info("order_id=%s event_id=%s cancelled on arrival", order_id, env.event_id)
             else:
                 dismissed = list(rec.cancel_branches)
@@ -278,6 +281,11 @@ def make_order_failed_handler(clock: Clock) -> Handler:
         rec = _lock(conn, order_id, create=True)
         assert rec is not None
         if rec.status in (NONE, CANCEL_PENDING):
+            # Section 13.2: the origin comes in a Failed message too; a cancel request from
+            # another branch is ignored with a warning.
+            wrong = [b for b in rec.cancel_branches if isinstance(origin, str) and b != origin]
+            if wrong and isinstance(origin, str):
+                _wrong_branch_alert(conn, message, origin, wrong)
             # Record the final result (BR8, prohibition 11), so that a later cancel request does
             # not create a Cancel-pending record.
             _set(

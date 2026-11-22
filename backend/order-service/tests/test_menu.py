@@ -246,3 +246,18 @@ def test_a_restarted_branch_fetches_the_snapshot_once_even_with_a_cache(bdb: str
     assert cached(bdb)["PHO_BO"] == ("HET", 1, 2)
     sync.sync_once()
     assert fetched == [1]  # once
+
+
+def test_a_late_message_of_the_old_generation_does_not_bring_a_hidden_dish_back(bdb: str) -> None:
+    """BR10: after a new epoch, the dishes still carrying the old generation are Hidden. A
+    DishStatusChanged of the old epoch read later (it waited in Kafka while the branch was
+    offline and fetched the new snapshot on reconnecting) must not bring one back."""
+    with psycopg.connect(bdb) as conn:
+        merge_snapshot(conn, {"epoch": 1, "dishes": [dish("TRA_DA", "CON", 1, 3)]}, NOW)
+        merge_snapshot(conn, {"epoch": 2, "dishes": [dish("PHO_BO", "CON", 2, 1)]}, NOW)
+    assert cached(bdb)["TRA_DA"] == ("AN", 1, 3)
+    hear(bdb, menu_message("DishStatusChanged", dish("TRA_DA", "CON", 1, 9)))
+    assert cached(bdb)["TRA_DA"][0] == "AN"
+    # A message of the current generation still applies.
+    hear(bdb, menu_message("DishStatusChanged", dish("PHO_BO", "HET", 2, 2)))
+    assert cached(bdb)["PHO_BO"] == ("HET", 2, 2)

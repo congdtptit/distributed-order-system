@@ -3,7 +3,8 @@ docs/01-business-spec.md, POS and Online side; BR10; ``menu_cache`` in section 5
 docs/02-detailed-design.md).
 
 - ``DishStatusChanged`` overwrites a dish only if its ``(epoch, seq)`` is greater than the one
-  held (epochs first). Any message from Inventory, and every heartbeat, moves ``last_heard_at``;
+  held (epochs first), and never when its epoch is older than the cache's: that generation is
+  gone. Any message from Inventory, and every heartbeat, moves ``last_heard_at``;
   an epoch greater than the one held is noted in ``newest_epoch``.
 - ``MenuSync`` fetches Inventory's snapshot when the branch starts (a start counts as
   reconnecting), when the connection to Kafka comes back, and when a greater epoch was heard.
@@ -73,8 +74,14 @@ def menu_handlers(clock: Clock) -> dict[str, Handler]:
 
     def dish_status_changed(conn: psycopg.Connection[Any], message: Incoming) -> None:
         payload = message.envelope.payload
+        epoch = _version(payload.get("epoch"), "epoch")
         # menu_cache_meta first, then the dish row: the order merge_snapshot locks them in.
-        _heard(conn, _version(payload.get("epoch"), "epoch"), clock.now())
+        _heard(conn, epoch, clock.now())
+        held = conn.execute("SELECT epoch FROM menu_cache_meta").fetchone()
+        if held is not None and epoch < int(held[0]):
+            # BR10: an older generation than the one held. Its dishes were moved to Hidden
+            # when the new epoch arrived; a late message of it must not bring one back.
+            return
         _merge_dish(conn, payload)
 
     def heartbeat(conn: psycopg.Connection[Any], message: Incoming) -> None:
