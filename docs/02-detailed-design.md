@@ -1,8 +1,16 @@
 # Detailed design – Kafka events, DB schemas and API
 
-Revision 14 · 22 Nov 2026 · @Naul · follows business specification v1.5
+Revision 15 · 22 Nov 2026 · @Naul · follows business specification v1.5
 
 This document turns business specification v1.5 (the lean edition) into three things to code against: the Kafka event catalogue, each service's DB schema, and the API. There is no existing codebase to align with: the base flow is built in this project as well, so the event names, table names, column names and API paths here are the ones to use.
+
+## Changes in revision 15
+
+| Section | Change | Reason |
+|---|---|---|
+| 5 | New rule "Reporting in practice": the heartbeat every 5 seconds from the branch DB's clock, in its own worker that survives the DB being down; what "data as of" guarantees; the report read in one snapshot; the configured branch list | Built in step 7 (22 Nov 2026) |
+| 6 | `GET /reports/summary` row: the response fields | Built in step 7 |
+| 9 | `GET /reports/summary` and scenario 55 leave "Not yet checked": they run as automated tests | Built in step 7 |
 
 ## Changes in revision 14
 
@@ -539,13 +547,21 @@ The `alerts` table stays at the branch: it is not in the publication to the Cent
 
 ### Replication to the Central Order Replica
 
-The specification requires the branch order DBs to replicate asynchronously to the Central Order Replica (section 13.5) and the Management report to show a "data as of" time for each branch (section 8). There is no existing reporting service to reuse, so both are built in this project. This part is the choice of point 12 in section 8, agreed on 21 Nov 2026. The publication and subscription below were trial-run on 21 Nov 2026 (section 9); the Order Query Service was not.
+The specification requires the branch order DBs to replicate asynchronously to the Central Order Replica (section 13.5) and the Management report to show a "data as of" time for each branch (section 8). There is no existing reporting service to reuse, so both are built in this project. This part is the choice of point 12 in section 8, agreed on 21 Nov 2026. The publication and subscription below were trial-run on 21 Nov 2026 (section 9); the heartbeat and the Order Query Service were built in step 7 and are tested with scenario 55.
 
 - **What replicates:** only `orders` and `replication_heartbeat`. The send queue, the dish cache and `processed_events` stay local.
 - **Mechanism:** PostgreSQL logical replication. Each branch DB runs with `wal_level=logical` and publishes the two tables. The central DB has the same two tables and one subscription per branch.
 - **`branch_id`:** every `orders` row carries the branch's own id, taken from the service configuration, so that rows from different branches can be told apart in the central DB. `order_id` is a UUID, so rows from different branches never collide.
-- **"Data as of":** each branch service updates its single `replication_heartbeat` row every 5 seconds (proposed). The value that has reached the central DB is that branch's "data as of" time. When replication from a branch is cut, its value stops moving while the other branches' values keep moving (scenario 55).
+- **"Data as of":** each branch service updates its single `replication_heartbeat` row every 5 seconds. The value that has reached the central DB is that branch's "data as of" time. When replication from a branch is cut, its value stops moving while the other branches' values keep moving (scenario 55).
 - **Reading:** the Order Query Service reads the central DB only, never a branch DB.
+
+**Reporting in practice** (built in step 7):
+
+- **The heartbeat** runs in its own thread of every branch service, also without Kafka. Each beat is one transaction with the upsert below, at the branch database's `now()`: "data as of" is a wall-clock time, so the service's replaceable clock is not used. A failed beat (the branch DB restarting) is logged and retried at the next beat; meanwhile the central value simply stops moving.
+- **What "data as of" guarantees.** Logical replication applies one branch's transactions in commit order, so once a `beat_at` has reached the central DB, every order change that branch committed before that moment is there too. The report can include changes a little newer than "data as of", never older.
+- **One snapshot.** The Order Query Service reads the heartbeats and the order counts in one `REPEATABLE READ, READ ONLY` transaction, so a heartbeat arriving between the two reads cannot claim figures newer than those shown. `data_age_s` is measured against the central DB's clock; all databases run on one machine here, so the clocks agree.
+- **Which branches.** `BRANCHES` (default `POS01,POS02,ONLINE`, as for the topics) lists the branches the report always shows, in that order, with a null "data as of" and zero counts until their first rows arrive. A branch found in the data but not configured follows, sorted by id.
+- **Reconnecting a cut network** must give the container back its service name on that network: a plain `docker network connect` drops the alias Compose set, and the central DB finds a branch DB by that name, so replication would never resume. `bin/chaos` and the `chaos` test fixture pass the alias (found while building scenario 55).
 
 ```sql
 -- On each branch DB
@@ -585,7 +601,7 @@ Each service exposes only the APIs that a person or a screen needs; services do 
 | Inventory | `GET /alerts` | Flow D: orders that need review and unmatched commands; filterable by `kind` | 200 |
 | Inventory, Kitchen | `GET /monitor` | Flow D: age of the oldest unread message on each topic, with a warning when it exceeds the slow-consumer threshold | 200 |
 | Inventory | `POST /admin/epoch/bump` (phase 2) | Runs the `epoch` bump procedure in section 3; used after restoring Inventory and for scenario 20 | 200 with the new `epoch` |
-| Reporting | `GET /reports/summary` | For each branch: the "data as of" time, the number of orders by status, and the number by reason for Cancelled and Failed orders; reads the Central Order Replica only | 200 |
+| Reporting | `GET /reports/summary` | For each branch: the "data as of" time, the number of orders by status, and the number by reason for Cancelled and Failed orders; reads the Central Order Replica only | 200 with `generated_at` and, per branch, `branch_id`, `data_as_of` (null before the first heartbeat arrives), `data_age_s`, `total`, `by_status` (all five statuses), `reasons[{status, reason_code, count}]` for `DA_HUY` and `THAT_BAI` ("Reporting in practice", section 5) |
 
 - **The screens** (the `frontend` module in section 2 of document 03) are a client of the APIs in this table and use nothing else: no direct DB access, no Kafka. They show the statuses the services return and decide none of their own; the only rule enforced on screen alone is point 5 in section 8. Each service publishes the OpenAPI document that FastAPI generates, and the screens' TypeScript types are generated from it.
 - **The three Kitchen buttons** run the same row-locking sequence as the consumer, without inserting a `CHUA_CO` row (section 4). A 409 here is the normal outcome of the race between Cancel and Start cooking (BR7); the UI only needs to reload the ticket.
@@ -658,9 +674,8 @@ Not yet checked:
 - Everything that needs a real Kafka: scenarios 4, 12, 24, 25, 31 and the consumer part of scenarios 26 and 29.
 - The X-hour limit check and creation times in the future (scenarios 15, 16).
 - The connectivity probe before a send attempt (section 5), because it needs a real Kafka.
-- Scenarios 9, 18, 21, 33, 39 and the new scenarios 48–55.
+- Scenarios 9, 18, 21, 33, 39 and the new scenarios 48–54.
 - The APIs in section 6.
 - The `IngredientCheckChanged` emission part of the `epoch` bump procedure.
-- `GET /reports/summary`. Logical replication itself was trial-run separately; see the last row of the table above.
 
 These trial runs only confirm the design; they do not replace the automated tests that section 12 of the specification requires.

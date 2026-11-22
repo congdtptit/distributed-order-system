@@ -38,7 +38,8 @@ case "${1:-}" in
     echo "$b is cut off Kafka; its DB and http API still work" ;;
   online)
     b=$(branch "${2:-}")
-    docker network connect "${project}_kafka-net" "$(need "$b")"
+    # --alias: a plain connect drops the service name Compose gave the container on that network.
+    docker network connect --alias "$b" "${project}_kafka-net" "$(need "$b")"
     echo "$b is back on Kafka" ;;
   stop)
     "${compose[@]}" stop "${2:?container name}" ;;
@@ -50,7 +51,8 @@ case "${1:-}" in
     echo "$b-db no longer replicates to central-db" ;;
   restore-replication)
     b=$(branch "${2:-}")
-    docker network connect "${project}_replication-net" "$(need "$b-db")"
+    # The central DB finds the branch DB by its service name, so the alias must come back.
+    docker network connect --alias "$b-db" "${project}_replication-net" "$(need "$b-db")"
     echo "$b-db replicates to central-db again" ;;
   status)
     "${compose[@]}" ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}'

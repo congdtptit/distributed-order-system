@@ -212,10 +212,12 @@ class DockerEngine:
     def connect(self, service: str, network: str = "kafka-net") -> None:
         if (service, network) in self.disconnected:
             self.disconnected.remove((service, network))
+        # The alias: a plain connect drops the service name Compose gave the container on that
+        # network, and the central DB finds a branch DB by that name (scenario 55).
         status, body = self._call(
             "POST",
             f"/networks/{self._project}_{network}/connect",
-            {"Container": self.container_id(service)},
+            {"Container": self.container_id(service), "EndpointConfig": {"Aliases": [service]}},
         )
         if status != 200:
             raise RuntimeError(f"connecting {service} to {network}: HTTP {status} {body}")

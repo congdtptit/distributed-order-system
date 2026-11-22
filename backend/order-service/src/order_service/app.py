@@ -1,8 +1,8 @@
 """HTTP entry point of the Branch service (POS and Online, told apart by ``BRANCH_ID``), and
 its background workers.
 
-On start: the dish catalogue is loaded from the seed file; the consumer of
-``status-events.<branch>`` and the sender of the send queue run in threads.
+On start: the dish catalogue is loaded from the seed file; the replication heartbeat, the
+consumer of ``status-events.<branch>`` and the sender of the send queue run in threads.
 
 The APIs are in section 6 of docs/02-detailed-design.md. Invalid input is answered with 400,
 not FastAPI's usual 422: BR9 names 400 for an order with invalid data.
@@ -31,6 +31,7 @@ from common.runtime import Workers, configure_logging, instance_name
 from common.seed import load_menu
 from common.service import identity
 from common.topics import status_events
+from order_service.heartbeat import Heartbeat
 from order_service.monitor import MonitorLimits, monitor_view
 from order_service.orders import (
     Line,
@@ -50,13 +51,19 @@ from order_service.statuses import branch_handlers
 log = logging.getLogger(__name__)
 
 
-def start_workers(dsn: str, bootstrap: str, branch: str) -> tuple[Workers, SendQueue]:
-    clock = SystemClock()
-    name = instance_name()
+def start_workers(
+    workers: Workers, dsn: str, bootstrap: str | None, branch: str
+) -> SendQueue | None:
+    """The replication heartbeat always; the consumer and the send queue when Kafka is set."""
 
     def connect() -> psycopg.Connection[Any]:
         return psycopg.connect(dsn)
 
+    workers.start("replication-heartbeat", Heartbeat(connect, branch).run)
+    if not bootstrap:
+        return None
+    clock = SystemClock()
+    name = instance_name()
     consumer = MessageConsumer(
         ConsumerSettings(
             name=f"branch-{branch}@{name}", handlers=branch_handlers(branch), deciding=False
@@ -66,10 +73,9 @@ def start_workers(dsn: str, bootstrap: str, branch: str) -> tuple[Workers, SendQ
         connect,
     )
     queue = SendQueue(connect, Sender(bootstrap, f"{name}-sender"), clock)
-    workers = Workers()
     workers.start("consumer", consumer.run)
     workers.start("send-queue", queue.run)
-    return workers, queue
+    return queue
 
 
 @asynccontextmanager
@@ -78,15 +84,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     dsn = os.environ["DATABASE_URL"]
     with psycopg.connect(dsn) as conn:
         load_dishes(conn, load_menu())
-    bootstrap = os.environ.get("KAFKA_BOOTSTRAP")
-    workers = None
-    if bootstrap:
-        workers, app.state.send_queue = start_workers(dsn, bootstrap, get_branch())
+    workers = Workers()
+    app.state.send_queue = start_workers(
+        workers, dsn, os.environ.get("KAFKA_BOOTSTRAP"), get_branch()
+    )
     try:
         yield
     finally:
-        if workers is not None:
-            workers.stop()
+        workers.stop()
 
 
 app = FastAPI(title="Branch", lifespan=lifespan)

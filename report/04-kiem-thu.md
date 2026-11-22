@@ -27,7 +27,7 @@ Thực hiện kiểm thử hệ thống đặt món phân tán đáp ứng các 
 
 ##### Mô hình kiểm thử tính phân tán
 
-Test tầng 3 chạy trong container `tools`, nối vào cùng các mạng Docker với các dịch vụ. Test tự gây lỗi qua Docker Engine API (dừng, kill, bật lại container; tách một container khỏi mạng `kafka-net`), giống lệnh `bin/chaos` dùng khi demo bằng tay, rồi kiểm tra trạng thái trong CSDL, tin trên Kafka và câu trả lời của API.
+Test tầng 3 chạy trong container `tools`, nối vào cùng các mạng Docker với các dịch vụ. Test tự gây lỗi qua Docker Engine API (dừng, kill, bật lại container; tách một container khỏi mạng `kafka-net` hoặc `replication-net`), giống lệnh `bin/chaos` dùng khi demo bằng tay, rồi kiểm tra trạng thái trong CSDL, tin trên Kafka và câu trả lời của API.
 
 ```mermaid
 flowchart LR
@@ -39,6 +39,10 @@ flowchart LR
   T -->|HTTP| KS["kitchen"]
   T -->|HTTP: tạo đơn, hủy, giám sát| P1
   T -->|SQL: đọc trạng thái| DB[("inventory-db, kitchen-db,<br/>CSDL test")]
+  D -.->|tách khỏi replication-net| P1DB[("pos01-db")]
+  P1DB -->|nhân bản logic| C[("central-db")]
+  T -->|HTTP: báo cáo| Q["query"]
+  Q --- C
   I1 & I2 & KS & P1 --- K1
 ```
 
@@ -56,7 +60,7 @@ flowchart LR
 | 12 | Gửi lỗi nhiều lần sau khi đã thử gửi | Hàng chờ của chi nhánh gửi tới một topic mà broker chưa có (thăm dò vẫn thành công nên mục được đặt cờ), lặp nhiều vòng, rồi tạo topic | Không mục nào bị bỏ; mục hủy không đi trước mục tạo đơn; khi gửi được thì đủ mọi mục, đúng thứ tự theo đơn; đơn khác không bị chặn | Đạt |
 | 31 (chi nhánh) | Broker đang làm leader bị kill khi chi nhánh đang gửi đơn | `kill` (SIGKILL) container leader trong lúc đơn mới liên tục được tạo và hàng chờ của chi nhánh đang gửi | Mọi mục Kafka đã xác nhận đều đọc lại được; gửi vẫn tiếp tục với broker còn lại | Đạt |
 | 28, 42 | Hai instance cùng xử lý một đơn | Hai kết nối CSDL chạy song song, lặp 100 lần (bước 7 bổ sung bản chạy hai instance thật trên Kafka) | Chỉ một bản ghi, kết quả đúng bảng 3.2 dù tin nào đến trước (28); đúng một đơn được giữ, kho không âm (42) | Đạt |
-| 55 | Cắt nhân bản về Central Order Replica | `bin/chaos cut-replication` (bước 7) | | Chưa kiểm thử |
+| 55 | Cắt nhân bản từ POS01 về Central Order Replica trong khi POS01 và POS02 vẫn nhận đơn | Tách `pos01-db` khỏi mạng `replication-net`, tạo hai đơn ở mỗi chi nhánh, chờ ba nhịp `replication_heartbeat` của POS02, nối mạng lại | Trong lúc cắt: `GET /reports/summary` vẫn trả lời; mốc "dữ liệu tính đến" của POS01 đứng yên, của POS02 vẫn chạy; đơn mới của POS01 chưa có ở `central-db`, đơn của POS02 đã có. Sau khi nối lại: số liệu POS01 trong báo cáo khớp với CSDL của chi nhánh | Đạt (3 lần liên tiếp) |
 
 #### 2.2. Công cụ kiểm thử
 
