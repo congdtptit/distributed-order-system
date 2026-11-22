@@ -7,6 +7,7 @@ import { call } from "./http";
 export type Ticket = components["schemas"]["Ticket"];
 export type Alert = components["schemas"]["Alert"];
 export type Rejection = components["schemas"]["Rejection"];
+export type ConsumerMonitor = components["schemas"]["Monitor"];
 
 const base = "/api/kitchen";
 
@@ -28,6 +29,7 @@ export function ticketItems(ticket: Ticket): TicketItem[] {
 export const kitchenApi = {
   tickets: async () => (await call<Ticket[]>(`${base}/tickets`)).body,
   alerts: async () => (await call<Alert[]>(`${base}/alerts`)).body,
+  monitor: async () => (await call<ConsumerMonitor>(`${base}/monitor`)).body,
   /** 200 with the ticket; 404 and 409 throw ApiError. */
   start: async (orderId: string) =>
     (await call<Ticket>(`${base}/tickets/${orderId}/start`, { method: "POST" })).body,

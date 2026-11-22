@@ -42,4 +42,12 @@ Màn hình chỉ hiển thị điều các dịch vụ trả về và không t�
 - **Nhập kho:** hộp thoại nhập số lượng dương, tối đa 3 chữ số thập phân (`POST /stock/receipts`); Kho trả 422 thì báo ngay dưới ô nhập.
 - **Kiểm kho xong** (chỉ có trên nguyên liệu bị cờ, `POST /ingredients/{id}/clear-check`): gỡ cờ, có thể kèm tồn đếm được. Nếu tồn đếm được ít hơn lượng đang giữ, Kho trả 409; màn hình nêu lượng đang giữ và hướng dẫn từ chối các phiếu còn giữ nguyên liệu đó trên màn Bếp rồi kiểm kho lại.
 
-> TODO(bước 6b): màn Giám sát và trang Demo; màn Quản lý ở bước 7.
+### 4. Màn hình Giám sát
+
+Đường dẫn `/monitor`; người dùng là người vận hành. Màn hình gom Luồng D của mọi dịch vụ và không có thao tác nào đổi trạng thái đơn: hệ thống chỉ báo động, không tự hủy đơn vì đơn đã chờ lâu (mục 8 của đặc tả).
+
+- **Các dịch vụ:** mỗi dịch vụ một dòng (POS01, POS02, ONLINE, Kho, Bếp) với tình trạng trả lời và kết nối Kafka. Dòng chi nhánh (`GET /monitor` của chi nhánh) có số mục chờ gửi và số đơn đang bị cảnh báo; dòng Kho và Bếp (`GET /monitor` của hai dịch vụ này) có số tin chưa đọc trên các topic. Dịch vụ không trả lời thì dòng đó hiện "Không trả lời" kèm lần trả lời cuối, các dòng khác vẫn chạy.
+- **Consumer chậm:** topic có tin chưa đọc cũ hơn ngưỡng 5 phút (mục 10 của đặc tả), kèm số tin chưa đọc và tuổi tin cũ nhất.
+- **Cảnh báo:** gộp cảnh báo của Kho, Bếp (`GET /alerts`) và tin trạng thái không đọc được của từng chi nhánh, mới nhất lên đầu, lọc được theo loại (`CAN_KIEM_TRA`, `LENH_KHONG_KHOP`, `HUY_SAI_CHI_NHANH`).
+
+> TODO(bước 6b): trang Demo; màn Quản lý ở bước 7.

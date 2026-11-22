@@ -5,12 +5,14 @@ import { SCREENS, type Screen } from "./screens";
 import { BranchScreen } from "./screens/branch/BranchScreen";
 import { InventoryScreen } from "./screens/inventory/InventoryScreen";
 import { KitchenScreen } from "./screens/kitchen/KitchenScreen";
+import { MonitorScreen } from "./screens/monitor/MonitorScreen";
 
 /** The screens built so far; the others show a placeholder naming their step. */
 const BUILT: Record<string, () => React.JSX.Element> = {
   branch: BranchScreen,
   kitchen: KitchenScreen,
   inventory: InventoryScreen,
+  monitor: MonitorScreen,
 };
 
 function Placeholder({ screen }: { screen: Screen }) {

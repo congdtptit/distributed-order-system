@@ -15,7 +15,16 @@ export const EMPTY_MONITOR: Monitor = {
   message_alerts: { count: 0, latest: [] },
 };
 
+export const QUIET_CONSUMER = (group: string) => ({
+  consumer_group: group,
+  slow_after_s: 300,
+  kafka_reachable: true,
+  topics: [],
+});
+
 export const server = setupServer(
+  http.get("*/api/kitchen/monitor", () => HttpResponse.json(QUIET_CONSUMER("kitchen"))),
+  http.get("*/api/inventory/monitor", () => HttpResponse.json(QUIET_CONSUMER("inventory"))),
   http.get("*/api/kitchen/tickets", () => HttpResponse.json([])),
   http.get("*/api/kitchen/alerts", () => HttpResponse.json([])),
   http.get("*/api/inventory/stock", () => HttpResponse.json([])),

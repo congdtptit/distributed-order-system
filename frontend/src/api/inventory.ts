@@ -6,12 +6,14 @@ import { call } from "./http";
 
 export type StockItem = components["schemas"]["StockItem"];
 export type InventoryAlert = components["schemas"]["Alert"];
+export type InventoryMonitor = components["schemas"]["Monitor"];
 
 const base = "/api/inventory";
 
 export const inventoryApi = {
   stock: async () => (await call<StockItem[]>(`${base}/stock`)).body,
   alerts: async () => (await call<InventoryAlert[]>(`${base}/alerts`)).body,
+  monitor: async () => (await call<InventoryMonitor>(`${base}/monitor`)).body,
   /** 404 (no such ingredient) and 422 (quantity not above 0) throw ApiError. */
   receive: async (ingredientId: string, quantity: string) =>
     (
