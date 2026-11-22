@@ -8,7 +8,7 @@ This file names what to show and points to the section that says how. It does no
 
 - **Route:** `/branch/:branchId` (`POS01`, `POS02`, `ONLINE`). Users: cashier (POS), customer (Online).
 - **Specified in:** 01 section 4 (placing an order), section 6 "Branch side" and the decision table, table 3.1 with the ranks and the cancel flag, section 8 (the four Branch rows), section 10 (reasons); 02 section 2, the table on applying status messages.
-- **APIs:** `POST /orders`, `POST /orders/{id}/cancel`, `GET /orders`, `GET /orders/{id}`, `GET /monitor` of that branch.
+- **APIs:** `GET /dishes`, `POST /orders`, `POST /orders/{id}/cancel`, `GET /orders`, `GET /orders/{id}`, `GET /monitor` of that branch.
 - **Must handle:**
   - each of the five order statuses, with its rank;
   - the cancel flag in its three values, and `cancel_message` ("Cannot cancel: the kitchen has started cooking");
@@ -18,7 +18,8 @@ This file names what to show and points to the section that says how. It does no
   - the offline case: an attempted order's cancel request is not a commitment, and the screen must say so (01 section 6, "Branch offline");
   - the Flow D alerts of 01 section 8: an order in Awaiting Inventory for more than N minutes, with a Request cancellation button; an entry close to the X-hour limit; flagged orders with the time waited;
   - connection status and the number of entries waiting to be sent, from `GET /monitor`.
-- **Open question:** in phase 1 the order form needs a list of dishes, but `GET /menu` is phase 2 and 02 section 6 has no other source. Ask the user before building the order form.
+- **Dishes for the order form:** `GET /dishes` (02 section 5, revision 8), which answers offline too. The old open question on this is closed.
+- **Send states:** `send_state` and `cancel_send_state` (`CHUA_GUI`, `DANG_GUI`, `DA_GUI`) carry the texts of BR5 ("The branch in practice", 02 section 5).
 - **Phase 2 (Flow C):** blocking a Sold-out dish while the data is fresh, and "Dish availability may have changed" / "May be sold out" when it is stale (01 section 7, the table; 02 section 8, point 5). Uses `GET /menu`.
 - **Built in:** step 6b; the Flow C part in phase 2.
 - **Screenshots:** 1280x800 (POS counter), 390x844 (Online on a phone).
