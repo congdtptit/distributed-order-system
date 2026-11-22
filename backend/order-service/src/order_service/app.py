@@ -13,8 +13,8 @@ import os
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import datetime
-from typing import Annotated, Any
+from datetime import datetime, timedelta
+from typing import Annotated, Any, Literal
 
 import psycopg
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
@@ -30,8 +30,9 @@ from common.kafka import Receiver, Sender
 from common.runtime import Workers, configure_logging, instance_name
 from common.seed import load_menu
 from common.service import identity
-from common.topics import status_events
+from common.topics import MENU_EVENTS, status_events
 from order_service.heartbeat import Heartbeat
+from order_service.menu import STALE_AFTER, MenuSync, http_snapshot, menu_handlers, menu_view
 from order_service.monitor import MonitorLimits, monitor_view
 from order_service.orders import (
     Line,
@@ -66,15 +67,26 @@ def start_workers(
     name = instance_name()
     consumer = MessageConsumer(
         ConsumerSettings(
-            name=f"branch-{branch}@{name}", handlers=branch_handlers(branch), deciding=False
+            name=f"branch-{branch}@{name}",
+            handlers={**branch_handlers(branch), **menu_handlers(clock)},
+            deciding=False,
         ),
-        Receiver(bootstrap, f"branch-{branch}", [status_events(branch)], f"{name}-consumer"),
+        Receiver(
+            bootstrap, f"branch-{branch}", [status_events(branch), MENU_EVENTS], f"{name}-consumer"
+        ),
         Sender(bootstrap, f"{name}-dlq"),
         connect,
     )
     queue = SendQueue(connect, Sender(bootstrap, f"{name}-sender"), clock)
+    menu_sync = MenuSync(
+        connect,
+        http_snapshot(os.environ.get("INVENTORY_URL", "http://inventory:8000")),
+        lambda: queue.status,
+        clock,
+    )
     workers.start("consumer", consumer.run)
     workers.start("send-queue", queue.run)
+    workers.start("menu-sync", menu_sync.run)
     return queue
 
 
@@ -235,6 +247,41 @@ def health() -> dict[str, str]:
 def dishes(conn: Conn) -> list[Dish]:
     """The branch's own dish catalogue; answers while the branch is offline."""
     return [Dish(**d) for d in list_dishes(conn)]
+
+
+def get_stale_after() -> timedelta:
+    """N of section 10 (dish data counts as stale): 5 minutes, ``MENU_STALE_MINUTES`` to
+    shorten it for a demo."""
+    minutes = os.environ.get("MENU_STALE_MINUTES")
+    return STALE_AFTER if minutes is None else timedelta(minutes=float(minutes))
+
+
+class MenuDish(BaseModel):
+    dish_id: str
+    name: str
+    status: Literal["CON", "HET", "AN"] | None
+    """None while nothing has been heard about this dish."""
+
+
+class Menu(BaseModel):
+    stale: bool
+    """Nothing heard from Inventory within N minutes (or ever): the screen shows "May be sold
+    out" instead of blocking (section 7 of the specification)."""
+    last_heard_at: datetime | None
+    dishes: list[MenuDish]
+
+
+@app.get("/menu")
+def menu(
+    conn: Conn, clock: ClockDep, stale_after: Annotated[timedelta, Depends(get_stale_after)]
+) -> Menu:
+    """Flow C: the dish catalogue with each dish's cached status and whether it is fresh."""
+    view = menu_view(conn, clock.now(), stale_after)
+    return Menu(
+        stale=view.stale,
+        last_heard_at=view.last_heard_at,
+        dishes=[MenuDish(**vars(d)) for d in view.dishes],
+    )
 
 
 @app.post("/orders", status_code=201, responses=BAD_INPUT)

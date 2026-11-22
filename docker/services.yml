@@ -28,7 +28,9 @@ x-inventory: &inventory
     SERVICE: inventory
     DATABASE_URL: postgresql://app:app@inventory-db:5432/inventory
   networks:
-    kafka-net: {}
+    # Branches fetch the dish snapshot on kafka-net, their link to the centre, so that
+    # bin/chaos offline cuts it together with Kafka (Flow C).
+    kafka-net: { aliases: [inventory] }
     inventory-net: {}
     api-net: { aliases: [inventory] } # the screens reach either instance
   depends_on:

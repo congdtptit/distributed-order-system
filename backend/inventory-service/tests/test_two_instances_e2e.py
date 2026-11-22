@@ -20,9 +20,11 @@ import psycopg
 import pytest
 from inventory_support import D, order_created
 
+from common.clock import SystemClock
 from common.envelope import encode
 from common.kafka import Outgoing, Sender, partition_owners
 from inventory_service.app import CONSUMER_GROUP
+from inventory_service.dishes import recompute_dishes
 from inventory_service.invariants import violations
 from inventory_service.stock import receive_stock
 
@@ -130,6 +132,8 @@ def test_two_instances_each_take_one_order_and_exactly_one_is_reserved(
                 for ingredient in ("BUN", "RAU_SONG"):
                     assert receive_stock(conn, ingredient, D("1"))
                 conn.execute("UPDATE stock SET available = 0.2 WHERE ingredient_id = 'THIT_LON'")
+                # A direct write skips Flow C; recompute so the dishes match the stock.
+                recompute_dishes(conn, ["THIT_LON"], SystemClock())
             order_ids = one_per_partition()
             since = time.time() - 1
             envs = [
@@ -173,9 +177,12 @@ def test_two_instances_each_take_one_order_and_exactly_one_is_reserved(
             assert [list(by.values()) for by in logged] == [[0], [1]], logged
             assert len({next(iter(by)) for by in logged}) == 2, logged
     finally:
+        # Give the meat back through a stock receipt, which recomputes the dishes (Flow C);
+        # a direct UPDATE would leave BUN_CHA and BANH_MI_THIT Sold out for good.
         with psycopg.connect(INVENTORY_DB) as conn:
-            conn.execute(
-                "UPDATE stock SET available = GREATEST(available, %s) "
-                "WHERE ingredient_id = 'THIT_LON'",
-                (before[0],),
-            )
+            row = conn.execute(
+                "SELECT available FROM stock WHERE ingredient_id = 'THIT_LON'"
+            ).fetchone()
+            assert row is not None
+            if row[0] < before[0]:
+                receive_stock(conn, "THIT_LON", before[0] - row[0], SystemClock())

@@ -28,9 +28,15 @@ def test_migrations_create_the_tables_of_the_design(fresh_db: str) -> None:
             "001_schema.sql",
             "002_dishes.sql",
             "003_alerts.sql",
+            "004_menu_sync.sql",
         ]
         assert apply_migrations(conn, MIGRATIONS) == []
         rows = conn.execute(
             "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
         ).fetchall()
+        # 004 (Flow C): the one meta row, at epoch 0 before the first snapshot.
+        meta = conn.execute(
+            "SELECT epoch, newest_epoch, last_heard_at FROM menu_cache_meta"
+        ).fetchall()
+    assert meta == [(0, 0, None)]
     assert {str(r[0]) for r in rows} - {"schema_migrations"} == TABLES
