@@ -12,4 +12,16 @@
 
 ## II. MÔ TẢ GIAO DIỆN HỆ THỐNG
 
-> TODO(bước 6b): mỗi màn hình một mục, kèm ảnh chụp từ skill `/screen`: Đặt món (POS, Online), Bếp, Kho, Giám sát, Quản lý, trang Demo.
+Màn hình chỉ hiển thị điều các dịch vụ trả về và không tự quyết định trạng thái nào. Mọi màn hình làm mới dữ liệu 2 giây một lần trong lúc đang mở. Khi một dịch vụ không trả lời, màn hình hiện băng cảnh báo và giữ dữ liệu cũ. Ảnh chụp các màn được thêm ở bước 8.
+
+### 1. Màn hình Chi nhánh (POS và Online)
+
+Đường dẫn `/branch/POS01`, `/branch/POS02`, `/branch/ONLINE`; người dùng là thu ngân hoặc khách hàng online. Màn hình gồm:
+
+- **Thanh trên:** trạng thái kết nối Kafka của chi nhánh (kết quả lần thăm dò gần nhất) và số mục chờ gửi, lấy từ `GET /monitor`; nút chọn chi nhánh.
+- **Cảnh báo Luồng D:** đơn chờ Kho quá N phút kèm nút Yêu cầu hủy; đơn còn trong hàng chờ sắp quá hạn X giờ; đơn đang yêu cầu hủy kèm thời gian đã chờ; tin trạng thái không đọc được.
+- **Tạo đơn:** danh mục món của chi nhánh (`GET /dishes`, dùng được khi mất mạng), nhập số lượng, bấm Tạo đơn. Đơn hiện ở Chờ kho cho tới khi có tin trạng thái.
+- **Danh sách đơn:** mã đơn rút gọn (bấm để chép mã đầy đủ), giờ tạo, món, trạng thái dạng nhãn có màu và biểu tượng, cờ yêu cầu hủy, lý do, thông báo "Không hủy được: bếp đã bắt đầu nấu", tình trạng gửi theo BR5 ("Chưa gửi, bếp chưa nhận", "Đang gửi, chưa biết bếp đã nhận chưa"), và nút Hủy đơn. Đơn đã kết thúc hoặc đang có yêu cầu hủy thì không có nút này.
+- **Hộp thoại hủy:** bắt buộc chọn lý do thuộc nhóm khách hủy, kèm lời giải thích: đơn chưa gửi đi thì hủy ngay, đơn đã gửi thì Bếp quyết định. Kết quả 200 báo đã hủy tại chi nhánh; 202 báo đã gửi yêu cầu tới Bếp và chưa chắc hủy được; 409 báo đơn vừa đổi trạng thái rồi tải lại.
+
+> TODO(bước 6b): các màn Bếp, Kho, Giám sát, trang Demo; màn Quản lý ở bước 7.

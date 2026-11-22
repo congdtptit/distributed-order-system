@@ -1,20 +1,7 @@
-import { MantineProvider } from "@mantine/core";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
-import { App } from "./App";
+import { screen } from "@testing-library/react";
 import { CANCEL_FLAG, INVENTORY_STATUS, KITCHEN_STATUS, ORDER_STATUS } from "./labels";
 import { SCREENS } from "./screens";
-import { theme } from "./theme";
-
-function renderAt(path: string) {
-  return render(
-    <MantineProvider theme={theme}>
-      <MemoryRouter initialEntries={[path]}>
-        <App />
-      </MemoryRouter>
-    </MantineProvider>,
-  );
-}
+import { renderRoute as renderAt } from "./test/render";
 
 describe("layout", () => {
   it("lists the six screens in the navbar", () => {
@@ -31,9 +18,11 @@ describe("layout", () => {
     expect(screen.getByRole("link", { name: "Bếp" })).toHaveAttribute("data-active", "true");
   });
 
-  it("opens the branch screen of POS01 at the root", () => {
+  it("opens the branch screen of POS01 at the root", async () => {
     renderAt("/");
-    expect(screen.getByRole("heading", { level: 1, name: "Chi nhánh" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Chi nhánh POS01" }),
+    ).toBeInTheDocument();
   });
 });
 

@@ -5,6 +5,8 @@
 # Example:
 #   screenshot.sh /kitchen 1024x768 /tmp/kitchen-tablet.png
 # The base url defaults to the Vite dev server, http://localhost:5173.
+# Headless Chrome never lays a page out narrower than 500px: a width below that is rendered
+# at 500px and cropped, so check phone layouts at 500 wide.
 set -euo pipefail
 
 if [ $# -lt 3 ]; then

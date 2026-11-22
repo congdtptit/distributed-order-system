@@ -2,6 +2,10 @@ import { AppShell, Burger, Group, NavLink, Stack, Text, Title } from "@mantine/c
 import { useDisclosure } from "@mantine/hooks";
 import { Navigate, Route, NavLink as RouterLink, Routes, useLocation } from "react-router";
 import { SCREENS, type Screen } from "./screens";
+import { BranchScreen } from "./screens/branch/BranchScreen";
+
+/** The screens built so far; the others show a placeholder naming their step. */
+const BUILT: Record<string, () => React.JSX.Element> = { branch: BranchScreen };
 
 function Placeholder({ screen }: { screen: Screen }) {
   return (
@@ -50,9 +54,16 @@ export function App() {
       <AppShell.Main>
         <Routes>
           <Route path="/" element={<Navigate to="/branch/POS01" replace />} />
-          {SCREENS.map((screen) => (
-            <Route key={screen.name} path={screen.path} element={<Placeholder screen={screen} />} />
-          ))}
+          {SCREENS.map((screen) => {
+            const Built = BUILT[screen.name];
+            return (
+              <Route
+                key={screen.name}
+                path={screen.path}
+                element={Built ? <Built /> : <Placeholder screen={screen} />}
+              />
+            );
+          })}
           <Route path="*" element={<Text>Không có màn hình này.</Text>} />
         </Routes>
       </AppShell.Main>
