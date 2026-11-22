@@ -33,8 +33,10 @@ bin/perf               # kiểm thử hiệu năng → perf/results/ và report/
 ## Xuất file Word
 
 ```bash
-report/build.sh        # → report/build/bao-cao.docx (không commit)
+report/build.sh        # → report/build/bao-cao.docx
 ```
+
+Riêng `report/build/bao-cao.docx` được commit (thêm bằng `git add -f`, vì `build/` nằm trong `.gitignore`) để xem được bản Word ngay trên GitHub; xuất lại thì commit lại file này. Các file trung gian khác trong `build/` không commit.
 
 Script vẽ các sơ đồ trong `diagrams/` vào `images/`, ghép các file theo thứ tự, thay các dòng `<!-- include: … -->` bằng nội dung file được chỉ tới, tách từng sơ đồ Mermaid ra và vẽ mỗi sơ đồ một lần bằng `minlag/mermaid-cli` (vẽ chung một lần thì trình duyệt của công cụ thỉnh thoảng bị treo), rồi xuất `.docx` bằng `pandoc/core`, đều chạy trong Docker. Bộ lọc `fit-images.lua` giới hạn sơ đồ quá dài ở 21 cm để không bị cắt cuối trang. Định dạng trang theo mẫu (font, lề) cần một `reference.docx` lấy từ file mẫu của giảng viên.
 
