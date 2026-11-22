@@ -241,6 +241,24 @@ def partition_leaders(bootstrap: str, topic: str) -> dict[int, int]:
     return {p.id: p.leader for p in meta.partitions.values()}
 
 
+def partition_owners(bootstrap: str, group_id: str, topic: str) -> dict[int, str]:
+    """Partition -> member id of the group member that holds it right now (tier 3 tests)."""
+    admin = AdminClient({"bootstrap.servers": bootstrap})
+    futures = cast(
+        dict[str, Any],
+        admin.describe_consumer_groups([group_id]),  # pyright: ignore[reportUnknownMemberType]
+    )
+    group: Any = futures[group_id].result(timeout=10)
+    owners: dict[int, str] = {}
+    for member in group.members:
+        assignment: Any = member.assignment
+        held = cast(list[TopicPartition], assignment.topic_partitions if assignment else [])
+        for tp in held:
+            if tp.topic == topic:
+                owners[tp.partition] = str(member.member_id)
+    return owners
+
+
 class TopicTail:
     """Reads what is written to some topics from the moment it is created, without a consumer
     group (no offsets committed). For end-to-end tests on the shared topics."""

@@ -309,7 +309,12 @@ def test_a_broker_killed_while_the_branch_sends_loses_no_acknowledged_entry(
         wait_for(lambda: len(acknowledged()) == len(placed), 120, "every entry sent")
         assert chaos.health(f"kafka{leader}") != "healthy"
         assert len([e for e in entries(bdb) if e["id"] > last_before_kill]) > 100
-        assert partition_leaders(kafka_bootstrap, topic)[0] not in (leader, -1)
+        # The partition has a new leader. Metadata can lag the election by a moment, so wait.
+        wait_for(
+            lambda: partition_leaders(kafka_bootstrap, topic)[0] not in (leader, -1),
+            30,
+            "a new leader of the partition",
+        )
     finally:
         stop.set()
         sender.join(timeout=60)

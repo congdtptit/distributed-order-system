@@ -21,7 +21,8 @@ import pytest
 from inventory_support import D, order_created
 
 from common.envelope import encode
-from common.kafka import Outgoing, Sender
+from common.kafka import Outgoing, Sender, partition_owners
+from inventory_service.app import CONSUMER_GROUP
 from inventory_service.invariants import violations
 from inventory_service.stock import receive_stock
 
@@ -38,6 +39,14 @@ class Docker(Protocol):
     """The ``chaos`` fixture of backend/conftest.py, used here only to read logs."""
 
     def logs(self, service: str, since: float) -> str: ...
+
+
+def each_instance_holds_a_partition(bootstrap: str) -> bool:
+    """The consumer group has given the two partitions of the topic to two different members.
+    Right after an instance restarts (scenarios 1 and 4 stop Inventory) it answers /health
+    before it has rejoined the group, and the other instance still holds both partitions."""
+    owners = partition_owners(bootstrap, CONSUMER_GROUP, TOPIC)
+    return len(owners) == PARTITIONS and len(set(owners.values())) == PARTITIONS
 
 
 def partition_of(order_id: uuid.UUID) -> int:
@@ -103,6 +112,10 @@ def test_two_instances_each_take_one_order_and_exactly_one_is_reserved(
     for instance in INSTANCES:
         with urllib.request.urlopen(f"http://{instance}:8000/health", timeout=5) as r:
             assert r.status == 200, f"{instance}: docker compose --profile full up -d"
+    deadline = time.monotonic() + 90
+    while not each_instance_holds_a_partition(kafka_bootstrap):
+        assert time.monotonic() < deadline, "the two instances never shared the partitions"
+        time.sleep(1)
     sender = Sender(kafka_bootstrap, "test-scenario-42")
     with psycopg.connect(INVENTORY_DB) as conn:
         before = conn.execute(
