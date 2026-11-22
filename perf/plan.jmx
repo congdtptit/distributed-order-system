@@ -2,6 +2,7 @@
 <!-- The load test of section 2 of docs/04-course-report.md: each API in turn (the thread groups
      run one after another), ${users} users (default 250) started within ${rampup} seconds, each
      sending ${loops} request(s). Hosts are the service names on the compose network api-net.
+     GET /orders and GET /tickets ask for a page of 20, as the screens do.
      Run with bin/perf; change the load with -Jusers=, -Jrampup=, -Jloops=. -->
 <jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
   <hashTree>
@@ -84,7 +85,7 @@
           <stringProp name="HTTPSampler.domain">pos01</stringProp>
           <stringProp name="HTTPSampler.port">8000</stringProp>
           <stringProp name="HTTPSampler.protocol">http</stringProp>
-          <stringProp name="HTTPSampler.path">/orders</stringProp>
+          <stringProp name="HTTPSampler.path">/orders?limit=20</stringProp>
           <stringProp name="HTTPSampler.method">GET</stringProp>
           <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
           <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
@@ -109,7 +110,7 @@
           <stringProp name="HTTPSampler.domain">kitchen</stringProp>
           <stringProp name="HTTPSampler.port">8000</stringProp>
           <stringProp name="HTTPSampler.protocol">http</stringProp>
-          <stringProp name="HTTPSampler.path">/tickets</stringProp>
+          <stringProp name="HTTPSampler.path">/tickets?limit=20</stringProp>
           <stringProp name="HTTPSampler.method">GET</stringProp>
           <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
           <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
