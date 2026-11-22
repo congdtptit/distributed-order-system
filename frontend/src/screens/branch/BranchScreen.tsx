@@ -88,7 +88,11 @@ export function BranchPanel({
 
       <Grid gap="md">
         <Grid.Col span={embedded ? 12 : { base: 12, lg: 3 }} style={{ minWidth: 0 }}>
-          <OrderForm branch={branch} headingLevel={embedded ? 3 : 2} />
+          <OrderForm
+            branch={branch}
+            headingLevel={embedded ? 3 : 2}
+            offline={monitor.data?.connection.connected === false}
+          />
         </Grid.Col>
         <Grid.Col span={embedded ? 12 : { base: 12, lg: 9 }} style={{ minWidth: 0 }}>
           <Stack gap="xs">

@@ -113,3 +113,9 @@ export const KITCHEN_REJECTION_REASONS = [
  * which case applies (BR9, section 6 of the specification). */
 export const CANCEL_EXPLANATION =
   "Đơn chưa từng được gửi đi thì chi nhánh hủy ngay, chắc chắn không được nấu. Đơn đã gửi đi thì Bếp quyết định: nếu bếp đã bắt đầu nấu thì không hủy được.";
+
+/** Flow C on the order form (section 7 of the specification): how a dish's cached status shows
+ * while the data is fresh, and while it is stale or the branch is offline. */
+export const DISH_FRESH = { HET: "Hết" } as const;
+export const DISH_STALE = { HET: "Có thể đã hết" } as const;
+export const MENU_STALE_LINE = "Tình trạng món có thể đã thay đổi.";

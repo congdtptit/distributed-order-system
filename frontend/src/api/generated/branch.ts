@@ -41,6 +41,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/menu": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Menu
+         * @description Flow C: the dish catalogue with each dish's cached status and whether it is fresh.
+         */
+        get: operations["menu_menu_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/monitor": {
         parameters: {
             query?: never;
@@ -207,6 +227,24 @@ export interface components {
             /** Quantity */
             quantity: number;
         };
+        /** Menu */
+        Menu: {
+            /** Dishes */
+            dishes: components["schemas"]["MenuDish"][];
+            /** Last Heard At */
+            last_heard_at: string | null;
+            /** Stale */
+            stale: boolean;
+        };
+        /** MenuDish */
+        MenuDish: {
+            /** Dish Id */
+            dish_id: string;
+            /** Name */
+            name: string;
+            /** Status */
+            status: ("CON" | "HET" | "AN") | null;
+        };
         /** MessageAlert */
         MessageAlert: {
             /**
@@ -350,6 +388,26 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    menu_menu_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Menu"];
                 };
             };
         };

@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/admin/epoch/bump": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Epoch Bump
+         * @description After Inventory is restored from a backup (section 3 of document 02, scenario 20).
+         */
+        post: operations["epoch_bump_admin_epoch_bump_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/alerts": {
         parameters: {
             query?: never;
@@ -62,6 +82,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/menu/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Menu Snapshot
+         * @description Flow C: the status and version of every dish, Hidden ones included. The one API another
+         *     service calls (a branch, on start, on reconnecting and on a new epoch).
+         */
+        get: operations["menu_snapshot_menu_snapshot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/monitor": {
         parameters: {
             query?: never;
@@ -113,7 +154,7 @@ export interface paths {
         put?: never;
         /**
          * Stock Receipt
-         * @description Stock receipt: adds to available stock. Phase 2 adds the dish-status computation.
+         * @description Stock receipt: adds to available stock and recomputes the ingredient's dishes.
          */
         post: operations["stock_receipt_stock_receipts_post"];
         delete?: never;
@@ -156,15 +197,41 @@ export interface components {
             /** Source Topic */
             source_topic: string;
         };
+        /** Bumped */
+        Bumped: {
+            /** Epoch */
+            epoch: number;
+        };
         /** ClearCheck */
         ClearCheck: {
             /** Counted On Hand */
             counted_on_hand?: number | string | null;
         };
+        /** DishVersion */
+        DishVersion: {
+            /** Dish Id */
+            dish_id: string;
+            /** Epoch */
+            epoch: number;
+            /** Seq */
+            seq: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "CON" | "HET" | "AN";
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** MenuSnapshot */
+        MenuSnapshot: {
+            /** Dishes */
+            dishes: components["schemas"]["DishVersion"][];
+            /** Epoch */
+            epoch: number;
         };
         /** Monitor */
         Monitor: {
@@ -241,6 +308,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    epoch_bump_admin_epoch_bump_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Bumped"];
+                };
+            };
+        };
+    };
     alerts_alerts_get: {
         parameters: {
             query?: {
@@ -339,6 +426,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    menu_snapshot_menu_snapshot_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MenuSnapshot"];
                 };
             };
         };

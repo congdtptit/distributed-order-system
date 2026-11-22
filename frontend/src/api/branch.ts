@@ -6,6 +6,7 @@ import { call } from "./http";
 
 export type Order = components["schemas"]["Order"];
 export type Dish = components["schemas"]["Dish"];
+export type Menu = components["schemas"]["Menu"];
 export type Monitor = components["schemas"]["Monitor"];
 export type NewOrder = components["schemas"]["NewOrder"];
 
@@ -21,6 +22,8 @@ export function branchApi(branch: BranchId) {
   return {
     base,
     dishes: async () => (await call<Dish[]>(`${base}/dishes`)).body,
+    /** The dish catalogue with each dish's cached status and whether it is fresh (Flow C). */
+    menu: async () => (await call<Menu>(`${base}/menu`)).body,
     /** The ``limit`` newest orders (at most 200). */
     orders: async (limit: number) => (await call<Order[]>(`${base}/orders?limit=${limit}`)).body,
     monitor: async () => (await call<Monitor>(`${base}/monitor`)).body,

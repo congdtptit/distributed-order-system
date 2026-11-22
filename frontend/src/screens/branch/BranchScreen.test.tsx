@@ -4,7 +4,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { delay, HttpResponse, http } from "msw";
-import type { Monitor, Order } from "../../api/branch";
+import type { Menu, Monitor, Order } from "../../api/branch";
 import { renderRoute } from "../../test/render";
 import { EMPTY_MONITOR, server } from "../../test/server";
 
@@ -380,5 +380,56 @@ describe("branch screen: Flow D", () => {
     );
     expect(asked).toBe(40);
     expect(screen.queryByRole("button", { name: /Xem thêm/ })).not.toBeInTheDocument();
+  });
+
+  describe("dish status on the order form (Flow C, section 7 of the specification)", () => {
+    function withMenu(stale: boolean, dishes: Menu["dishes"]) {
+      server.use(
+        http.get("*/api/pos01/menu", () =>
+          HttpResponse.json<Menu>({ stale, last_heard_at: "2026-11-20T09:15:00Z", dishes }),
+        ),
+      );
+    }
+    const DISHES: Menu["dishes"] = [
+      { dish_id: "PHO_BO", name: "Phở bò", status: "CON" },
+      { dish_id: "TRA_DA", name: "Trà đá", status: "HET" },
+      { dish_id: "GOI_CUON", name: "Gỏi cuốn", status: "AN" },
+    ];
+
+    it("blocks a Sold-out dish and hides a Hidden one while the data is fresh", async () => {
+      withMenu(false, DISHES);
+      renderRoute("/branch/POS01");
+      expect(await screen.findByRole("textbox", { name: "Phở bò" })).toBeEnabled();
+      const tea = screen.getByRole("textbox", { name: "Trà đá" });
+      expect(tea).toBeDisabled();
+      expect(tea).toHaveAccessibleDescription("Hết");
+      expect(screen.queryByRole("textbox", { name: "Gỏi cuốn" })).not.toBeInTheDocument();
+      expect(screen.queryByText("Tình trạng món có thể đã thay đổi.")).not.toBeInTheDocument();
+    });
+
+    it("warns instead of blocking when the data is stale", async () => {
+      withMenu(true, DISHES);
+      renderRoute("/branch/POS01");
+      const tea = await screen.findByRole("textbox", { name: "Trà đá" });
+      expect(tea).toBeEnabled();
+      expect(tea).toHaveAccessibleDescription("Có thể đã hết");
+      expect(screen.getByText("Tình trạng món có thể đã thay đổi.")).toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "Phở bò" })).not.toHaveAccessibleDescription();
+      expect(screen.queryByRole("textbox", { name: "Gỏi cuốn" })).not.toBeInTheDocument();
+    });
+
+    it("warns instead of blocking when the branch is offline, even with recent data", async () => {
+      withMenu(false, DISHES);
+      withMonitor({ connection: { connected: false, checked_at: "2026-11-20T09:15:00Z" } });
+      renderRoute("/branch/POS01");
+      expect(await screen.findByText("Tình trạng món có thể đã thay đổi.")).toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "Trà đá" })).toBeEnabled();
+    });
+
+    it("lets a dish Inventory has said nothing about be ordered", async () => {
+      withMenu(false, [{ dish_id: "PHO_BO", name: "Phở bò", status: null }]);
+      renderRoute("/branch/POS01");
+      expect(await screen.findByRole("textbox", { name: "Phở bò" })).toBeEnabled();
+    });
   });
 });

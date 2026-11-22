@@ -4,7 +4,7 @@
 
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import type { Monitor, Order } from "../api/branch";
+import type { Menu, Monitor, Order } from "../api/branch";
 
 export const EMPTY_MONITOR: Monitor = {
   connection: { connected: true, checked_at: "2026-11-20T09:15:00Z" },
@@ -32,10 +32,14 @@ export const server = setupServer(
   http.get("*/api/inventory/alerts", () => HttpResponse.json([])),
   http.get("*/api/:branch/orders", () => HttpResponse.json<Order[]>([])),
   http.get("*/api/:branch/monitor", () => HttpResponse.json(EMPTY_MONITOR)),
-  http.get("*/api/:branch/dishes", () =>
-    HttpResponse.json([
-      { dish_id: "PHO_BO", name: "Phở bò" },
-      { dish_id: "TRA_DA", name: "Trà đá" },
-    ]),
+  http.get("*/api/:branch/menu", () =>
+    HttpResponse.json<Menu>({
+      stale: false,
+      last_heard_at: "2026-11-20T09:15:00Z",
+      dishes: [
+        { dish_id: "PHO_BO", name: "Phở bò", status: "CON" },
+        { dish_id: "TRA_DA", name: "Trà đá", status: "CON" },
+      ],
+    }),
   ),
 );

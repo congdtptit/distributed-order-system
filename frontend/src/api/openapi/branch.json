@@ -201,6 +201,75 @@
         "title": "Item",
         "type": "object"
       },
+      "Menu": {
+        "properties": {
+          "dishes": {
+            "items": {
+              "$ref": "#/components/schemas/MenuDish"
+            },
+            "title": "Dishes",
+            "type": "array"
+          },
+          "last_heard_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heard At"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "stale",
+          "last_heard_at",
+          "dishes"
+        ],
+        "title": "Menu",
+        "type": "object"
+      },
+      "MenuDish": {
+        "properties": {
+          "dish_id": {
+            "title": "Dish Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "CON",
+                  "HET",
+                  "AN"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "dish_id",
+          "name",
+          "status"
+        ],
+        "title": "MenuDish",
+        "type": "object"
+      },
       "MessageAlert": {
         "properties": {
           "created_at": {
@@ -552,6 +621,25 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/menu": {
+      "get": {
+        "description": "Flow C: the dish catalogue with each dish's cached status and whether it is fresh.",
+        "operationId": "menu_menu_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Menu"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Menu"
       }
     },
     "/monitor": {

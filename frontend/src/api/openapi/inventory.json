@@ -73,6 +73,19 @@
         "title": "Alert",
         "type": "object"
       },
+      "Bumped": {
+        "properties": {
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "epoch"
+        ],
+        "title": "Bumped",
+        "type": "object"
+      },
       "ClearCheck": {
         "properties": {
           "counted_on_hand": {
@@ -94,6 +107,39 @@
         "title": "ClearCheck",
         "type": "object"
       },
+      "DishVersion": {
+        "properties": {
+          "dish_id": {
+            "title": "Dish Id",
+            "type": "string"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "CON",
+              "HET",
+              "AN"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dish_id",
+          "status",
+          "epoch",
+          "seq"
+        ],
+        "title": "DishVersion",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -105,6 +151,27 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "MenuSnapshot": {
+        "properties": {
+          "dishes": {
+            "items": {
+              "$ref": "#/components/schemas/DishVersion"
+            },
+            "title": "Dishes",
+            "type": "array"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "epoch",
+          "dishes"
+        ],
+        "title": "MenuSnapshot",
         "type": "object"
       },
       "Monitor": {
@@ -309,6 +376,25 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/admin/epoch/bump": {
+      "post": {
+        "description": "After Inventory is restored from a backup (section 3 of document 02, scenario 20).",
+        "operationId": "epoch_bump_admin_epoch_bump_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Bumped"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Epoch Bump"
+      }
+    },
     "/alerts": {
       "get": {
         "description": "Orders that need review and unmatched commands,\nnewest first (at most 100); ``kind`` filters.",
@@ -447,6 +533,25 @@
         "summary": "Clear Stock Check"
       }
     },
+    "/menu/snapshot": {
+      "get": {
+        "description": "Flow C: the status and version of every dish, Hidden ones included. The one API another\nservice calls (a branch, on start, on reconnecting and on a new epoch).",
+        "operationId": "menu_snapshot_menu_snapshot_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MenuSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Menu Snapshot"
+      }
+    },
     "/monitor": {
       "get": {
         "description": "Flow D: unread messages per topic and the slow-consumer alert.",
@@ -491,7 +596,7 @@
     },
     "/stock/receipts": {
       "post": {
-        "description": "Stock receipt: adds to available stock. Phase 2 adds the dish-status computation.",
+        "description": "Stock receipt: adds to available stock and recomputes the ingredient's dishes.",
         "operationId": "stock_receipt_stock_receipts_post",
         "requestBody": {
           "content": {
