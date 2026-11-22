@@ -17,7 +17,7 @@ Thư mục này là báo cáo nộp giảng viên, viết theo mẫu "Mẫu PTTK
 | `04-kiem-thu.md` | Phần IV. Kịch bản kiểm thử (lấy từ `generated/kiem-thu.md`), mô hình kiểm thử phân tán, công cụ, môi trường, kết quả |
 | `generated/` | Sinh tự động, không sửa tay (xem dưới) |
 
-Sơ đồ viết bằng Mermaid ngay trong Markdown: VS Code và GitHub hiển thị trực tiếp; khi xuất Word, `build.sh` vẽ chúng thành ảnh.
+Sơ đồ viết bằng Mermaid ngay trong Markdown: VS Code và GitHub hiển thị trực tiếp; khi xuất Word, `build.sh` vẽ chúng thành ảnh. Riêng sơ đồ HLD nằm ở `diagrams/hld.mmd` (dàn trang ELK) và được `build.sh` vẽ thành `images/hld.png` trước. Ảnh chụp màn hình nằm ở `images/`, chụp từ hệ thống đang chạy sau khi dọn cụm và chạy `docker compose exec -T tools python scripts/demo_data.py`.
 
 ## Sinh lại phần tự động
 
@@ -36,7 +36,7 @@ bin/perf               # kiểm thử hiệu năng → perf/results/ và report/
 report/build.sh        # → report/build/bao-cao.docx (không commit)
 ```
 
-Script ghép các file theo thứ tự, thay các dòng `<!-- include: … -->` bằng nội dung file được chỉ tới, vẽ sơ đồ Mermaid thành PNG bằng `minlag/mermaid-cli`, rồi xuất `.docx` bằng `pandoc/core`, đều chạy trong Docker. Định dạng trang theo mẫu (font, lề) sẽ làm bằng một `reference.docx` ở bước 8.
+Script vẽ các sơ đồ trong `diagrams/` vào `images/`, ghép các file theo thứ tự, thay các dòng `<!-- include: … -->` bằng nội dung file được chỉ tới, tách từng sơ đồ Mermaid ra và vẽ mỗi sơ đồ một lần bằng `minlag/mermaid-cli` (vẽ chung một lần thì trình duyệt của công cụ thỉnh thoảng bị treo), rồi xuất `.docx` bằng `pandoc/core`, đều chạy trong Docker. Bộ lọc `fit-images.lua` giới hạn sơ đồ quá dài ở 21 cm để không bị cắt cuối trang. Định dạng trang theo mẫu (font, lề) cần một `reference.docx` lấy từ file mẫu của giảng viên.
 
 ## Trạng thái các mục
 
@@ -49,8 +49,8 @@ Script ghép các file theo thứ tự, thay các dòng `<!-- include: … -->` 
 | Thiết kế chức năng | Có cho mọi giao dịch đợt 1: Kho, Bếp, chi nhánh và báo cáo quản lý (24 giao dịch); tình trạng món ở đợt 2 |
 | Thiết kế CSDL | Có: danh sách CSDL, sơ đồ tổng quát, danh sách bảng; sơ đồ ER và bảng chi tiết sinh từ CSDL đang chạy |
 | Công nghệ | Có |
-| Giao diện | Có đủ sáu màn: Chi nhánh, Bếp, Kho, Giám sát, Quản lý và trang Demo; ảnh chụp ở bước 8 |
+| Giao diện | Có đủ sáu màn: Chi nhánh, Bếp, Kho, Giám sát, Quản lý và trang Demo, mỗi màn có ảnh chụp (`images/`, dữ liệu từ `backend/scripts/demo_data.py`) |
 | Kịch bản kiểm thử | Có; trạng thái sinh từ lần chạy test gần nhất |
-| Mô hình kiểm thử phân tán | Có, gồm cắt mạng chi nhánh thật (kịch bản 10, 36) và cắt nhân bản về trung tâm (kịch bản 55); hai instance thật ở bước 7 |
+| Mô hình kiểm thử phân tán | Có, gồm cắt mạng chi nhánh thật (kịch bản 10, 36), cắt nhân bản về trung tâm (kịch bản 55), hai instance Inventory thật (kịch bản 42) và các kịch bản demo 1, 3, 4 chạy trên cụm thật |
 | Kiểm thử hiệu năng | Có: JMeter 5.6.3, 250 người dùng đồng thời cho 6 chức năng, tài nguyên từ `docker stats`, thời gian tạo đơn tới Đã giữ (`generated/hieu-nang.md`) |
 | Môi trường, công cụ | Có |

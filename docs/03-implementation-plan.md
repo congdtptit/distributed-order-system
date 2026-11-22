@@ -1,8 +1,15 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 20 · 22 Nov 2026
+Revision 21 · 22 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the implementation phase; section 7 records what has been built so far. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 21
+
+| Section | Change | Reason |
+|---|---|---|
+| 6 | Two more tier 3 timing faults, fixed in the tests | A full run on 22 Nov 2026 failed them while a heavy job shared the machine |
+| 7 | Step 8 under way | 22 Nov 2026 |
 
 ## Changes in revision 20
 
@@ -395,7 +402,7 @@ Every part was created on 21 Nov 2026, in step 0 or before it, except the `night
 - **How Kafka assigns partitions to the two Inventory instances** was tried in step 7: each instance holds one partition of each `order-events.*` topic, and scenario 42 passes with two real instances (section 9 of the design).
 - **Resources of the demo machine.** Measured on 22 Nov 2026, idle, on a Docker Desktop with 4 CPUs and 5.8 GB of memory: about 2.5 GB for the core profile and 3.1 GB for `full`. The three brokers take about 300–350 MB each (384 MB heap), Kafka UI about 330 MB, each service container about 80 MB, each database about 25–30 MB, the frontend container about 200 MB (without the heap cap Vite held 1 GB). Measured again in step 7 under the performance test (250 users per API) on a freshly emptied cluster: services, databases and Kafka peaked at about 2.4 GB, so memory hardly moves with load; CPU rises in the service under load, its database and Kafka (`report/generated/hieu-nang.md`).
 - **A second toolchain.** Node and npm run in their own container, like the Python tools. Their `node_modules` stay inside the container, so the editor sees the TypeScript types only when the project is opened in the dev container. Major versions move fast there: step 0 found that TypeScript 7 breaks `openapi-typescript`.
-- **Tier 3 scenarios tend to be flaky.** They depend on when containers stop and start; they need explicit wait conditions instead of waiting on time. On 22 Nov 2026 one full run had a failure that the summary did not name; with `-rf` the next one was named: scenario 31's test required a batch in flight at the instant of the kill, which a fast relay sometimes did not leave. Fixed by asserting what the scenario names (orders still being sent).
+- **Tier 3 scenarios tend to be flaky.** They depend on when containers stop and start; they need explicit wait conditions instead of waiting on time. On 22 Nov 2026 one full run had a failure that the summary did not name; with `-rf` the next one was named: scenario 31's test required a batch in flight at the instant of the kill, which a fast relay sometimes did not leave. Fixed by asserting what the scenario names (orders still being sent). Two more on 22 Nov 2026, found by a full run while the report export used the CPU: scenario 42's two-instance test sent its orders while a just-restarted Inventory instance answered `/health` but had not yet rejoined the consumer group (it now waits until the group gives each instance a partition), and scenario 31's branch test read the partition's leader once, before the metadata showed the new one (it now waits for it). Heavy jobs such as the report export should not share the machine with a tier 3 run.
 
 ## 7. Progress
 
@@ -412,7 +419,7 @@ Updated 22 Nov 2026, during step 7. A step is done when its scenarios pass, the 
 | 6. Branch | Done 22 Nov 2026 | 7, 10, 12, 36, 37, 53, 54; the branch side of 1, 3, 4, 8, 23, 24, 31, 33 |
 | 6b. Screens | Done 22 Nov 2026; the Management screen followed in step 7 | – |
 | 7. Integration | Mostly done 22 Nov 2026: reporting, the Management screen, the performance test, CI. Left: the `stack` job and `nightly` run only after a push | 55; the end-to-end versions of 1, 3 and 42 |
-| 8. Report material | After step 7 | – |
+| 8. Report material | Under way 22 Nov 2026: screenshots of the six screens, the HLD redrawn, the Word export made reliable. Left: the template's page layout (needs the template file), the cover and Part I (@Naul's decision) | – |
 | Phase 2 | After phase 1 | 0 of 4 |
 
 **Scenarios:** 40 of 44 pass (91 %); the full run on 22 Nov 2026 had 246 backend tests, none failing. Of those, 6 and 48 wait for phase 2 for their dish-status part. Left: 18–21 (phase 2). **Estimate of work done:** about 82 % of the whole project: 59 % after step 6, the screens' full 11 %, 7 of the 9 points of integration and reporting (left: the CI runs on GitHub and the final review of section 5.5) and the performance test's 5 %, weighting each step by its expected effort. The weights, rescaled on 22 Nov 2026: preparation 13 %, step 1 9 %, Inventory 13 %, Kitchen 13 %, branch 11 %, screens 11 %, integration and reporting 9 %, performance test 5 %, report material 8 %, phase 2 5 %, demo 3 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.

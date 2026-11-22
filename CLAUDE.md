@@ -41,6 +41,7 @@ Everything runs in Docker; nothing is installed on the host. Source is mounted i
 | Frontend tests, types, format and lint | `docker compose exec frontend npx --no-install vitest run`, `… tsc --noEmit`, `… biome check --write .` |
 | Faults | `bin/chaos offline pos01`, `bin/chaos stop kafka2`, `bin/chaos cut-replication pos01`, `bin/chaos status` |
 | Performance test | `bin/perf` (250 users per API; `-Jusers=50` for a lighter run) |
+| Demo data, report | `docker compose exec -T tools python scripts/demo_data.py` on an emptied cluster; `report/build.sh` → `report/build/bao-cao.docx` |
 | API types for the screens | `docker compose exec tools python scripts/dump_openapi.py`, then `docker compose exec frontend npm run gen:api` |
 
 | URL | What |

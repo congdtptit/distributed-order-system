@@ -63,7 +63,7 @@ State: **covered** (the material exists and only needs reformatting into the tem
 | Overall database diagram (**required**) | `report/02-phan-tich-thiet-ke.md` (overview of the six databases and how data moves between them) and one ER diagram per database in `report/generated/csdl.md` | Covered | Regenerate after each migration |
 | Table list and table detail | `report/02-phan-tich-thiet-ke.md` (23 tables with descriptions) and `report/generated/csdl.md` (Field, Type, Null, Key, Default, Extra) | Covered | Regenerate after each migration |
 | Technology | `report/03-xay-dung.md` | Covered | |
-| User interface | `report/03-xay-dung.md`: the six screens, built in steps 6b and 7 with `/screen` | Partly | The screenshots go into the report in step 8 |
+| User interface | `report/03-xay-dung.md`: the six screens, each with a screenshot from the running system (`report/images/`, data from `backend/scripts/demo_data.py`) | Covered | |
 | Test scenarios | `report/generated/kiem-thu.md`, from a full test run: 40 of 44 pass on 22 Nov 2026 (6 and 48 counting their phase 1 parts) | Covered | Regenerate after each step |
 | Distributed testing: model and scenarios (**required**) | `report/04-kiem-thu.md`: the test setup drawing and the table of faults injected: 1, 3, 4, 10, 12, 24, 25, 26, 29, 31, 36, 42 on two real instances, 55 | Covered | |
 | Performance testing (**required**) | `report/04-kiem-thu.md` section 2.4.2 and `report/generated/hieu-nang.md`: JMeter 5.6.3 in a container on `api-net`, 250 users on each of six APIs, `docker stats`, order creation to Reserved; the two faults it found and their fixes | Covered | Run `bin/perf` again on a clean cluster before the report is final |
@@ -77,5 +77,5 @@ State: **covered** (the material exists and only needs reformatting into the tem
 
 - **Every step** updates its parts of `report/` when it is done (section "How the report is made").
 - **Step 7** added the performance test: `perf/plan.jmx`, run by `bin/perf` in a container on `api-net` against the full cluster, with its result files and `docker stats` kept in `perf/results/` and summarised in `report/generated/hieu-nang.md`.
-- **Step 8, report material,** is now what is left once the steps are done: tidying the diagrams, the page layout of the template (`reference.docx`), and the final read-through. Part I and the cover are @Naul's, unless Claude is asked to draft them.
+- **Step 8, report material,** under way on 22 Nov 2026: the screenshots are in, the HLD was redrawn without crossing arrows (its source is `report/diagrams/hld.mmd`), and `report/build.sh` draws each diagram on its own and keeps tall ones on one page. Left: the page layout of the template (`reference.docx`, which needs the template file), the final read-through, and Part I and the cover, which are @Naul's unless Claude is asked to draft them.
 - Section 4 of document 03 lists both, and section 7 of 03 counts them in the progress estimate.

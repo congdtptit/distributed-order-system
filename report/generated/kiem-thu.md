@@ -2,9 +2,9 @@
 
 | STT | Kịch bản | Kết quả mong đợi | Quy tắc | Tầng | Số test | Kết quả |
 |---|---|---|---|---|---|---|
-| 1 | Yêu cầu hủy tới Bếp trước đơn; sau đó Kho giữ được và chuyển đơn sang Bếp | Không có phiếu; đơn Đã hủy; Kho hoàn đủ một lần | BR7 | Tầng 1 | 2 | Đạt |
+| 1 | Yêu cầu hủy tới Bếp trước đơn; sau đó Kho giữ được và chuyển đơn sang Bếp | Không có phiếu; đơn Đã hủy; Kho hoàn đủ một lần | BR7 | Tầng 1 | 3 | Đạt |
 | 2 | Như kịch bản 1, rồi Kho gửi lại đơn lần hai | Không lập phiếu, không gửi lệnh hoàn lần hai | BR8 | Tầng 1 | 1 | Đạt |
-| 3 | Thu ngân bấm hủy và Bếp bấm Bắt đầu nấu cùng lúc | Đúng một thao tác thắng; trạng thái Bếp, Kho và chi nhánh khớp nhau | BR7 | Tầng 2 | 3 | Đạt |
+| 3 | Thu ngân bấm hủy và Bếp bấm Bắt đầu nấu cùng lúc | Đúng một thao tác thắng; trạng thái Bếp, Kho và chi nhánh khớp nhau | BR7 | Tầng 2 | 4 | Đạt |
 | 4 | Bếp từ chối phiếu khi Kho đang dừng, rồi Kho chạy lại | Chi nhánh thấy Đã hủy ngay; Kho hoàn đúng một lần khi chạy lại | BR4 | Tầng 3 | 2 | Đạt |
 | 5 | Lệnh hoàn của cùng một đơn tới Kho ba lần | Tồn tăng đúng một lần | BR12 | Tầng 1 | 1 | Đạt |
 | 6 | Bếp từ chối với lý do nguyên liệu hỏng (thịt) | Thịt ghi hao hụt, nguyên liệu khác được hoàn; món dùng thịt sang Hết; phiếu Chờ nấu có thịt hiện cảnh báo | BR6 | Tầng 1 | 2 | Đạt (Phần đợt 1 đạt; phần món chuyển sang Hết thuộc đợt 2) |
@@ -53,5 +53,5 @@
 | Kịch bản lỗi | 0 |
 | Kịch bản chưa kiểm thử (thuộc các bước sau) | 4 |
 | Tổng số kịch bản | 44 |
-| Tổng số test tự động đã chạy (kể cả test không gắn kịch bản) | 246 |
+| Tổng số test tự động đã chạy (kể cả test không gắn kịch bản) | 250 |
 | Trong đó test lỗi | 0 |

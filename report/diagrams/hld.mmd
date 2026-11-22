@@ -1,0 +1,26 @@
+---
+config:
+  layout: elk
+---
+flowchart TB
+  subgraph Branches["Chi nhánh (POS01, POS02, ONLINE)"]
+    UI1["Màn hình POS / Online"] --> LOS["Local Order Service /<br/>Online Order Service"]
+    LOS --- BDB[("Branch DB")]
+  end
+  subgraph DC["Trung tâm dữ liệu"]
+    REP[("Central Order Replica")] --- OQS["Order Query Service"]
+    MUI["Màn hình Quản lý"] --> OQS
+  end
+  K{{"Kafka: 3 broker, mỗi topic 3 bản sao"}}
+  subgraph Inventory["Kho"]
+    IUI["Màn hình Kho"] --> INV["Inventory Service × 2"]
+    INV --- IDB[("Inventory DB")]
+  end
+  subgraph Kitchen["Bếp"]
+    KUI["Màn hình Bếp"] --> KIT["Kitchen Service"]
+    KIT --- KDB[("Kitchen DB")]
+  end
+  BDB -. "logical replication" .-> REP
+  LOS <== "gửi đơn, yêu cầu hủy / nhận trạng thái đơn" ==> K
+  K <== "nhận đơn mới, lệnh hoàn kho / gửi đơn đã giữ, trạng thái, cờ kiểm kho" ==> INV
+  K <== "nhận đơn đã giữ, yêu cầu hủy, cờ kiểm kho / gửi lệnh hoàn kho, trạng thái" ==> KIT

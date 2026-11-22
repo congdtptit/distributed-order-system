@@ -4,42 +4,21 @@
 
 Hệ thống gồm các chi nhánh nhận đơn (POS tại quầy, kênh Online), một Kho dùng chung và một Bếp trung tâm. Các bên chỉ trao đổi với nhau qua Kafka; mỗi dịch vụ có CSDL riêng. Báo cáo quản lý đọc một bản sao tập trung của các CSDL đơn hàng ở chi nhánh.
 
-```mermaid
-flowchart LR
-  subgraph Branches["Chi nhánh (POS01, POS02, ONLINE)"]
-    UI1["Màn hình POS / Online"] --> LOS["Local Order Service<br/>(Online Order Service)"]
-    LOS --- BDB[("Branch DB<br/>orders, outbox_events")]
-  end
-  subgraph Kafka["Kafka: 3 broker, RF=3, min.insync=2"]
-    OE["order-events.&lt;branch&gt;"]
-    CE["cancel-events.&lt;branch&gt;"]
-    SE["status-events.&lt;branch&gt;"]
-    KO["kitchen-orders"]
-    SC["stock-commands"]
-    ME["menu-events"]
-    DLQ["dlq"]
-  end
-  subgraph Inventory["Kho"]
-    INV["Inventory Service × 2"] --- IDB[("Inventory DB")]
-  end
-  subgraph Kitchen["Bếp"]
-    KUI["Màn hình Bếp"] --> KIT["Kitchen Service"]
-    KIT --- KDB[("Kitchen DB")]
-  end
-  subgraph DC["Trung tâm dữ liệu (báo cáo)"]
-    REP[("Central Order Replica")] --- OQS["Order Query Service"]
-    MUI["Màn hình Quản lý"] --> OQS
-  end
-  LOS -->|đơn mới| OE --> INV
-  LOS -->|yêu cầu hủy| CE --> KIT
-  INV -->|đơn đã giữ / thất bại| KO --> KIT
-  KIT -->|hoàn kho / đã dùng| SC --> INV
-  INV -->|cờ kiểm kho| ME --> KIT
-  INV -->|trạng thái đơn| SE
-  KIT -->|trạng thái đơn| SE
-  SE --> LOS
-  BDB -.->|logical replication| REP
-```
+![Hình 2.1. Mô hình HLD: các chi nhánh, Kho và Bếp chỉ trao đổi qua Kafka; báo cáo đọc bản sao trung tâm](images/hld.png)
+
+Mã nguồn sơ đồ: `report/diagrams/hld.mmd` (Mermaid, dàn trang ELK), vẽ lại bằng `report/build.sh`.
+
+Mỗi mũi tên hai chiều tới Kafka gom nhiều topic; bảng dưới đây cho biết từng topic đi từ đâu tới đâu.
+
+| Topic | Bên gửi | Bên nhận | Tin |
+|---|---|---|---|
+| `order-events.<branch>` | Chi nhánh | Kho | `OrderCreated` |
+| `cancel-events.<branch>` | Chi nhánh | Bếp | `CancelRequested` |
+| `kitchen-orders` | Kho | Bếp | `OrderReserved`, `OrderFailed` |
+| `stock-commands` | Bếp | Kho | `StockConsumed`, `ReleaseRequested` |
+| `status-events.<branch>` | Kho, Bếp | Chi nhánh gốc của đơn (`CancelPending`: chi nhánh gửi yêu cầu hủy) | `OrderReserved`, `OrderFailed`, `OrderCancelled`, `OrderCompleted`, `CancelPending`, `CancelRejected` |
+| `menu-events` | Kho | Bếp; các chi nhánh (đợt 2) | `IngredientCheckChanged`; `DishStatusChanged`, `Heartbeat` (đợt 2) |
+| `dlq` | Mọi consumer | Người vận hành | Tin không đọc được sau 5 lần thử |
 
 | Thành phần | Vai trò |
 |---|---|
