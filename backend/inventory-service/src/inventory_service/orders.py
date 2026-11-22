@@ -25,6 +25,7 @@ from common.consumer import Handler, Incoming
 from common.envelope import Envelope, new_envelope
 from common.outbox import enqueue
 from common.topics import KITCHEN_ORDERS, status_events
+from inventory_service.dishes import recompute_dishes
 
 log = logging.getLogger(__name__)
 
@@ -137,6 +138,10 @@ def make_order_created_handler(clock: Clock, limits: Limits) -> Handler:
         if failure is None:
             assert order is not None
             failure, reserved = _reserve(conn, env, order)
+            if failure is None:
+                # Flow C: the reserved ingredients' dishes may now be Sold out. After the
+                # stock rows, before anything else takes a version.
+                recompute_dishes(conn, [r.ingredient_id for r in reserved], clock)
             if failure is not None:
                 conn.execute(
                     "UPDATE inventory_orders SET status = %s, reason = %s, updated_at = %s"

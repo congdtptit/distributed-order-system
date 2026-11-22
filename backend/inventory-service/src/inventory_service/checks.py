@@ -96,6 +96,11 @@ def clear_check(
         "UPDATE stock SET available = %s, needs_check = FALSE WHERE ingredient_id = %s",
         (available, ingredient_id),
     )
+    # Flow C: the ingredient's dishes may return to Available (or, with a low count, become
+    # Sold out). Imported here: dishes.py takes its versions from this module.
+    from inventory_service.dishes import recompute_dishes
+
+    recompute_dishes(conn, [ingredient_id], clock)
     if flagged:
         emit_check_changed(conn, ingredient_id, False, clock)
     return Cleared(ClearResult.CLEARED, available, reserved)

@@ -66,6 +66,10 @@ def reserve(inv: str, items: list[tuple[str, int]] | None = None) -> Any:
     return env
 
 
+def dish_changes(inv: str) -> list[dict[str, Any]]:
+    return [r.payload | {"_key": r.key} for r in outbox(inv) if r.event_type == "DishStatusChanged"]
+
+
 def check_changed(inv: str) -> list[dict[str, Any]]:
     return [
         r.payload | {"_key": r.key} for r in outbox(inv) if r.event_type == "IngredientCheckChanged"
@@ -101,7 +105,7 @@ def test_a_spoiled_ingredient_is_written_off_flagged_and_the_rest_released(inv: 
     """Scenario 6, the Inventory part: the Kitchen rejects with the reason spoiled ingredient
     (meat). The meat is written off as waste and the other ingredients are released. Inventory
     also flags the meat and tells the Kitchen, which needs it for the ticket warning (step 4).
-    "Dishes that use meat move to Sold out" is phase 2."""
+    Dishes that use meat move to Sold out (phase 2, Flow C)."""
     before = stock(inv)
     order = reserve(inv)
     deliver(
@@ -126,9 +130,15 @@ def test_a_spoiled_ingredient_is_written_off_flagged_and_the_rest_released(inv: 
         "THIT_BO": "HAO_HUT",
     }
     assert order_record(inv, order.order_id) == ("DA_TRA", reasons.SPOILED_INGREDIENT, "POS01", NOW)
-    # The Kitchen is told the meat is flagged, with a version from menu_version.
+    # Dishes that use meat move to Sold out: PHO_BO is the one dish with THIT_BO.
+    assert dish_changes(inv) == [
+        {"dish_id": "PHO_BO", "status": "HET", "epoch": 1, "seq": 1, "_key": "PHO_BO"}
+    ]
+    # The Kitchen is told the meat is flagged, with a version from menu_version. The dish took
+    # seq 1: the dish_status rows are locked before menu_version (section 3 of document 02,
+    # "Lock order"), so the dish change takes its version before the flag message does.
     assert check_changed(inv) == [
-        {"ingredient_id": "THIT_BO", "needs_check": True, "epoch": 1, "seq": 1, "_key": "THIT_BO"}
+        {"ingredient_id": "THIT_BO", "needs_check": True, "epoch": 1, "seq": 2, "_key": "THIT_BO"}
     ]
     [row] = [r for r in outbox(inv) if r.event_type == "IngredientCheckChanged"]
     assert row.topic == "menu-events"
@@ -258,8 +268,8 @@ def test_clearing_the_flag_lets_a_new_order_reserve_the_ingredient_again(
 ) -> None:
     """Scenario 48, the Inventory part: meat is flagged for stock check; Inventory confirms that
     the stock check is done. The flag is cleared; a new order that uses meat is reserved. The
-    Kitchen is told (its warning disappears in step 4); dishes returning to Available is
-    phase 2."""
+    Kitchen is told (its warning disappears in step 4); dishes that use meat return to
+    Available (phase 2, Flow C)."""
     spoiled = reserve(inv)
     deliver(
         inv,
@@ -275,8 +285,15 @@ def test_clearing_the_flag_lets_a_new_order_reserve_the_ingredient_again(
     # The flag is cleared ...
     assert response.json()["needs_check"] is False
     assert stock(inv)["THIT_BO"].needs_check is False
-    # ... and announced to the Kitchen with a later version.
-    assert [(c["needs_check"], c["seq"]) for c in check_changed(inv)] == [(True, 1), (False, 2)]
+    # ... and announced to the Kitchen with a later version. Each flag message follows the
+    # dish change of the same transaction (dish_status before menu_version, section 3 of
+    # document 02): PHO_BO Sold out takes seq 1, the flag 2; PHO_BO back takes 3, the flag 4.
+    assert [(c["needs_check"], c["seq"]) for c in check_changed(inv)] == [(True, 2), (False, 4)]
+    # Dishes that use meat return to Available.
+    assert [(d["dish_id"], d["status"], d["seq"]) for d in dish_changes(inv)] == [
+        ("PHO_BO", "HET", 1),
+        ("PHO_BO", "CON", 3),
+    ]
     flag_rows = [r for r in outbox(inv) if r.event_type == "IngredientCheckChanged"]
     assert [(r.topic, r.key) for r in flag_rows] == [("menu-events", "THIT_BO")] * 2
     # A new order that uses meat is reserved.

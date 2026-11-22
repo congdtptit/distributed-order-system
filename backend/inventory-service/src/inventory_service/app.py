@@ -34,6 +34,12 @@ from common.service import identity
 from common.topics import ORDER_EVENTS_PATTERN, STOCK_COMMANDS
 from inventory_service.checks import ClearResult, clear_check
 from inventory_service.commands import make_consumed_handler, make_release_handler
+from inventory_service.dishes import (
+    HEARTBEAT_EVERY_S,
+    HeartbeatSender,
+    bump_epoch,
+    snapshot,
+)
 from inventory_service.orders import Limits, make_order_created_handler
 from inventory_service.stock import load_seed, receive_stock
 
@@ -75,6 +81,8 @@ def start_workers(dsn: str, bootstrap: str) -> Workers:
     workers = Workers()
     workers.start("consumer", consumer.run)
     workers.start("outbox-relay", relay.run)
+    every_s = float(os.environ.get("INVENTORY_HEARTBEAT_S", str(HEARTBEAT_EVERY_S)))
+    workers.start("heartbeat", HeartbeatSender(connect, clock, every_s).run)
     return workers
 
 
@@ -156,9 +164,9 @@ def list_stock(conn: Conn) -> list[StockItem]:
 
 
 @app.post("/stock/receipts", responses={404: {"description": "No such ingredient"}})
-def stock_receipt(body: Receipt, conn: Conn) -> StockItem:
-    """Stock receipt: adds to available stock. Phase 2 adds the dish-status computation."""
-    if not receive_stock(conn, body.ingredient_id, body.quantity):
+def stock_receipt(body: Receipt, conn: Conn, clock: ClockDep) -> StockItem:
+    """Stock receipt: adds to available stock and recomputes the ingredient's dishes."""
+    if not receive_stock(conn, body.ingredient_id, body.quantity, clock):
         raise HTTPException(404, f"no ingredient {body.ingredient_id}")
     item = _stock_item(conn, body.ingredient_id)
     conn.commit()  # before the response: a 200 means the change is stored
@@ -192,6 +200,42 @@ def clear_stock_check(
     item = _stock_item(conn, ingredient_id)
     conn.commit()  # before the response: a 200 means the change is stored
     return item
+
+
+class DishVersion(BaseModel):
+    dish_id: str
+    status: Literal["CON", "HET", "AN"]
+    epoch: int
+    seq: int
+
+
+class MenuSnapshot(BaseModel):
+    epoch: int
+    """The current epoch: a branch moves every dish still at an older epoch to Hidden."""
+    dishes: list[DishVersion]
+
+
+@app.get("/menu/snapshot")
+def menu_snapshot(conn: Conn) -> MenuSnapshot:
+    """Flow C: the status and version of every dish, Hidden ones included. The one API another
+    service calls (a branch, on start, on reconnecting and on a new epoch)."""
+    snap = snapshot(conn)
+    return MenuSnapshot(
+        epoch=snap.epoch,
+        dishes=[DishVersion(**vars(d)) for d in snap.dishes],
+    )
+
+
+class Bumped(BaseModel):
+    epoch: int
+
+
+@app.post("/admin/epoch/bump")
+def epoch_bump(conn: Conn, clock: ClockDep) -> Bumped:
+    """After Inventory is restored from a backup (section 3 of document 02, scenario 20)."""
+    epoch = bump_epoch(conn, clock)
+    conn.commit()
+    return Bumped(epoch=epoch)
 
 
 class Alert(BaseModel):

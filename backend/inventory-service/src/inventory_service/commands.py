@@ -22,6 +22,7 @@ from common.alerts import UNMATCHED_COMMAND, write_alert
 from common.clock import Clock
 from common.consumer import Handler, Incoming
 from inventory_service.checks import emit_check_changed
+from inventory_service.dishes import recompute_dishes
 
 log = logging.getLogger(__name__)
 
@@ -86,6 +87,9 @@ def make_release_handler(clock: Clock) -> Handler:
                 env.event_id,
                 ", ".join(unknown),
             )
+        # Flow C: released stock and flags change dishes. dish_status rows are locked before
+        # menu_version, which the flag messages below take (section 3 of document 02).
+        recompute_dishes(conn, [i for i, _ in lines], clock)
         for ingredient_id in newly_flagged:  # menu_version is locked last
             emit_check_changed(conn, ingredient_id, True, clock)
         log.info(
