@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# The performance test (section 2 of docs/04-course-report.md) on the running full cluster:
+#
+#   docker compose --profile full up -d --wait
+#   bin/perf                  250 users on each API of perf/plan.jmx, one API after another
+#   bin/perf -Jusers=50       any JMeter property: users, rampup (seconds), loops
+#
+# Leaves in perf/results/: results.jtl (every request), statistics.json (aggregate per API),
+# html/ (JMeter's dashboard, not committed), stats.csv (docker stats while the load ran),
+# latency.json (order creation to Reserved), run.txt. Then writes the report's table to
+# report/generated/hieu-nang.md. The orders it places stay in the cluster's databases.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+compose=(docker compose --profile full --profile perf)
+out=perf/results
+for port in 8101 8201 8301 8401; do
+  curl -fsS -o /dev/null "http://localhost:$port/health" ||
+    { echo "a service on port $port does not answer: docker compose --profile full up -d --wait" >&2; exit 1; }
+done
+
+rm -rf "$out"
+mkdir -p "$out"
+# Stock for the orders the test places: TRA_DA takes LA_TRA 0.005 kg and DA 0.3 kg a portion.
+for receipt in DA:120 LA_TRA:2; do
+  curl -fsS -o /dev/null -X POST http://localhost:8101/stock/receipts -H 'Content-Type: application/json' \
+    -d "{\"ingredient_id\": \"${receipt%%:*}\", \"quantity\": \"${receipt##*:}\"}"
+done
+
+"${compose[@]}" build -q jmeter
+cpus=$(docker info --format '{{.NCPU}}')
+memory=$(docker info --format '{{.MemTotal}}' | awk '{printf "%.1f", $1 / 1073741824}')
+echo "$(date '+%d/%m/%Y %H:%M'), Apache JMeter 5.6.3, Docker với ${cpus} CPU và ${memory} GiB bộ nhớ, thuộc tính: ${*:-mặc định (users=250, rampup=1, loops=1)}" > "$out/run.txt"
+
+# Resource use while the load runs.
+(
+  while :; do
+    now=$(date +%s)
+    docker stats --no-stream --format '{{.Name}};{{.CPUPerc}};{{.MemUsage}}' | sed "s/^/$now;/"
+  done
+) > "$out/stats.csv" &
+sampler=$!
+trap 'kill $sampler 2>/dev/null || true' EXIT
+
+"${compose[@]}" run --rm jmeter -n -t /perf/plan.jmx \
+  -l /perf/results/results.jtl -j /perf/results/jmeter.log -e -o /perf/results/html "$@"
+kill "$sampler"
+wait "$sampler" 2>/dev/null || true
+trap - EXIT
+cp "$out/html/statistics.json" "$out/statistics.json"
+
+docker compose exec -T tools python scripts/perf_latency.py
+docker compose exec -T tools python scripts/report_perf.py > report/generated/hieu-nang.md
+echo "summary: report/generated/hieu-nang.md; dashboard: $out/html/index.html"

@@ -12,7 +12,7 @@ Course project on distributed systems: order taking for a restaurant chain. Bran
 ## Current phase: implementation
 
 - `.claude/project-phase` contains `code`. Only the user changes that file; a hook blocks edits to it.
-- The order of work is section 4 of `docs/03-implementation-plan.md`; steps 0 to 6 are done (preparation, the shared `common` module, Inventory, the Kitchen, the branch), and section 7 there records the progress. Next: the screens (step 6b). The final report follows the lecturer's template; document 04 says what it needs. Business code is written one scenario at a time with `/scenario <n>`, screens one at a time with `/screen <name>`.
+- The order of work is section 4 of `docs/03-implementation-plan.md`; steps 0 to 6b are done (preparation, the shared `common` module, Inventory, the Kitchen, the branch, the screens) and most of step 7 (reporting and scenario 55, scenario 42 on two instances, the performance test, CI); section 7 there records the progress. Next: the rest of step 7, then the report material (step 8) and phase 2. The final report follows the lecturer's template; document 04 says what it needs. Business code is written one scenario at a time with `/scenario <n>`, screens one at a time with `/screen <name>`.
 - The project is built from scratch, with no existing codebase to follow.
 
 ## Layout and commands
@@ -24,6 +24,7 @@ Course project on distributed systems: order taking for a restaurant chain. Bran
 | `backend/` | Python 3.12 uv workspace and its `Dockerfile` (one image for every Python container): `common/`, `order-service/`, `inventory-service/`, `kitchen-service/`, `query-service/`, each with `src/`, `tests/`, `migrations/`; `scripts/` for the init jobs and tools |
 | `frontend/` | TypeScript screens: React, Vite, Mantine, TanStack Query |
 | `bin/chaos` | Fault injection on the running cluster: a branch offline, a broker or service stopped, replication cut |
+| `perf/`, `bin/perf` | The JMeter load test (`perf/plan.jmx`); `bin/perf` runs it and writes `report/generated/hieu-nang.md` |
 | `report/` | The course report in Vietnamese, in the lecturer's template: Markdown with Mermaid diagrams, `generated/` from scripts, `build.sh` exports Word. `report/README.md` says how |
 
 Everything runs in Docker; nothing is installed on the host. Source is mounted into the containers, so a code change reloads the service; a change to `pyproject.toml` or `uv.lock` needs `docker compose build`. Section 2 of `docs/03-implementation-plan.md` explains the containers and networks.
@@ -39,6 +40,7 @@ Everything runs in Docker; nothing is installed on the host. Source is mounted i
 | Backend format, lint, types | `docker compose exec tools ruff format .`, `… ruff check .`, `… pyright` |
 | Frontend tests, types, format and lint | `docker compose exec frontend npx --no-install vitest run`, `… tsc --noEmit`, `… biome check --write .` |
 | Faults | `bin/chaos offline pos01`, `bin/chaos stop kafka2`, `bin/chaos cut-replication pos01`, `bin/chaos status` |
+| Performance test | `bin/perf` (250 users per API; `-Jusers=50` for a lighter run) |
 | API types for the screens | `docker compose exec tools python scripts/dump_openapi.py`, then `docker compose exec frontend npm run gen:api` |
 
 | URL | What |

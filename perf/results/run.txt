@@ -1,0 +1,1 @@
+22/11/2026 12:11, Apache JMeter 5.6.3, Docker với 4 CPU và 5.8 GiB bộ nhớ, thuộc tính: mặc định (users=250, rampup=1, loops=1)

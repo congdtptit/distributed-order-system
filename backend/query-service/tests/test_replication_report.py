@@ -114,7 +114,8 @@ def test_cutting_replication_from_pos01_stops_only_its_data_as_of_time(chaos: Ch
     # Both branches' data is current before the cut.
     def both_fresh() -> bool:
         lines = report()
-        return all((lines[b]["data_age_s"] or 1e9) < 2 * BEAT_S for b in BRANCH_API)
+        ages = [lines[b]["data_age_s"] for b in BRANCH_API]
+        return all(age is not None and age < 2 * BEAT_S for age in ages)
 
     wait_for("both branches to replicate", 30, both_fresh)
 

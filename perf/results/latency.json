@@ -1,0 +1,14 @@
+{
+  "orders": 30,
+  "by_status": {
+    "DA_GIU": 30
+  },
+  "poll_ms": 20.0,
+  "reserved_ms": {
+    "min": 136,
+    "mean": 218,
+    "median": 206,
+    "p95": 229,
+    "max": 382
+  }
+}

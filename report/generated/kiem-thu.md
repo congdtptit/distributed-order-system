@@ -35,7 +35,7 @@
 | 36 | POS gửi đơn rồi mất mạng, thu ngân bấm hủy; khi có mạng lại, Bếp đã bấm Bắt đầu nấu trước khi nhận yêu cầu hủy | Chi nhánh thấy "Không hủy được: bếp đã bắt đầu nấu"; đơn đi tiếp tới Hoàn tất; nguyên liệu không bị hoàn | BR5, BR7 | Tầng 3 | 1 | Đạt |
 | 37 | Thu ngân bấm hủy đúng lúc bộ gửi lấy gói tạo đơn chưa từng thử gửi | Đúng một bên thắng: hoặc đơn bị hủy cục bộ và không gói nào được gửi, hoặc gói được gửi và yêu cầu hủy đi qua Bếp | BR9 | Tầng 2 | 1 | Đạt |
 | 39 | Inventory nhận đơn đọc được nhưng có số lượng âm | Kho ghi bản ghi Thất bại (dữ liệu đơn không hợp lệ), không giữ; chi nhánh thấy Thất bại; tin không vào dlq | BR12 | Tầng 2 | 1 | Đạt |
-| 42 | Hai đơn tới cùng lúc ở hai instance Inventory, cùng cần một nguyên liệu, tổng nhu cầu vượt tồn khả dụng | Đúng một đơn Đã giữ, đơn kia Thất bại; tồn khả dụng không âm; không đơn nào được giữ một phần | BR1 | Tầng 2 | 1 | Đạt |
+| 42 | Hai đơn tới cùng lúc ở hai instance Inventory, cùng cần một nguyên liệu, tổng nhu cầu vượt tồn khả dụng | Đúng một đơn Đã giữ, đơn kia Thất bại; tồn khả dụng không âm; không đơn nào được giữ một phần | BR1 | Tầng 2 | 2 | Đạt |
 | 43 | Kho có 10 kg thịt; một đơn giữ 2 kg rồi Bếp bấm Bắt đầu nấu | Tồn khả dụng là 8 kg trước và sau khi nấu; đang giữ về 0; đã dùng tăng 2 kg | Mục 3.3 | Tầng 1 | 1 | Đạt |
 | 44 | Thịt đang bị đánh dấu cần kiểm kho, tồn khả dụng còn đủ; POS mất mạng vẫn nhận đơn có món dùng thịt rồi gửi đi | Kho trả Thất bại (nguyên liệu đang chờ kiểm kho); không nguyên liệu nào của đơn bị giữ | BR6 | Tầng 2 | 1 | Đạt |
 | 48 | Thịt đang bị đánh dấu cần kiểm kho, một phiếu Chờ nấu có thịt đang hiện cảnh báo; Kho xác nhận kiểm kho xong | Cờ được gỡ; cảnh báo trên phiếu mất; đơn mới dùng thịt được giữ; món dùng thịt về Còn | BR6 | Tầng 1 | 2 | Đạt (Phần đợt 1 đạt; phần món trở lại Còn thuộc đợt 2) |
@@ -45,13 +45,13 @@
 | 52 | Hai nhân viên bấm Từ chối và Bắt đầu nấu trên cùng một phiếu Chờ nấu cùng lúc | Đúng một thao tác thắng; lần giữ rời Đang giữ đúng một lần, tới đã dùng hoặc tới hoàn | BR7, BR12 | Tầng 2 | 1 | Đạt |
 | 53 | Kho đang dừng; một đơn nằm ở Chờ Kho quá N phút | Chi nhánh hiện cảnh báo kèm nút Yêu cầu hủy; đơn không tự đổi trạng thái | Luồng D | Tầng 1 | 1 | Đạt |
 | 54 | POS mất mạng; một đơn trong hàng chờ gửi còn chưa tới 1 giờ là quá hạn X | Chi nhánh hiện mất kết nối, số gói đang chờ gửi và cảnh báo đơn sắp quá hạn | Luồng D | Tầng 1 | 1 | Đạt |
-| 55 | Ngắt nhân bản từ POS01 về Central Order Replica trong khi POS01 và POS02 vẫn nhận đơn, rồi nối lại | Trong lúc ngắt, báo cáo vẫn xem được, mốc "dữ liệu tính đến" của POS01 dừng lại còn của POS02 vẫn chạy; khi nối lại, số liệu của POS01 khớp với DB của chi nhánh | Luồng D, mục 13.5 | Tầng 3 |  | Chưa kiểm thử |
+| 55 | Ngắt nhân bản từ POS01 về Central Order Replica trong khi POS01 và POS02 vẫn nhận đơn, rồi nối lại | Trong lúc ngắt, báo cáo vẫn xem được, mốc "dữ liệu tính đến" của POS01 dừng lại còn của POS02 vẫn chạy; khi nối lại, số liệu của POS01 khớp với DB của chi nhánh | Luồng D, mục 13.5 | Tầng 3 | 1 | Đạt |
 
 | Tổng hợp kết quả kiểm thử | Số lượng |
 |---|---|
-| Kịch bản đạt | 39 |
+| Kịch bản đạt | 40 |
 | Kịch bản lỗi | 0 |
-| Kịch bản chưa kiểm thử (thuộc các bước sau) | 5 |
+| Kịch bản chưa kiểm thử (thuộc các bước sau) | 4 |
 | Tổng số kịch bản | 44 |
-| Tổng số test tự động đã chạy (kể cả test không gắn kịch bản) | 221 |
+| Tổng số test tự động đã chạy (kể cả test không gắn kịch bản) | 246 |
 | Trong đó test lỗi | 0 |

@@ -1,8 +1,18 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 19 · 22 Nov 2026
+Revision 20 · 22 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the implementation phase; section 7 records what has been built so far. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 20
+
+| Section | Change | Reason |
+|---|---|---|
+| 2 | DB access: a bounded connection pool per service process, entered through an async wait | The performance test found two faults: one new connection per request exceeded PostgreSQL's 100 connections under 250 users, and a pool waited on inside FastAPI's thread pool starved it |
+| 2 | Repository layout: `perf/` and `bin/perf`; end-to-end tests live in the `tests/` of the module they check, not in an `e2e/` folder | Built in step 7; the `e2e/` folder was never needed |
+| 5.6, 5.7 | `ci` gains the `stack` job; the `nightly` workflow is created | Step 7 |
+| 6 | Reporting is built and tested; the partition assignment of the two Inventory instances is tried; resources measured under load | Step 7 |
+| 7 | Step 7: what is built and how it was checked; progress and estimate | Built on 22 Nov 2026 |
 
 ## Changes in revision 19
 
@@ -159,7 +169,7 @@ The project is built from scratch; there is no existing codebase to follow. Pyth
 |---|---|---|
 | Language | Python 3.12 | Light enough to run seven service processes beside three brokers and six databases on one machine; short code that the team can read and explain; the SQL trial-run script is already Python and seeds the test suite |
 | HTTP | FastAPI with Uvicorn | Small, with typed request models; enough for the few endpoints in section 6 of the design |
-| DB access | psycopg 3 with plain SQL, no ORM | The specification and the design are written directly in SQL (`FOR UPDATE`, `ON CONFLICT`, `SAVEPOINT`, conditional UPDATE); an ORM hides exactly the places that need control |
+| DB access | psycopg 3 with plain SQL, no ORM; each service process takes its HTTP requests' connections from one bounded pool (`psycopg_pool`, `DB_POOL_SIZE`, default 10), waited for asynchronously so that waiting holds no thread | The specification and the design are written directly in SQL (`FOR UPDATE`, `ON CONFLICT`, `SAVEPOINT`, conditional UPDATE); an ORM hides exactly the places that need control. The pool came from the performance test (section 7, step 7) |
 | Schema migrations | Numbered SQL files applied by a small runner in `common` | The DDL in the design is already SQL, so there is no extra tool to learn |
 | Kafka in the application | `confluent-kafka`, with a hand-written consumer loop following the five steps of section 13.3 of the specification | It exposes the settings the specification requires (`acks=all`, `enable.idempotence`, auto-commit off, pattern subscription); a hand-written loop makes it easy to insert a stop point between the DB commit and the offset commit for scenario 26 |
 | Infrastructure | Docker Compose: Kafka in KRaft mode with 3 brokers, one PostgreSQL container per DB, every service as its own container | Matches section 13.6 of the specification, including the two Inventory instances |
@@ -184,7 +194,9 @@ The hardest parts of the project, races and deduplication, are solved by row loc
 | `backend/` | One uv workspace: the Python modules below, each with `src/`, `tests/` and `migrations/`; `scripts/` for the init jobs and tools; `seed/menu.json`, the dish catalogue and starting data (section 1 of the design); `conftest.py` with the shared fixtures; the `Dockerfile` of the one image every Python container uses |
 | `frontend/` | The npm project of the screens |
 | `bin/chaos` | Fault injection for the tier 3 scenarios and the demo |
-| `e2e/` | End-to-end scenarios across services, from step 7 |
+| `perf/`, `bin/perf` | The JMeter load test (`perf/plan.jmx`, its image `perf/Dockerfile`) and the script that runs it; the summary files of the latest run stay in `perf/results/` |
+
+End-to-end tests across services live in the `tests/` folder of the module whose outcome they check (`*_e2e.py`, marker `tier3`).
 
 Nothing is installed on the host machine beyond Docker. The containers, by file:
 
@@ -343,17 +355,17 @@ CI runs on GitHub Actions, one workflow file per row in `.github/workflows/`.
 |---|---|---|---|
 | `docs` | Every push to `main` and every pull request | The document consistency check, the same script as the `Stop` hook | Created |
 | `ci` | Every push to `main` and every pull request | `ruff format --check`, `ruff check`, Pyright, then the tier 1 and tier 2 tests against a PostgreSQL service of the workflow. A second job for `frontend`: Biome, `tsc --noEmit`, Vitest | Created in step 0 |
-| `nightly` | Once a night, and on manual start | The tier 3 tests with a real Kafka; they are slow and can be flaky, so they do not block a pull request | Step 7 |
+| `nightly` | Once a night, and on manual start | The tier 3 tests with a real Kafka on the full compose cluster; they are slow and can be flaky, so they do not block a pull request. Keeps the JUnit file as an artifact | Created in step 7; first runs after a push |
 | `review` | Every pull request | Review by `claude-code-action`, with a `REVIEW.md` holding the twelve prohibitions, a turn limit and a timeout | After step 1. It needs an API key stored as a repository secret |
 
-There is no continuous deployment: the system is demonstrated on one machine with Docker Compose and has no server to deploy to. In its place, `ci` gains a job in step 7 that starts `docker compose --profile full` and calls every service's `/health`, so that the demo setup cannot break unnoticed.
+There is no continuous deployment: the system is demonstrated on one machine with Docker Compose and has no server to deploy to. In its place, `ci` has a `stack` job (step 7) that builds the image, starts `docker compose --profile full`, calls every service's `/health` and waits until all three branches replicate to the Central Order Replica, so that the demo setup cannot break unnoticed.
 
 - **Test quality audit:** done by the `test-auditor` subagent inside `/scenario` (section 5.5). Before the demo, one run over every scenario gives the scenario-to-test table.
 - **Not needed for this project:** an MCP server (`psql` and the Kafka CLI through Bash are enough), the Agent SDK and OpenTelemetry.
 
 ### 5.7 Current state of the configuration
 
-Every part was created on 21 Nov 2026, in step 0 or before it. What is left belongs to later steps: the `nightly` and `review` workflows.
+Every part was created on 21 Nov 2026, in step 0 or before it, except the `nightly` workflow (step 7). What is left: the `review` workflow, which needs an API key stored as a repository secret.
 
 | Part | File | State |
 |---|---|---|
@@ -371,22 +383,23 @@ Every part was created on 21 Nov 2026, in step 0 or before it. What is left belo
 | Running the slow tests | `test-runner` subagent | Created |
 | Formatting, the test gate at `Stop`, blocking edits to applied migrations, blocking `DELETE` and auto-commit | `format.sh` (`PostToolUse`), `test-gate.sh` (`Stop`), `code-guard.sh` (`PreToolUse`) | Created and tried with sample inputs |
 | `/invariants` skill, the `ci` workflow | `.claude/skills/invariants/`, `.github/workflows/ci.yml` | Created |
-| The `nightly` and `review` workflows of section 5.6 | | Not created. Step 7, and after step 1 |
+| The `nightly` workflow of section 5.6 | `.github/workflows/nightly.yml` | Created in step 7 |
+| The `review` workflow of section 5.6 | | Not created: needs an API key as a repository secret |
 | Rules for the screens | `.claude/rules/frontend.md`, `paths: frontend/**` | Created |
 | Building one screen | `/screen <name>` skill: read the specification section of the screen, list every state it must show, build it, test its display rules, take a screenshot for the user | Created ahead of step 6b. Its checklist is a UI/UX rule set filtered for this project; the source skill was removed on 22 Nov 2026 |
 
 ## 6. Open risks
 
 - **Python catches fewer errors before the code runs.** Type hints checked by Pyright and the scenario tests have to make up for the missing compiler; both run before a turn ends.
-- **Reporting is designed but not built.** Logical replication was trial-run in step 0 (section 9 of the design): rows arrive, "data as of" stops moving while replication is stopped, and rows written while the central DB is down arrive after it returns. `GET /reports/summary` is still untried.
-- **How Kafka assigns partitions to the two Inventory instances** needs a trial run (point 6 in section 8 of the design). Scenario 42 therefore takes its handler-level test as the main one.
-- **Resources of the demo machine.** Measured on 22 Nov 2026, idle, on a Docker Desktop with 4 CPUs and 5.8 GB of memory: about 2.5 GB for the core profile and 3.1 GB for `full`. The three brokers take about 300–350 MB each (384 MB heap), Kafka UI about 330 MB, each service container about 80 MB, each database about 25–30 MB, the frontend container about 200 MB (without the heap cap Vite held 1 GB). Measure again in step 7, when the services consume and produce.
+- **Reporting** was built in step 7 and scenario 55 passes on the running cluster. Found on the way: reconnecting a cut network without the container's Compose alias left the central DB unable to find the branch DB again (fixed in `bin/chaos` and the test fixture).
+- **How Kafka assigns partitions to the two Inventory instances** was tried in step 7: each instance holds one partition of each `order-events.*` topic, and scenario 42 passes with two real instances (section 9 of the design).
+- **Resources of the demo machine.** Measured on 22 Nov 2026, idle, on a Docker Desktop with 4 CPUs and 5.8 GB of memory: about 2.5 GB for the core profile and 3.1 GB for `full`. The three brokers take about 300–350 MB each (384 MB heap), Kafka UI about 330 MB, each service container about 80 MB, each database about 25–30 MB, the frontend container about 200 MB (without the heap cap Vite held 1 GB). Measured again in step 7 under the performance test (250 users per API): the whole cluster peaked at about 3.1 GB, so memory hardly moves with load; CPU rises in the service under load and its database (`report/generated/hieu-nang.md`).
 - **A second toolchain.** Node and npm run in their own container, like the Python tools. Their `node_modules` stay inside the container, so the editor sees the TypeScript types only when the project is opened in the dev container. Major versions move fast there: step 0 found that TypeScript 7 breaks `openapi-typescript`.
 - **Tier 3 scenarios tend to be flaky.** They depend on when containers stop and start; they need explicit wait conditions instead of waiting on time. On 22 Nov 2026 one full run had a failure that the summary did not name; with `-rf` the next one was named: scenario 31's test required a batch in flight at the instant of the kill, which a fast relay sometimes did not leave. Fixed by asserting what the scenario names (orders still being sent).
 
 ## 7. Progress
 
-Updated 22 Nov 2026, after step 6. A step is done when its scenarios pass, the code passes Ruff and Pyright, the reviews of section 5.3 are closed, and its sections of the report in `report/` are updated.
+Updated 22 Nov 2026, during step 7. A step is done when its scenarios pass, the code passes Ruff and Pyright, the reviews of section 5.3 are closed, and its sections of the report in `report/` are updated.
 
 | Step | State | Scenarios passing |
 |---|---|---|
@@ -397,12 +410,12 @@ Updated 22 Nov 2026, after step 6. A step is done when its scenarios pass, the c
 | 4. Kitchen: tickets, buttons, warnings | Done 22 Nov 2026 | 4, 50, 52; the Kitchen parts of 6 and 48 |
 | 5. Kitchen: cancel requests | Done 22 Nov 2026 | 1, 2, 3, 8, 23, 25, 27, 28, 33, 34, 35, 51 |
 | 6. Branch | Done 22 Nov 2026 | 7, 10, 12, 36, 37, 53, 54; the branch side of 1, 3, 4, 8, 23, 24, 31, 33 |
-| 6b. Screens | Done 22 Nov 2026, except the Management screen (step 7) | – |
-| 7. Integration | After step 6 | 0 of 1 (scenario 55), plus the end-to-end versions and the performance test |
+| 6b. Screens | Done 22 Nov 2026; the Management screen followed in step 7 | – |
+| 7. Integration | Mostly done 22 Nov 2026: reporting, the Management screen, the performance test, CI. Left: the `stack` job and `nightly` run only after a push | 55; the end-to-end versions of 1, 3 and 42 |
 | 8. Report material | After step 7 | – |
 | Phase 2 | After phase 1 | 0 of 4 |
 
-**Scenarios:** 39 of 44 pass at their step (89 %). Of those, 6 and 48 wait for phase 2 for their dish-status part. Left: 55 (step 7) and 18–21 (phase 2). **Estimate of work done:** about 69 % of the whole project (59 % after step 6, then 9 of the 11 points of the screens and 1 of integration for the two Flow D APIs built early), weighting each step by its expected effort. The report template added a performance test and report material, so the weights were rescaled on 22 Nov 2026: preparation 13 %, step 1 9 %, Inventory 13 %, Kitchen 13 %, branch 11 %, screens 11 %, integration and reporting 9 %, performance test 5 %, report material 8 %, phase 2 5 %, demo 3 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.
+**Scenarios:** 40 of 44 pass (91 %); the full run on 22 Nov 2026 had 246 backend tests, none failing. Of those, 6 and 48 wait for phase 2 for their dish-status part. Left: 18–21 (phase 2). **Estimate of work done:** about 82 % of the whole project: 59 % after step 6, the screens' full 11 %, 7 of the 9 points of integration and reporting (left: the CI runs on GitHub and the final review of section 5.5) and the performance test's 5 %, weighting each step by its expected effort. The weights, rescaled on 22 Nov 2026: preparation 13 %, step 1 9 %, Inventory 13 %, Kitchen 13 %, branch 11 %, screens 11 %, integration and reporting 9 %, performance test 5 %, report material 8 %, phase 2 5 %, demo 3 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.
 
 ### What step 1 built
 
@@ -518,3 +531,21 @@ Also: the branch DB's `alerts` table (migration `003`, decided by @Naul on 22 No
 - **Against the running cluster:** each screen was looked at with real data: pos01 cut off Kafka (`bin/chaos offline pos01`) for the branch's connection badge, a spoiled-ingredient rejection for the Kitchen's red warning and the Inventory flag, pos02 stopped for the Monitor's "not answering" row.
 - **Checklist findings, fixed:** the branch page overflowed sideways (grid columns without `minWidth: 0`); reduced motion was not respected; some targets were under 24px; status badges lacked icons; the Kitchen's alerts sat below the tickets; the wall screen used one card per row.
 - **Process slip:** one commit of the Monitor screen went in with a failing test, because a `| grep` hid vitest's exit code; fixed in the next commit, and commits are now gated on the test command's own status.
+
+### What step 7 built
+
+- **Reporting.** Every branch beats its `replication_heartbeat` row every 5 seconds (`order_service/heartbeat.py`); the Order Query Service answers `GET /reports/summary` from the Central Order Replica in one read-only snapshot ("Reporting in practice", revision 15 of the design). The Management screen (`/reports`) shows each branch's "data as of" time and age, the counts by status with a chain total, and the Cancelled and Failed orders by reason.
+- **Scenario 55** on the running cluster, and **scenario 42 with two real Inventory instances** (each instance's log shows it handled the order of its own partition).
+- **The performance test**: Apache JMeter 5.6.3 in its own container on `api-net` (`perf/`, `bin/perf`), 250 users on each of six APIs, `docker stats` during the load, and the time from creating an order to Reserved (`report/generated/hieu-nang.md`).
+- **The connection pool** of every service's HTTP API (section 2), from the two faults the performance test found.
+- **CI**: the `stack` job of `ci` and the `nightly` workflow (section 5.6).
+- **`bin/chaos` and the `chaos` fixture** give a reconnected container its Compose alias back.
+- **End-to-end versions of the demo scenarios**: 1 (Inventory stopped, the cancel reaches the Kitchen first) and 3 (cancel and Start cooking pressed together, five rounds with the start held back 0–0.6 s) on the running cluster, beside the existing 4, 10 and 36. The other scenarios that span services keep their handler chains in tier 1 (the branch's tests hand its real messages to the real Inventory and Kitchen handlers), which decide the same rules without Kafka timing.
+
+### How step 7 was checked
+
+- **Tests:** the full run has 246 backend tests, none failing (tier 3 included, 5 minutes), and 82 frontend tests. Scenario 55 passed three runs in a row; scenario 42 on two instances three runs; scenario 3's five rounds produced both outcomes in one run (three cancels won, two starts).
+- **The tests can fail:** reconnecting without the Compose alias fails scenario 55 at "a POS01 beat after the branch was read"; a first version of that test compared the branch's figures with a beat that could never be newer, and passed only by luck: found by the mutation run and rewritten. The two pool faults each have a test that reproduced them first (`backend/common/tests/test_api.py`): ten requests on a pool of two, and twenty requests through a real server with four threads.
+- **Reviews:** the specification review of the pool found no fault: transaction boundaries, rollback on errors and the lock order are unchanged, and no handler leaves session state on a pooled connection. Its notes: when a database is down a request now waits up to about 60 s for a 503 instead of failing at once; the apps' tests replace `get_conn`, so only `test_api.py` exercises the pool. The test audit asked scenario 42's two-instance test to check that the winner holds every line of the recipe, not only that the loser holds none; added.
+- **Performance:** 1,500 requests (250 users on each of six APIs) with no error after the fix; an order goes from creation to Reserved in about 0.2 s; the cluster peaks at about 3.1 GB. `GET /tickets` was the slowest (4.6 s on average) because 556 tickets left by earlier test runs were Queued; the run should be repeated on a clean cluster before the report is final.
+

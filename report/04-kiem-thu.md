@@ -23,7 +23,7 @@ Không dùng mock thay cho PostgreSQL hay Kafka. Bảng dưới đây sinh từ 
 Thực hiện kiểm thử hệ thống đặt món phân tán đáp ứng các nội dung kiểm thử bao gồm:
 
 - Kiểm thử chức năng, trong đó có tính phân tán: mô hình và kịch bản kiểm thử tính phân tán của hệ thống, khả năng chịu lỗi và phục hồi (mục "Mô hình kiểm thử tính phân tán" dưới đây).
-- Kiểm thử hiệu năng: mức độ sử dụng tài nguyên và khả năng đáp ứng khi nhiều người dùng đồng thời (bước 7).
+- Kiểm thử hiệu năng: mức độ sử dụng tài nguyên và khả năng đáp ứng khi nhiều người dùng đồng thời (mục 2.4.2).
 
 ##### Mô hình kiểm thử tính phân tán
 
@@ -60,6 +60,8 @@ flowchart LR
 | 12 | Gửi lỗi nhiều lần sau khi đã thử gửi | Hàng chờ của chi nhánh gửi tới một topic mà broker chưa có (thăm dò vẫn thành công nên mục được đặt cờ), lặp nhiều vòng, rồi tạo topic | Không mục nào bị bỏ; mục hủy không đi trước mục tạo đơn; khi gửi được thì đủ mọi mục, đúng thứ tự theo đơn; đơn khác không bị chặn | Đạt |
 | 31 (chi nhánh) | Broker đang làm leader bị kill khi chi nhánh đang gửi đơn | `kill` (SIGKILL) container leader trong lúc đơn mới liên tục được tạo và hàng chờ của chi nhánh đang gửi | Mọi mục Kafka đã xác nhận đều đọc lại được; gửi vẫn tiếp tục với broker còn lại | Đạt |
 | 28, 42 | Hai instance cùng xử lý một đơn | Hai kết nối CSDL chạy song song, lặp 100 lần (bước 7 bổ sung bản chạy hai instance thật trên Kafka) | Chỉ một bản ghi, kết quả đúng bảng 3.2 dù tin nào đến trước (28); đúng một đơn được giữ, kho không âm (42) | Đạt |
+| 1 | Yêu cầu hủy tới Bếp trước đơn (kịch bản demo) | Dừng mọi instance Inventory, tạo đơn ở `pos01` và hủy qua API; bật lại Kho | Bếp có bản ghi Hủy chờ đơn và chi nhánh hiện "Bếp sẽ không nấu"; khi Kho chạy lại: không có phiếu, đơn `DA_HUY`, mọi dòng giữ `DA_HOAN`, tồn kho trở về đúng như trước | Đạt |
+| 3 | Hủy và Bắt đầu nấu cùng lúc (kịch bản demo) | Bấm hủy ở `pos01` và Bắt đầu nấu ở Bếp cùng lúc, nút Bếp lệch 0–0,6 giây, 5 vòng | Mỗi vòng đúng một bên thắng và ba phía cùng kết cục: hủy thắng thì Bếp, chi nhánh `DA_HUY` và Kho hoàn kho; nấu thắng thì chi nhánh hiện "Không hủy được", Kho ghi đã dùng, đơn tới `HOAN_TAT`. Một lần chạy ra cả hai kết cục | Đạt |
 | 42 (hai instance thật) | Hai đơn cùng lúc tới hai instance Inventory, cùng cần một nguyên liệu chỉ đủ cho một đơn | Chọn trước hai `order_id` rơi vào hai partition khác nhau của `order-events.POS01` (CRC32 của key), gửi cùng lúc; `inventory-1` và `inventory-2` cùng một nhóm consumer; 5 vòng mỗi lần chạy | Log của mỗi instance cho thấy nó xử lý đúng một đơn, từ partition của mình; đúng một đơn `DANG_GIU`, đơn kia `THAT_BAI` và không có dòng giữ nào; tồn kho không âm; hai bất biến của Kho đúng | Đạt (3 lần liên tiếp) |
 | 55 | Cắt nhân bản từ POS01 về Central Order Replica trong khi POS01 và POS02 vẫn nhận đơn | Tách `pos01-db` khỏi mạng `replication-net`, tạo hai đơn ở mỗi chi nhánh, chờ ba nhịp `replication_heartbeat` của POS02, nối mạng lại | Trong lúc cắt: `GET /reports/summary` vẫn trả lời; mốc "dữ liệu tính đến" của POS01 đứng yên, của POS02 vẫn chạy; đơn mới của POS01 chưa có ở `central-db`, đơn của POS02 đã có. Sau khi nối lại: số liệu POS01 trong báo cáo khớp với CSDL của chi nhánh | Đạt (3 lần liên tiếp) |
 
@@ -74,7 +76,7 @@ Quá trình kiểm thử sử dụng kiểm thử hộp đen ở mức dịch v�
 | | confluent-kafka (client Kafka trong test) | Confluent (nguồn mở) | 2.16.1 |
 | | Docker Engine API (gây lỗi) | Docker | 28.4.0 |
 | Kiểm thử giao diện | Vitest, Testing Library, MSW | nguồn mở | theo `frontend/package-lock.json` |
-| Kiểm thử hiệu năng | Apache JMeter | Apache Software Foundation | (bước 7) |
+| Kiểm thử hiệu năng | Apache JMeter (trong container, trên Java 21 của Eclipse Temurin) | Apache Software Foundation | 5.6.3 |
 
 #### 2.3. Môi trường kiểm thử
 
@@ -94,4 +96,26 @@ Bảng tổng hợp ở cuối mục 1 (kịch bản đạt, lỗi, chưa kiểm
 
 ##### 2.4.2. Kết quả kiểm thử hiệu năng
 
-> TODO(bước 7): Apache JMeter chạy trong container trên mạng `api-net`, 250 người dùng đồng thời cho mỗi chức năng: `POST /orders`, `GET /dishes`, `GET /orders`, `GET /tickets`, `GET /stock`, `GET /reports/summary`. Bảng chức năng được kiểm thử, bảng trường hợp kiểm thử (vai trò, số người), bảng kết quả (mẫu, trung bình, thấp nhất, cao nhất, lỗi %, thông lượng), kèm mức dùng CPU và RAM từ `docker stats` và thời gian từ lúc tạo đơn đến khi chi nhánh nhận Đã giữ.
+Apache JMeter 5.6.3 chạy trong container `jmeter` trên mạng `api-net` (mạng mà giao diện dùng), gọi thẳng API của các dịch vụ bằng tên dịch vụ. Kế hoạch tải nằm ở `perf/plan.jmx`; lệnh `bin/perf` chạy toàn bộ: nhập thêm kho cho món dùng trong test, chạy tải, ghi `docker stats` trong lúc chạy, đo thời gian một đơn đi trọn đường, rồi sinh bảng kết quả `report/generated/hieu-nang.md`.
+
+**Các chức năng được kiểm thử.**
+
+| STT | Chức năng | API | Dịch vụ |
+|---|---|---|---|
+| 1 | Tạo đơn (món Trà đá, 1 phần) | `POST /orders` | POS01 |
+| 2 | Xem danh mục món | `GET /dishes` | POS01 |
+| 3 | Xem danh sách đơn (200 đơn gần nhất) | `GET /orders` | POS01 |
+| 4 | Xem danh sách phiếu bếp | `GET /tickets` | Kitchen |
+| 5 | Xem tồn kho | `GET /stock` | Inventory (hai instance) |
+| 6 | Xem báo cáo tổng hợp | `GET /reports/summary` | Order Query Service |
+
+**Trường hợp kiểm thử.** Mỗi chức năng chịu 250 người dùng đồng thời (khởi động trong 1 giây, mỗi người gửi một yêu cầu); các chức năng được chạy lần lượt, chức năng sau bắt đầu khi chức năng trước xong, nên mỗi bảng số đo chỉ thuộc về một chức năng. Tổng cộng 1.500 yêu cầu. Vai trò: thu ngân (1–3), nhân viên bếp (4), nhân viên kho (5), quản lý (6).
+
+**Hai lỗi kiểm thử hiệu năng tìm ra.** Lần chạy đầu tiên có 47 % yêu cầu lỗi (HTTP 500) ở cả sáu chức năng. Nguyên nhân: mỗi yêu cầu HTTP tự mở một kết nối PostgreSQL mới, nên 250 yêu cầu cùng lúc vượt giới hạn 100 kết nối của PostgreSQL ("too many clients already"). Cách sửa thứ nhất là dùng pool kết nối giới hạn 10 kết nối cho mỗi tiến trình dịch vụ (`psycopg_pool`). Lần chạy thứ hai còn tệ hơn: phần lớn yêu cầu hết 60 giây chờ. FastAPI chạy phần lấy kết nối trong threadpool 40 luồng; các yêu cầu đang chờ pool chiếm hết 40 luồng, nên 10 yêu cầu đã có kết nối không còn luồng để chạy tiếp, và tất cả kẹt cho tới khi hết thời gian chờ. Cách sửa thứ hai là cho yêu cầu chờ trên một semaphore bất đồng bộ (không chiếm luồng) trước khi lấy kết nối, nên số yêu cầu vào tới threadpool để lấy kết nối không bao giờ vượt kích thước pool. Cả hai tình huống đều có test tự động tái hiện (`backend/common/tests/test_api.py`). Sau hai lần sửa, kết quả như dưới đây.
+
+**Kết quả.** Không có yêu cầu nào lỗi. `GET /tickets` chậm nhất vì lúc đo Bếp có 556 phiếu Chờ nấu (250 phiếu do chính bài tải tạo ra, phần còn lại do các lần kiểm thử trước để lại): mỗi câu trả lời nặng khoảng 214 KB và mất khoảng 0,36 giây khi chạy một mình, rồi 250 yêu cầu chia nhau 10 kết nối của Bếp. Thời gian một đơn đi trọn đường từ lúc tạo tới khi chi nhánh thấy Đã giữ, khoảng 0,2 giây, không đổi so với lúc không tải. Khi chạy tải, toàn cụm dùng khoảng 3,1 GB bộ nhớ, gần như bằng lúc không tải; CPU tăng chủ yếu ở dịch vụ đang bị gọi và CSDL của nó.
+
+
+Bảng dưới đây sinh từ lần chạy `bin/perf` gần nhất:
+
+<!-- include: generated/hieu-nang.md -->

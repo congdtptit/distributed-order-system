@@ -34,3 +34,7 @@ frontend/dist/
 
 # Test results the nightly workflow writes before uploading them
 report/generated/junit-*.xml
+
+# The JMeter dashboard and log of bin/perf (the summary files are kept)
+perf/results/html/
+perf/results/jmeter.log

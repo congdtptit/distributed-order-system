@@ -135,7 +135,14 @@ def test_two_instances_each_take_one_order_and_exactly_one_is_reserved(
             # Exactly one order is Reserved and the other is Failed.
             assert sorted(statuses.values()) == ["DANG_GIU", "THAT_BAI"], statuses
             [failed] = [o for o, s in statuses.items() if s == "THAT_BAI"]
-            # No order is partially reserved.
+            [winner] = [o for o, s in statuses.items() if s == "DANG_GIU"]
+            # No order is partially reserved: the winner holds every line of the recipe, the
+            # loser none.
+            assert sorted(reserved_lines(winner)) == [
+                ("BUN", D("0.200")),
+                ("RAU_SONG", D("0.050")),
+                ("THIT_LON", D("0.150")),
+            ]
             assert reserved_lines(failed) == []
             # Available stock is not negative (0.2 - 0.15), and the books balance.
             assert available("THIT_LON") == D("0.05")

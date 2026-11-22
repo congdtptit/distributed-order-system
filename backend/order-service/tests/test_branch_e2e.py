@@ -4,6 +4,7 @@ is ``bin/chaos offline pos01``: the container is cut off ``kafka-net`` through t
 Engine API and keeps its DB and API."""
 
 import json
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -35,6 +36,10 @@ class Chaos(Protocol):
 
     def disconnect(self, service: str, network: str = "kafka-net") -> None: ...
     def connect(self, service: str, network: str = "kafka-net") -> None: ...
+    def stop(self, service: str) -> None: ...
+    def start(self, service: str) -> None: ...
+    def wait_healthy(self, service: str, timeout_s: float = 120) -> None: ...
+    def health(self, service: str) -> str: ...
 
 
 def http(method: str, url: str, body: Any = None) -> tuple[int, Any]:
@@ -257,4 +262,201 @@ def test_a_cancel_sent_after_reconnecting_reaches_a_cooking_ticket(chaos: Chaos)
             "SELECT outcome FROM inventory_reservations WHERE order_id = %s", (order_id,)
         ).fetchall()
     assert outcomes and {r[0] for r in outcomes} == {"DA_DUNG"}  # none released
+    assert_inventory_invariants()
+
+
+def running_inventories(chaos: Chaos) -> list[str]:
+    running: list[str] = []
+    for service in ("inventory-1", "inventory-2"):
+        try:
+            if chaos.health(service) == "healthy":
+                running.append(service)
+        except RuntimeError:  # inventory-2 exists only with --profile full
+            pass
+    return running
+
+
+def stock_of(ingredients: tuple[str, ...]) -> dict[str, Any]:
+    with psycopg.connect(INVENTORY_DB) as conn:
+        rows = conn.execute(
+            "SELECT ingredient_id, available, reserved FROM stock WHERE ingredient_id = ANY(%s)",
+            (list(ingredients),),
+        ).fetchall()
+    return {r[0]: (r[1], r[2]) for r in rows}
+
+
+def line_outcomes(order_id: str) -> list[Any]:
+    with psycopg.connect(INVENTORY_DB) as conn:
+        rows = conn.execute(
+            "SELECT outcome FROM inventory_reservations WHERE order_id = %s", (order_id,)
+        ).fetchall()
+    return [r[0] for r in rows]
+
+
+@pytest.mark.kb(1)
+def test_a_cancel_that_reaches_the_kitchen_before_the_order(chaos: Chaos) -> None:
+    """Scenario 1, one of the demo scenarios: Inventory is down, so the order waits in
+    order-events while the cashier's cancel request reaches the Kitchen first. Inventory then
+    reserves the ingredients and forwards the order. No ticket; the order is Cancelled;
+    Inventory releases in full, once."""
+    stock_for_tra_da(1)
+    stopped = running_inventories(chaos)
+    assert stopped, "no Inventory instance is running"
+    try:
+        for service in stopped:
+            chaos.stop(service)
+        before = stock_of(("LA_TRA", "DA"))
+        order = place_at_pos01()
+        order_id = order["order_id"]
+        wait_for(
+            "the order to be sent", 30, lambda: pos01_order(order_id)["send_state"] == "DA_GUI"
+        )
+        status, body = http(
+            "POST", f"{POS01}/orders/{order_id}/cancel", {"reason_code": "CHANGED_MIND"}
+        )
+        assert status == 202, body
+        # The cancel request reaches the Kitchen before the order: a Cancel-pending record,
+        # and POS01 hears "the kitchen will not cook".
+        wait_for(
+            "the Kitchen's Cancel-pending record",
+            30,
+            lambda: (
+                one(KITCHEN_DB, "SELECT status FROM kitchen_orders WHERE order_id = %s", order_id)
+                == "HUY_CHO_DON"
+            ),
+        )
+        wait_for(
+            "POS01 to show the kitchen will not cook",
+            30,
+            lambda: pos01_order(order_id)["cancel_flag"] == "BEP_KHONG_NAU",
+        )
+        assert pos01_order(order_id)["status"] == "CHO_KHO"
+    finally:
+        for service in stopped:
+            chaos.start(service)
+        for service in stopped:
+            chaos.wait_healthy(service)
+
+    # Inventory reserves, the Kitchen cancels instead of queuing, Inventory releases.
+    wait_for("Cancelled at POS01", 60, lambda: pos01_order(order_id)["status"] == "DA_HUY")
+    wait_for(
+        "Inventory to release the order",
+        60,
+        lambda: (
+            one(INVENTORY_DB, "SELECT status FROM inventory_orders WHERE order_id = %s", order_id)
+            == "DA_TRA"
+        ),
+    )
+    # No ticket: the Kitchen record went from Cancel-pending to Cancelled, never Queued.
+    assert (
+        one(KITCHEN_DB, "SELECT status FROM kitchen_orders WHERE order_id = %s", order_id)
+        == "DA_HUY"
+    )
+    status, tickets = http("GET", f"{KITCHEN}/tickets")
+    assert status == 200
+    assert order_id not in {t["order_id"] for t in tickets}
+    # Inventory releases in full, once: every line released, and the stock is back where it was.
+    outcomes = line_outcomes(order_id)
+    assert outcomes and set(outcomes) == {"DA_HOAN"}
+    assert stock_of(("LA_TRA", "DA")) == before
+    final = pos01_order(order_id)
+    assert (final["close_reason"], final["cancel_flag"]) == ("CHANGED_MIND", "KHONG")
+    assert_inventory_invariants()
+
+
+@pytest.mark.kb(3)
+def test_cancel_and_start_cooking_pressed_together_agree_everywhere() -> None:
+    """Scenario 3, one of the demo scenarios: the cashier presses cancel and the Kitchen presses
+    Start cooking at the same time. Exactly one wins, and the branch, the Kitchen and Inventory
+    agree. The cancel travels through Kafka while Start cooking is a direct call, so the start
+    is held back by a different delay each round; any round may go either way, and each must
+    be consistent. The many-run race on two connections is the Kitchen's tier 2 test."""
+    for delay_s in (0.0, 0.05, 0.15, 0.3, 0.6):
+        race_round(delay_s)
+
+
+def race_round(delay_s: float) -> None:
+    """One round of scenario 3, with Start cooking held back by ``delay_s``."""
+    stock_for_tra_da(1)
+    order = place_at_pos01()
+    order_id = order["order_id"]
+    wait_for("Reserved at POS01", 60, lambda: pos01_order(order_id)["status"] == "DA_GIU")
+    wait_for(
+        "the Queued ticket",
+        30,
+        lambda: (
+            one(KITCHEN_DB, "SELECT status FROM kitchen_orders WHERE order_id = %s", order_id)
+            == "CHO_NAU"
+        ),
+    )
+    answers: dict[str, int] = {}
+    barrier = threading.Barrier(2)
+
+    def cancel() -> None:
+        barrier.wait()
+        answers["cancel"] = http(
+            "POST", f"{POS01}/orders/{order_id}/cancel", {"reason_code": "WAITED_TOO_LONG"}
+        )[0]
+
+    def start(delay: float = delay_s) -> None:
+        barrier.wait()
+        time.sleep(delay)
+        answers["start"] = http("POST", f"{KITCHEN}/tickets/{order_id}/start")[0]
+
+    threads = [threading.Thread(target=cancel), threading.Thread(target=start)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(30)
+    assert answers["cancel"] == 202  # the order was sent: the Kitchen decides
+    assert answers["start"] in (200, 409), answers
+
+    if answers["start"] == 200:
+        # Start cooking won: the cancel is refused, the order goes on and is consumed.
+        refused = wait_for(
+            "POS01 to show the refusal",
+            60,
+            lambda: (o := pos01_order(order_id))["cancel_message"] == CANCEL_REJECTED_MESSAGE and o,
+        )
+        assert (refused["status"], refused["cancel_flag"]) == ("DA_GIU", "KHONG")
+        assert (
+            one(KITCHEN_DB, "SELECT status FROM kitchen_orders WHERE order_id = %s", order_id)
+            == "DANG_NAU"
+        )
+        wait_for(
+            "Inventory to count the order consumed",
+            60,
+            lambda: (
+                one(
+                    INVENTORY_DB,
+                    "SELECT status FROM inventory_orders WHERE order_id = %s",
+                    order_id,
+                )
+                == "DA_DUNG"
+            ),
+        )
+        assert set(line_outcomes(order_id)) == {"DA_DUNG"}
+        status, _ = http("POST", f"{KITCHEN}/tickets/{order_id}/complete")
+        assert status == 200
+        wait_for("Completed at POS01", 60, lambda: pos01_order(order_id)["status"] == "HOAN_TAT")
+    else:
+        # The cancel won: the ticket is Cancelled, the order too, and Inventory releases.
+        wait_for("Cancelled at POS01", 60, lambda: pos01_order(order_id)["status"] == "DA_HUY")
+        assert (
+            one(KITCHEN_DB, "SELECT status FROM kitchen_orders WHERE order_id = %s", order_id)
+            == "DA_HUY"
+        )
+        wait_for(
+            "Inventory to release the order",
+            60,
+            lambda: (
+                one(
+                    INVENTORY_DB,
+                    "SELECT status FROM inventory_orders WHERE order_id = %s",
+                    order_id,
+                )
+                == "DA_TRA"
+            ),
+        )
+        assert set(line_outcomes(order_id)) == {"DA_HOAN"}
     assert_inventory_invariants()

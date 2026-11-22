@@ -27,6 +27,7 @@ Cần cluster đang chạy (`docker compose --profile full up -d --wait`):
 docker compose exec -T tools python scripts/report_schema.py > report/generated/csdl.md
 docker compose exec -T tools sh -c 'pytest -p no:cacheprovider --junitxml=/tmp/junit.xml; \
   python scripts/report_tests.py /tmp/junit.xml > /report/generated/kiem-thu.md'
+bin/perf               # kiểm thử hiệu năng → perf/results/ và report/generated/hieu-nang.md
 ```
 
 ## Xuất file Word
@@ -51,5 +52,5 @@ Script ghép các file theo thứ tự, thay các dòng `<!-- include: … -->` 
 | Giao diện | Có đủ sáu màn: Chi nhánh, Bếp, Kho, Giám sát, Quản lý và trang Demo; ảnh chụp ở bước 8 |
 | Kịch bản kiểm thử | Có; trạng thái sinh từ lần chạy test gần nhất |
 | Mô hình kiểm thử phân tán | Có, gồm cắt mạng chi nhánh thật (kịch bản 10, 36) và cắt nhân bản về trung tâm (kịch bản 55); hai instance thật ở bước 7 |
-| Kiểm thử hiệu năng | Chờ bước 7 (JMeter) |
-| Môi trường, công cụ | Có; bổ sung JMeter ở bước 7 |
+| Kiểm thử hiệu năng | Có: JMeter 5.6.3, 250 người dùng đồng thời cho 6 chức năng, tài nguyên từ `docker stats`, thời gian tạo đơn tới Đã giữ (`generated/hieu-nang.md`) |
+| Môi trường, công cụ | Có |

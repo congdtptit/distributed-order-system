@@ -1,8 +1,14 @@
 # Detailed design – Kafka events, DB schemas and API
 
-Revision 16 · 22 Nov 2026 · @Naul · follows business specification v1.5
+Revision 17 · 22 Nov 2026 · @Naul · follows business specification v1.5
 
 This document turns business specification v1.5 (the lean edition) into three things to code against: the Kafka event catalogue, each service's DB schema, and the API. There is no existing codebase to align with: the base flow is built in this project as well, so the event names, table names, column names and API paths here are the ones to use.
+
+## Changes in revision 17
+
+| Section | Change | Reason |
+|---|---|---|
+| 6 | Every API may answer 503 when its service's database connections stay busy for 30 seconds | The connection pool added after the performance test of step 7 (section 2 of document 03) |
 
 ## Changes in revision 16
 
@@ -609,6 +615,7 @@ Each service exposes only the APIs that a person or a screen needs; services do 
 | Inventory | `POST /admin/epoch/bump` (phase 2) | Runs the `epoch` bump procedure in section 3; used after restoring Inventory and for scenario 20 | 200 with the new `epoch` |
 | Reporting | `GET /reports/summary` | For each branch: the "data as of" time, the number of orders by status, and the number by reason for Cancelled and Failed orders; reads the Central Order Replica only | 200 with `generated_at` and, per branch, `branch_id`, `data_as_of` (null before the first heartbeat arrives), `data_age_s`, `total`, `by_status` (all five statuses), `reasons[{status, reason_code, count}]` for `DA_HUY` and `THAT_BAI` ("Reporting in practice", section 5) |
 
+- **Busy database.** Each service process serves its HTTP requests from at most 10 database connections (`DB_POOL_SIZE`); a request waits for one, and gets 503 "The database is busy; try again" if none frees up within 30 seconds (twice that if the database itself is down). The screens treat 503 like a service that does not answer. Added after the performance test of step 7.
 - **The screens** (the `frontend` module in section 2 of document 03) are a client of the APIs in this table and use nothing else: no direct DB access, no Kafka. They show the statuses the services return and decide none of their own; the only rule enforced on screen alone is point 5 in section 8. Each service publishes the OpenAPI document that FastAPI generates, and the screens' TypeScript types are generated from it.
 - **The three Kitchen buttons** run the same row-locking sequence as the consumer, without inserting a `CHUA_CO` row (section 4). A 409 here is the normal outcome of the race between Cancel and Start cooking (BR7); the UI only needs to reload the ticket.
 - **`POST /orders` does not wait for Inventory**: the Reserved or Failed result comes later through `status-events`. The UI re-reads the order with `GET /orders/{id}`.
