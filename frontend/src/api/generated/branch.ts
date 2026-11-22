@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/dishes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dishes
+         * @description The branch's own dish catalogue; answers while the branch is offline.
+         */
+        get: operations["dishes_dishes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -21,10 +41,266 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/monitor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Monitor */
+        get: operations["monitor_monitor_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Orders */
+        get: operations["orders_orders_get"];
+        put?: never;
+        /**
+         * Place Order
+         * @description Stores the Awaiting Inventory order and its create-order entry; does not wait for
+         *     Inventory, whose result arrives later through ``status-events``.
+         */
+        post: operations["place_order_orders_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orders/{order_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Order */
+        get: operations["order_orders__order_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orders/{order_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel
+         * @description 200 with DA_HUY: cancelled here, the order was never attempted. 202 with the flag
+         *     DANG_YEU_CAU: the Kitchen decides.
+         */
+        post: operations["cancel_orders__order_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-    schemas: never;
+    schemas: {
+        /** AwaitingOrder */
+        AwaitingOrder: {
+            /** Cancel Flag */
+            cancel_flag: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Order Id
+             * Format: uuid
+             */
+            order_id: string;
+            /** Waited S */
+            waited_s: number;
+        };
+        /** CancelRequest */
+        CancelRequest: {
+            /** Reason Code */
+            reason_code: string;
+        };
+        /** CancelWaiting */
+        CancelWaiting: {
+            /** Cancel Flag */
+            cancel_flag: string;
+            /** Cancel Requested At */
+            cancel_requested_at: string | null;
+            /**
+             * Order Id
+             * Format: uuid
+             */
+            order_id: string;
+            /** Waited S */
+            waited_s: number | null;
+        };
+        /** Connection */
+        Connection: {
+            /** Checked At */
+            checked_at: string | null;
+            /** Connected */
+            connected: boolean | null;
+        };
+        /** Dish */
+        Dish: {
+            /** Dish Id */
+            dish_id: string;
+            /** Name */
+            name: string;
+        };
+        /** ExpiringOrder */
+        ExpiringOrder: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Order Id
+             * Format: uuid
+             */
+            order_id: string;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
+        /** Item */
+        Item: {
+            /** Dish Id */
+            dish_id: string;
+            /** Name */
+            name: string;
+            /** Quantity */
+            quantity: number;
+        };
+        /** MessageAlert */
+        MessageAlert: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Detail */
+            detail: {
+                [key: string]: unknown;
+            };
+            /** Event Id */
+            event_id: string | null;
+            /** Kind */
+            kind: string;
+            /** Order Id */
+            order_id: string | null;
+            /** Source Topic */
+            source_topic: string;
+        };
+        /** MessageAlerts */
+        MessageAlerts: {
+            /** Count */
+            count: number;
+            /** Latest */
+            latest: components["schemas"]["MessageAlert"][];
+        };
+        /** Monitor */
+        Monitor: {
+            /** About To Expire */
+            about_to_expire: components["schemas"]["ExpiringOrder"][];
+            /** Awaiting Inventory */
+            awaiting_inventory: components["schemas"]["AwaitingOrder"][];
+            /** Cancel Requested */
+            cancel_requested: components["schemas"]["CancelWaiting"][];
+            connection: components["schemas"]["Connection"];
+            message_alerts: components["schemas"]["MessageAlerts"];
+            /** Waiting To Send */
+            waiting_to_send: number;
+        };
+        /** NewLine */
+        NewLine: {
+            /** Dish Id */
+            dish_id: string;
+            /** Quantity */
+            quantity: number;
+        };
+        /** NewOrder */
+        NewOrder: {
+            /** Items */
+            items: components["schemas"]["NewLine"][];
+        };
+        /** Order */
+        Order: {
+            /** Branch Id */
+            branch_id: string;
+            /** Cancel Flag */
+            cancel_flag: string;
+            /** Cancel Message */
+            cancel_message: string | null;
+            /** Cancel Requested At */
+            cancel_requested_at: string | null;
+            /** Cancel Send State */
+            cancel_send_state: string | null;
+            /** Close Reason */
+            close_reason: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Items */
+            items: components["schemas"]["Item"][];
+            /**
+             * Order Id
+             * Format: uuid
+             */
+            order_id: string;
+            /** Send State */
+            send_state: string | null;
+            /** Status */
+            status: string;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+        };
+    };
     responses: never;
     parameters: never;
     requestBodies: never;
@@ -33,6 +309,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    dishes_dishes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Dish"][];
+                };
+            };
+        };
+    };
     health_health_get: {
         parameters: {
             query?: never;
@@ -51,6 +347,187 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    monitor_monitor_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Monitor"];
+                };
+            };
+        };
+    };
+    orders_orders_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Order"][];
+                };
+            };
+        };
+    };
+    place_order_orders_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewOrder"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Order"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    order_orders__order_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Order"];
+                };
+            };
+            /** @description No such order */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_orders__order_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Order"];
+                };
+            };
+            /** @description Sent to the Kitchen, or a cancel request is already waiting */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such order */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The order is already in a terminal status */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

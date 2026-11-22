@@ -1,4 +1,157 @@
 {
+  "components": {
+    "schemas": {
+      "ClearCheck": {
+        "properties": {
+          "counted_on_hand": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counted On Hand"
+          }
+        },
+        "title": "ClearCheck",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Receipt": {
+        "properties": {
+          "ingredient_id": {
+            "title": "Ingredient Id",
+            "type": "string"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Quantity"
+          }
+        },
+        "required": [
+          "ingredient_id",
+          "quantity"
+        ],
+        "title": "Receipt",
+        "type": "object"
+      },
+      "StockItem": {
+        "description": "The four quantities of section 3.3 of the specification and the stock-check flag.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "string"
+          },
+          "consumed": {
+            "title": "Consumed",
+            "type": "string"
+          },
+          "ingredient_id": {
+            "title": "Ingredient Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "needs_check": {
+            "title": "Needs Check",
+            "type": "boolean"
+          },
+          "reserved": {
+            "title": "Reserved",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "wasted": {
+            "title": "Wasted",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ingredient_id",
+          "name",
+          "unit",
+          "available",
+          "reserved",
+          "consumed",
+          "wasted",
+          "needs_check"
+        ],
+        "title": "StockItem",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
   "info": {
     "title": "Inventory",
     "version": "0.1.0"
@@ -13,9 +166,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
+                  "additionalProperties": true,
                   "title": "Response Health Health Get",
                   "type": "object"
                 }
@@ -25,6 +176,134 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/ingredients/{ingredient_id}/clear-check": {
+      "post": {
+        "description": "Clear the stock-check flag once the check is done (Flow A, scenario 48).",
+        "operationId": "clear_stock_check_ingredients__ingredient_id__clear_check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ingredient_id",
+            "required": true,
+            "schema": {
+              "title": "Ingredient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ClearCheck"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such ingredient"
+          },
+          "409": {
+            "description": "counted_on_hand is less than the reserved quantity"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clear Stock Check"
+      }
+    },
+    "/stock": {
+      "get": {
+        "description": "Testing, the demo, and Flow D's list of ingredients awaiting a stock check.",
+        "operationId": "list_stock_stock_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StockItem"
+                  },
+                  "title": "Response List Stock Stock Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Stock"
+      }
+    },
+    "/stock/receipts": {
+      "post": {
+        "description": "Stock receipt: adds to available stock. Phase 2 adds the dish-status computation.",
+        "operationId": "stock_receipt_stock_receipts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Receipt"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such ingredient"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stock Receipt"
       }
     }
   }
