@@ -292,4 +292,28 @@ describe("kitchen screen: alerts", () => {
     expect(region.getByText(/gốc POS01, bỏ qua POS02/)).toBeInTheDocument();
     expect(region.getByText(/Cần kiểm tra/)).toBeInTheDocument();
   });
+
+  it("shows a page of each column with the column's total, and loads more on request", async () => {
+    const all = Array.from({ length: 25 }, (_, i) =>
+      ticket({ order_id: `c0000000-0000-4000-8000-${String(i).padStart(12, "0")}` }),
+    );
+    server.use(
+      http.get("*/api/kitchen/tickets", ({ request }) => {
+        const limit = Number(new URL(request.url).searchParams.get("limit"));
+        return HttpResponse.json(all.slice(0, limit));
+      }),
+      http.get("*/api/kitchen/tickets/counts", () =>
+        HttpResponse.json({ CHO_NAU: 25, DANG_NAU: 0 }),
+      ),
+    );
+    renderRoute("/kitchen");
+    expect(await screen.findByRole("heading", { name: "Chờ nấu (25)" })).toBeInTheDocument();
+    const queuedColumn = () => screen.getByRole("region", { name: "Chờ nấu" });
+    expect(queuedColumn().querySelectorAll("[data-ticket]")).toHaveLength(20);
+    await userEvent.click(
+      column("Chờ nấu").getByRole("button", { name: "Xem thêm (còn 5 phiếu)" }),
+    );
+    await waitFor(() => expect(queuedColumn().querySelectorAll("[data-ticket]")).toHaveLength(25));
+    expect(column("Chờ nấu").queryByRole("button", { name: /Xem thêm/ })).not.toBeInTheDocument();
+  });
 });

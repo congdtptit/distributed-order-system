@@ -141,3 +141,14 @@ def test_inventory_accepts_the_branch_order_and_its_answer_reaches_the_branch(
     ticket = kit.record(kdb, order_id)
     assert ticket is not None and ticket["status"] == "CHO_NAU"
     inv.assert_invariants(idb)
+
+
+def test_reading_only_the_newest_orders(api: TestClient) -> None:
+    """The screen asks for a page of the newest orders instead of all 200 every 2 seconds."""
+    for _ in range(3):
+        place(api, [{"dish_id": "PHO_BO", "quantity": 1}])
+    everything = [o["order_id"] for o in api.get("/orders").json()]
+    assert len(everything) == 3
+    assert [o["order_id"] for o in api.get("/orders?limit=2").json()] == everything[:2]
+    for bad in ("0", "201", "x"):
+        assert api.get(f"/orders?limit={bad}").status_code == 400

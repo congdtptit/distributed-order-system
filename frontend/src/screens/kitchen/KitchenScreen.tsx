@@ -5,6 +5,7 @@
 
 import {
   Alert,
+  Button,
   Grid,
   List,
   Loader,
@@ -16,7 +17,7 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconAlertCircle } from "@tabler/icons-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, detailMessage } from "../../api/http";
 import type { Alert as KitchenAlert, Ticket } from "../../api/kitchen";
@@ -25,6 +26,9 @@ import { clock, ServiceBanner, TABULAR } from "../../components/common";
 import { ALERT_KIND, KITCHEN_STATUS } from "../../labels";
 import { RejectModal } from "./RejectModal";
 import { type TicketAction, TicketCard } from "./TicketCard";
+
+/** Tickets shown per column before "Xem thêm". */
+const PAGE = 20;
 
 interface Request {
   orderId: string;
@@ -37,7 +41,16 @@ interface Request {
  * heading and one card per row in each column). */
 export function KitchenScreen({ embedded = false }: { embedded?: boolean } = {}) {
   const client = useQueryClient();
-  const tickets = useQuery({ queryKey: ["kitchen", "tickets"], queryFn: kitchenApi.tickets });
+  // A page of each column, not every ticket: a long queue made the screen lag when it
+  // reloaded every 2 seconds. "Xem thêm" grows the page.
+  const [limit, setLimit] = useState(PAGE);
+  const tickets = useQuery({
+    queryKey: ["kitchen", "tickets", limit],
+    queryFn: () => kitchenApi.tickets(limit),
+    placeholderData: keepPreviousData,
+  });
+  const counts = useQuery({ queryKey: ["kitchen", "counts"], queryFn: kitchenApi.counts });
+  const more = () => setLimit((l) => l + PAGE);
   const alerts = useQuery({ queryKey: ["kitchen", "alerts"], queryFn: kitchenApi.alerts });
   const [rejecting, setRejecting] = useState<Ticket | null>(null);
   const [refused, setRefused] = useState<string | null>(null);
@@ -116,6 +129,8 @@ export function KitchenScreen({ embedded = false }: { embedded?: boolean } = {})
             cards={embedded ? { base: 1 } : { base: 1, xl: 2 }}
             level={embedded ? 3 : 2}
             title="Chờ nấu"
+            total={counts.data?.CHO_NAU}
+            onMore={more}
             empty="Chưa có phiếu nào đang chờ nấu. Đơn Kho đã giữ nguyên liệu sẽ hiện ở đây."
           >
             {queued.map((t) => (
@@ -132,6 +147,8 @@ export function KitchenScreen({ embedded = false }: { embedded?: boolean } = {})
             cards={{ base: 1 }}
             level={embedded ? 3 : 2}
             title="Đang nấu"
+            total={counts.data?.DANG_NAU}
+            onMore={more}
             empty="Chưa có phiếu nào đang nấu."
           >
             {cooking.map((t) => (
@@ -171,6 +188,8 @@ function Column({
   cards,
   level,
   title,
+  total,
+  onMore,
   empty,
   children,
 }: {
@@ -178,15 +197,21 @@ function Column({
   cards: { base: number; xl?: number };
   level: 2 | 3;
   title: string;
+  /** The column's total from GET /tickets/counts; never shown below the tickets on screen,
+   * since the two requests are not one snapshot. */
+  total: number | undefined;
+  onMore: () => void;
   empty: string;
   children: React.ReactNode[];
 }) {
+  const count = Math.max(total ?? 0, children.length);
+  const hidden = count - children.length;
   return (
     <Grid.Col span={span} style={{ minWidth: 0 }}>
       <section aria-label={title}>
         <Stack gap="sm">
           <Title order={level} size="h3">
-            {title} ({children.length})
+            {title} ({count})
           </Title>
           {children.length ? (
             <SimpleGrid cols={cards} spacing="sm">
@@ -194,6 +219,11 @@ function Column({
             </SimpleGrid>
           ) : (
             <Text c="dimmed">{empty}</Text>
+          )}
+          {hidden > 0 && (
+            <Button variant="light" onClick={onMore}>
+              Xem thêm (còn {hidden} phiếu)
+            </Button>
           )}
         </Stack>
       </section>

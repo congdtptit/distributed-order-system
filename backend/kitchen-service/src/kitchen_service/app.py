@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 
 import psycopg
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
 from common.alerts import list_alerts
@@ -32,6 +32,7 @@ from kitchen_service.tickets import (
     ActionError,
     Record,
     complete,
+    count_tickets,
     list_tickets,
     make_cancel_requested_handler,
     make_check_changed_handler,
@@ -131,8 +132,19 @@ def health() -> dict[str, Any]:
 
 
 @app.get("/tickets")
-def tickets(conn: Conn) -> list[Ticket]:
-    return [Ticket(**ticket_view(t)) for t in list_tickets(conn)]
+def tickets(conn: Conn, limit: Annotated[int | None, Query(ge=1, le=500)] = None) -> list[Ticket]:
+    """Queued and Cooking tickets, oldest first; ``limit``: at most that many of each status."""
+    return [Ticket(**ticket_view(t)) for t in list_tickets(conn, limit)]
+
+
+class TicketCounts(BaseModel):
+    CHO_NAU: int
+    DANG_NAU: int
+
+
+@app.get("/tickets/counts")
+def ticket_counts(conn: Conn) -> TicketCounts:
+    return TicketCounts(**count_tickets(conn))
 
 
 def _act(conn: psycopg.Connection[Any], action: Any) -> Ticket:

@@ -65,7 +65,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Orders */
+        /**
+         * Orders
+         * @description The newest orders first; ``limit`` (at most 200) lets the screen ask for one page.
+         */
         get: operations["orders_orders_get"];
         put?: never;
         /**
@@ -373,7 +376,9 @@ export interface operations {
     };
     orders_orders_get: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -387,6 +392,22 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Order"][];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -69,8 +69,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Tickets */
+        /**
+         * Tickets
+         * @description Queued and Cooking tickets, oldest first; ``limit``: at most that many of each status.
+         */
         get: operations["tickets_tickets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tickets/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ticket Counts */
+        get: operations["ticket_counts_tickets_counts_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -229,6 +249,13 @@ export interface components {
             /** Warnings */
             warnings: string[];
         };
+        /** TicketCounts */
+        TicketCounts: {
+            /** Cho Nau */
+            CHO_NAU: number;
+            /** Dang Nau */
+            DANG_NAU: number;
+        };
         /** TopicState */
         TopicState: {
             /** Oldest Unread Age S */
@@ -339,7 +366,9 @@ export interface operations {
     };
     tickets_tickets_get: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -353,6 +382,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Ticket"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ticket_counts_tickets_counts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketCounts"];
                 };
             };
         };

@@ -358,4 +358,27 @@ describe("branch screen: Flow D", () => {
       await screen.findByText("1 tin trạng thái không đọc được hoặc không nhận ra"),
     ).toBeInTheDocument();
   });
+
+  it("lists a page of the newest orders and loads older ones on request", async () => {
+    const all = Array.from({ length: 30 }, (_, i) =>
+      order({ order_id: `d0000000-0000-4000-8000-${String(i).padStart(12, "0")}` }),
+    );
+    let asked = 0;
+    server.use(
+      http.get("*/api/pos01/orders", ({ request }) => {
+        asked = Number(new URL(request.url).searchParams.get("limit"));
+        return HttpResponse.json(all.slice(0, asked));
+      }),
+    );
+    renderRoute("/branch/POS01");
+    const more = await screen.findByRole("button", { name: "Xem thêm 20 đơn cũ hơn" });
+    expect(asked).toBe(20);
+    expect(screen.getAllByRole("button", { name: /^Hủy đơn/ })).toHaveLength(20);
+    await userEvent.click(more);
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: /^Hủy đơn/ })).toHaveLength(30),
+    );
+    expect(asked).toBe(40);
+    expect(screen.queryByRole("button", { name: /Xem thêm/ })).not.toBeInTheDocument();
+  });
 });

@@ -1,10 +1,16 @@
 # Course report – the lecturer's template and what the project covers
 
-Revision 2 · 22 Nov 2026 · @Naul · follows documents 01–03
+Revision 3 · 22 Nov 2026 · @Naul · follows documents 01–03
 
 The lecturer sent the report template on 22 Nov 2026: "Mẫu PTTK", a software analysis and design document of the Posts and Telecommunications Institute of Technology (PTIT). The final report of this course project follows it. This document records what the template asks for, where the project already has the material, and what is still missing, so that the missing parts get planned like the code. The template file itself is not in the repository.
 
 The report itself is in `report/`. When this document and documents 01–03 disagree, those documents are right.
+
+## Changes in revision 3
+
+| Section | Change | Reason |
+|---|---|---|
+| 2 | The status table after step 7: the functional design, the screens, the distributed tests, the performance test and its tables are covered; 40 of 44 scenarios pass | Step 7, 22 Nov 2026 |
 
 ## Changes in revision 2
 
@@ -52,24 +58,24 @@ State: **covered** (the material exists and only needs reformatting into the tem
 | Part I: the unit, the market, the conclusion | Nothing yet. Section 1 of the specification gives the purpose and scope | Missing | Writing and research, not code: the restaurant chain's situation, POS and order-management products in Vietnam and abroad, and why they do not fit the offline and cancellation rules (BR5–BR9). @Naul to decide who writes it; Claude can draft it on request |
 | HLD model (**required**) | `report/02-phan-tich-thiet-ke.md`, from the component table in 01 and section 2 of 03 | Covered | The drawing's layout can be tidied in step 8 |
 | Function list | `report/02-phan-tich-thiet-ke.md`, every transaction of phases 1 and 2 | Covered | Kept in line as the APIs are built |
-| Functional design per transaction | `report/02-phan-tich-thiet-ke.md`: cards and activity diagrams for the 11 transactions of Inventory and the Kitchen built so far | Partly | The branch's transactions in step 6, cancel requests in step 5, alerts and the report in step 7, dish status in phase 2 |
+| Functional design per transaction | `report/02-phan-tich-thiet-ke.md`: cards and activity diagrams for the 24 transactions of phase 1 | Covered | Dish status in phase 2 |
 | Databases of the system | Sections 3–5 of 02; the containers in section 2 of 03 | Covered | Inventory DB, Kitchen DB, one branch DB per site (POS01, POS02, ONLINE), the Central Order Replica |
 | Overall database diagram (**required**) | `report/02-phan-tich-thiet-ke.md` (overview of the six databases and how data moves between them) and one ER diagram per database in `report/generated/csdl.md` | Covered | Regenerate after each migration |
 | Table list and table detail | `report/02-phan-tich-thiet-ke.md` (23 tables with descriptions) and `report/generated/csdl.md` (Field, Type, Null, Key, Default, Extra) | Covered | Regenerate after each migration |
 | Technology | `report/03-xay-dung.md` | Covered | |
-| User interface | Planned: step 6b, one screen at a time with `/screen`, which takes a screenshot | Missing | Step 6b, then the screenshots go into the report |
-| Test scenarios | `report/generated/kiem-thu.md`, from a full test run: 20 of 44 pass on 22 Nov 2026 (6 and 48 counting their phase 1 parts) | Covered | Regenerate after each step |
-| Distributed testing: model and scenarios (**required**) | `report/04-kiem-thu.md`: the test setup drawing and a table of the faults injected (26, 29, 31, 4, 24 done) | Partly | The Kitchen down for 2 hours (25), a branch offline (10, 12, 36), two instances (28, 42), replication cut (55) come with steps 5–7 |
-| Performance testing (**required**) | Nothing yet. Section 6 of 03 has idle resource figures | Missing | Load test with Apache JMeter in a container, as the template does: 250 concurrent users on each chosen API (`POST /orders`, `GET /dishes`, `GET /orders`, `GET /tickets`, `GET /stock`, `GET /reports/summary`), plus resource use from `docker stats` and the time from an order's creation to Reserved at the branch. Needs `POST /orders`, so step 7 |
+| User interface | `report/03-xay-dung.md`: the six screens, built in steps 6b and 7 with `/screen` | Partly | The screenshots go into the report in step 8 |
+| Test scenarios | `report/generated/kiem-thu.md`, from a full test run: 40 of 44 pass on 22 Nov 2026 (6 and 48 counting their phase 1 parts) | Covered | Regenerate after each step |
+| Distributed testing: model and scenarios (**required**) | `report/04-kiem-thu.md`: the test setup drawing and the table of faults injected: 1, 3, 4, 10, 12, 24, 25, 26, 29, 31, 36, 42 on two real instances, 55 | Covered | |
+| Performance testing (**required**) | `report/04-kiem-thu.md` section 2.4.2 and `report/generated/hieu-nang.md`: JMeter 5.6.3 in a container on `api-net`, 250 users on each of six APIs, `docker stats`, order creation to Reserved; the two faults it found and their fixes | Covered | Run `bin/perf` again on a clean cluster before the report is final |
 | Security testing | The template lists Acunetix as a tool but does not mark security testing as required. The lean edition has no authentication (section 15 of 01) | Missing | Optional. A free scanner (OWASP ZAP baseline scan) could stand in for Acunetix. Decision pending (README) |
-| Test tools table | `report/04-kiem-thu.md` | Partly | JMeter's version in step 7 |
-| Test environment | `report/04-kiem-thu.md`: the developer machine and the compose setup in the template's server table (there is no server) | Covered | Resource figures under load in step 7 |
-| Functional result counts | The summary table at the end of `report/generated/kiem-thu.md` (133 tests, 0 failed on 22 Nov 2026) | Covered | Regenerate after each step |
-| Performance result table | | Missing | From the JMeter result files. Step 7 |
+| Test tools table | `report/04-kiem-thu.md` | Covered | |
+| Test environment | `report/04-kiem-thu.md`: the developer machine and the compose setup in the template's server table (there is no server); resource use idle and under load | Covered | |
+| Functional result counts | The summary table at the end of `report/generated/kiem-thu.md` (246 tests, 0 failed on 22 Nov 2026) | Covered | Regenerate after each step |
+| Performance result table | `report/generated/hieu-nang.md`, from the JMeter result files | Covered | |
 
 ## 3. Plan
 
 - **Every step** updates its parts of `report/` when it is done (section "How the report is made").
-- **Step 7** gains the performance test: a JMeter test plan in the repository, run in a container on `api-net` against the full cluster, with its result files and `docker stats` kept for the report.
+- **Step 7** added the performance test: `perf/plan.jmx`, run by `bin/perf` in a container on `api-net` against the full cluster, with its result files and `docker stats` kept in `perf/results/` and summarised in `report/generated/hieu-nang.md`.
 - **Step 8, report material,** is now what is left once the steps are done: tidying the diagrams, the page layout of the template (`reference.docx`), and the final read-through. Part I and the cover are @Naul's, unless Claude is asked to draft them.
 - Section 4 of document 03 lists both, and section 7 of 03 counts them in the progress estimate.

@@ -410,3 +410,23 @@ def test_alerts_api_lists_wrong_branch_cancels(kdb: str, api: TestClient) -> Non
     assert body[0]["detail"] == {"origin_branch": "POS01", "dismissed": ["POS02"]}
     assert api.get("/alerts", params={"kind": "CAN_KIEM_TRA"}).json() == []
     assert api.get("/alerts", params={"kind": "LENH_KHONG_KHOP"}).status_code == 422
+
+
+def test_a_page_of_tickets_per_column_and_the_counts(api: TestClient, kdb: str) -> None:
+    """The screen shows the oldest tickets of each column and the column's total, instead of
+    loading every ticket every 2 seconds."""
+    ids = [queued(kdb) for _ in range(4)]
+    everything = list(tickets(api))
+    assert sorted(everything) == sorted(str(i) for i in ids)
+    for order_id in everything[:2]:
+        assert api.post(f"/tickets/{order_id}/start").status_code == 200
+    full = api.get("/tickets").json()
+    page = api.get("/tickets?limit=1").json()
+    oldest = {
+        status: next(t["order_id"] for t in full if t["status"] == status)
+        for status in ("CHO_NAU", "DANG_NAU")
+    }
+    assert {t["status"]: t["order_id"] for t in page} == oldest
+    assert len(page) == 2
+    assert api.get("/tickets/counts").json() == {"CHO_NAU": 2, "DANG_NAU": 2}
+    assert api.get("/tickets?limit=0").status_code == 422

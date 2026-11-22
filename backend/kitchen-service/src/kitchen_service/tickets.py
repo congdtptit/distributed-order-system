@@ -543,13 +543,19 @@ def complete(conn: psycopg.Connection[Any], order_id: uuid.UUID, clock: Clock) -
     return rec
 
 
-def list_tickets(conn: psycopg.Connection[Any]) -> list[Record]:
+def list_tickets(conn: psycopg.Connection[Any], limit: int | None = None) -> list[Record]:
     """Queued and Cooking tickets, oldest order first. A Queued ticket carries a warning for
-    each of its reserved ingredients that is flagged for stock check (a display-time join)."""
+    each of its reserved ingredients that is flagged for stock check (a display-time join).
+    ``limit`` keeps at most that many of each status, the oldest: the screen shows a page of
+    each column instead of every ticket."""
     rows = conn.execute(
-        f"SELECT {_COLUMNS} FROM kitchen_orders WHERE status IN (%s, %s)"  # pyright: ignore[reportArgumentType]
+        f"SELECT {_COLUMNS} FROM ("  # pyright: ignore[reportArgumentType]
+        "  SELECT *, row_number() OVER ("
+        "    PARTITION BY status ORDER BY order_created_at NULLS LAST, order_id) AS place"
+        "  FROM kitchen_orders WHERE status IN (%s, %s)"
+        ") k WHERE %s::int IS NULL OR place <= %s::int"
         " ORDER BY order_created_at NULLS LAST, order_id",
-        (QUEUED, COOKING),
+        (QUEUED, COOKING, limit, limit),
     ).fetchall()
     flagged = {
         str(r[0])
@@ -562,6 +568,17 @@ def list_tickets(conn: psycopg.Connection[Any]) -> list[Record]:
         if t.status == QUEUED:
             t.warnings = sorted({str(r.get("ingredient_id")) for r in t.reserved or []} & flagged)
     return tickets
+
+
+def count_tickets(conn: psycopg.Connection[Any]) -> dict[str, int]:
+    """How many tickets are Queued and Cooking: the column totals beside a page of tickets."""
+    counts: dict[str, int] = dict.fromkeys((QUEUED, COOKING), 0)
+    for status, n in conn.execute(
+        "SELECT status, count(*)::int FROM kitchen_orders WHERE status IN (%s, %s) GROUP BY status",
+        (QUEUED, COOKING),
+    ).fetchall():
+        counts[str(status)] = int(n)
+    return counts
 
 
 def _ticket(conn: psycopg.Connection[Any], order_id: uuid.UUID, required: str) -> Record:

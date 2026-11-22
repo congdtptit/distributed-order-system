@@ -574,7 +574,22 @@
     },
     "/orders": {
       "get": {
+        "description": "The newest orders first; ``limit`` (at most 200) lets the screen ask for one page.",
         "operationId": "orders_orders_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -589,6 +604,19 @@
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Orders"

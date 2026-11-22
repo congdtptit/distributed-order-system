@@ -1,8 +1,14 @@
 # Detailed design – Kafka events, DB schemas and API
 
-Revision 17 · 22 Nov 2026 · @Naul · follows business specification v1.5
+Revision 18 · 22 Nov 2026 · @Naul · follows business specification v1.5
 
 This document turns business specification v1.5 (the lean edition) into three things to code against: the Kafka event catalogue, each service's DB schema, and the API. There is no existing codebase to align with: the base flow is built in this project as well, so the event names, table names, column names and API paths here are the ones to use.
+
+## Changes in revision 18
+
+| Section | Change | Reason |
+|---|---|---|
+| 6 | `GET /orders` takes an optional `limit` (1–200, default 200); `GET /tickets` takes an optional `limit` per status (1–500, oldest first); new `GET /tickets/counts` | The screens reloaded every order and every ticket every 2 seconds and lagged with a long queue (@Naul, 22 Nov 2026); they now load a page of 20 and grow it on request |
 
 ## Changes in revision 17
 
@@ -598,10 +604,11 @@ Each service exposes only the APIs that a person or a screen needs; services do 
 | Branch | `POST /orders` | Validates the data, generates `order_id`, stores the Awaiting Inventory order and the create-order entry in one transaction | 201 with the order as `GET /orders/{id}` shows it; 400 if the data is invalid: no items, a missing field, a quantity that is not a positive whole number, or a dish not in `dishes` (BR9). Every invalid input at the branch is 400, not FastAPI's 422 |
 | Branch | `GET /dishes` | The dish catalogue from the branch's own `dishes` table; answers while the branch is offline | 200 |
 | Branch | `POST /orders/{id}/cancel` | Runs operation (2) in section 5 with `reason_code` | 200 `DA_HUY` for a local cancel; 202 `DANG_YEU_CAU` if it goes through the Kitchen or a cancel request is already pending; 409 if the order is already in a terminal status; 404 if the order does not exist; 400 if `reason_code` is not a customer cancel reason (checked first). The body is the order |
-| Branch | `GET /orders`, `GET /orders/{id}` | Reads orders with the cancel flag and message and the send states ("The branch in practice", section 5); the list holds the 200 most recent | 200; 404 for an unknown order |
+| Branch | `GET /orders`, `GET /orders/{id}` | Reads orders with the cancel flag and message and the send states ("The branch in practice", section 5); the list holds the `limit` most recent (1–200, default 200; the screen asks for 20 and grows the page) | 200; 404 for an unknown order; 400 for a `limit` out of range |
 | Branch | `GET /menu` (phase 2) | Reads `menu_cache`, with a `stale` flag when nothing has been heard from Inventory for more than N minutes | 200 |
 | Branch | `GET /monitor` | Flow D: connection status, number of entries waiting to be sent, orders in Awaiting Inventory longer than N minutes, orders about to pass X, orders with the cancel flag, message alerts ("The branch in practice", section 5) | 200 |
-| Kitchen | `GET /tickets` | Queued and Cooking tickets, with warnings for flagged ingredients | 200 |
+| Kitchen | `GET /tickets` | Queued and Cooking tickets, oldest first, with warnings for flagged ingredients; with `limit` (1–500), at most that many of each status | 200; 422 for a `limit` out of range |
+| Kitchen | `GET /tickets/counts` | How many tickets are Queued and how many Cooking (`CHO_NAU`, `DANG_NAU`): the column totals beside a page of tickets | 200 |
 | Kitchen | `POST /tickets/{order_id}/start` | Queued → Cooking, emits `StockConsumed` | 200; 409 with the current status if the ticket is no longer Queued |
 | Kitchen | `POST /tickets/{order_id}/reject` | Queued → Cancelled with `reason_code`, `spoiled_ingredients[]`; emits `OrderCancelled` and `ReleaseRequested` | 200; 409 as above; 400 if the reason is Spoiled ingredient but no ingredient is given, or an ingredient does not belong to the ticket |
 | Kitchen | `POST /tickets/{order_id}/complete` | Cooking → Completed, emits `OrderCompleted` | 200; 409 if the ticket is not Cooking |

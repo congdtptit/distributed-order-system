@@ -17,7 +17,7 @@ from datetime import datetime
 from typing import Annotated, Any
 
 import psycopg
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -250,9 +250,10 @@ def place_order(body: NewOrder, conn: Conn, clock: ClockDep, branch: Branch) -> 
     return Order(**order)
 
 
-@app.get("/orders")
-def orders(conn: Conn) -> list[Order]:
-    return [Order(**o) for o in list_orders(conn)]
+@app.get("/orders", responses=BAD_INPUT)
+def orders(conn: Conn, limit: Annotated[int, Query(ge=1, le=200)] = 200) -> list[Order]:
+    """The newest orders first; ``limit`` (at most 200) lets the screen ask for one page."""
+    return [Order(**o) for o in list_orders(conn, limit)]
 
 
 @app.get("/orders/{order_id}", responses=NOT_FOUND)

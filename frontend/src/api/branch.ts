@@ -21,7 +21,8 @@ export function branchApi(branch: BranchId) {
   return {
     base,
     dishes: async () => (await call<Dish[]>(`${base}/dishes`)).body,
-    orders: async () => (await call<Order[]>(`${base}/orders`)).body,
+    /** The ``limit`` newest orders (at most 200). */
+    orders: async (limit: number) => (await call<Order[]>(`${base}/orders?limit=${limit}`)).body,
     monitor: async () => (await call<Monitor>(`${base}/monitor`)).body,
     place: async (order: NewOrder) =>
       (await call<Order>(`${base}/orders`, { method: "POST", body: JSON.stringify(order) })).body,

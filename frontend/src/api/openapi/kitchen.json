@@ -251,6 +251,24 @@
         "title": "Ticket",
         "type": "object"
       },
+      "TicketCounts": {
+        "properties": {
+          "CHO_NAU": {
+            "title": "Cho Nau",
+            "type": "integer"
+          },
+          "DANG_NAU": {
+            "title": "Dang Nau",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "CHO_NAU",
+          "DANG_NAU"
+        ],
+        "title": "TicketCounts",
+        "type": "object"
+      },
       "TopicState": {
         "properties": {
           "oldest_unread_age_s": {
@@ -443,7 +461,28 @@
     },
     "/tickets": {
       "get": {
+        "description": "Queued and Cooking tickets, oldest first; ``limit``: at most that many of each status.",
         "operationId": "tickets_tickets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -458,9 +497,37 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Tickets"
+      }
+    },
+    "/tickets/counts": {
+      "get": {
+        "operationId": "ticket_counts_tickets_counts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketCounts"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ticket Counts"
       }
     },
     "/tickets/{order_id}/complete": {

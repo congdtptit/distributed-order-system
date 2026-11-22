@@ -8,6 +8,7 @@ export type Ticket = components["schemas"]["Ticket"];
 export type Alert = components["schemas"]["Alert"];
 export type Rejection = components["schemas"]["Rejection"];
 export type ConsumerMonitor = components["schemas"]["Monitor"];
+export type TicketCounts = components["schemas"]["TicketCounts"];
 
 const base = "/api/kitchen";
 
@@ -27,7 +28,9 @@ export function ticketItems(ticket: Ticket): TicketItem[] {
 }
 
 export const kitchenApi = {
-  tickets: async () => (await call<Ticket[]>(`${base}/tickets`)).body,
+  /** At most ``limit`` tickets of each status, the oldest first. */
+  tickets: async (limit: number) => (await call<Ticket[]>(`${base}/tickets?limit=${limit}`)).body,
+  counts: async () => (await call<TicketCounts>(`${base}/tickets/counts`)).body,
   alerts: async () => (await call<Alert[]>(`${base}/alerts`)).body,
   monitor: async () => (await call<ConsumerMonitor>(`${base}/monitor`)).body,
   /** 200 with the ticket; 404 and 409 throw ApiError. */

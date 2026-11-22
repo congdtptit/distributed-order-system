@@ -4,6 +4,7 @@
 
 import {
   Badge,
+  Button,
   Grid,
   Group,
   Loader,
@@ -14,7 +15,7 @@ import {
   VisuallyHidden,
 } from "@mantine/core";
 import { IconPlugConnected, IconPlugConnectedX, IconQuestionMark } from "@tabler/icons-react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import type { BranchId, Monitor, Order } from "../../api/branch";
@@ -25,6 +26,10 @@ import { BranchAlerts } from "./BranchAlerts";
 import { CancelModal } from "./CancelModal";
 import { OrderForm } from "./OrderForm";
 import { OrdersTable } from "./OrdersTable";
+
+/** Orders shown before "Xem thêm"; the branch lists at most 200 (GET /orders). */
+const PAGE = 20;
+const MAX_ORDERS = 200;
 
 export function BranchScreen() {
   const { branchId } = useParams();
@@ -45,7 +50,14 @@ export function BranchPanel({
 }) {
   const api = branchApi(branch);
   const navigate = useNavigate();
-  const orders = useQuery({ queryKey: ["branch", branch, "orders"], queryFn: api.orders });
+  // A page of the newest orders, not all 200: reloading every order every 2 seconds made the
+  // screen lag. "Xem thêm" grows the page up to the 200 the branch keeps listing.
+  const [limit, setLimit] = useState(PAGE);
+  const orders = useQuery({
+    queryKey: ["branch", branch, "orders", limit],
+    queryFn: () => api.orders(limit),
+    placeholderData: keepPreviousData,
+  });
   const monitor = useQuery({ queryKey: ["branch", branch, "monitor"], queryFn: api.monitor });
   const [cancelling, setCancelling] = useState<string | null>(null);
   const announcement = useStatusAnnouncer(orders.data);
@@ -86,7 +98,17 @@ export function BranchPanel({
             {orders.isPending && !orders.isError ? (
               <Loader size="sm" aria-label="Đang tải đơn" />
             ) : (
-              <OrdersTable orders={orders.data ?? []} onCancel={setCancelling} />
+              <>
+                <OrdersTable orders={orders.data ?? []} onCancel={setCancelling} />
+                {(orders.data?.length ?? 0) >= limit && limit < MAX_ORDERS && (
+                  <Button
+                    variant="light"
+                    onClick={() => setLimit((l) => Math.min(l + PAGE, MAX_ORDERS))}
+                  >
+                    Xem thêm {PAGE} đơn cũ hơn
+                  </Button>
+                )}
+              </>
             )}
           </Stack>
         </Grid.Col>

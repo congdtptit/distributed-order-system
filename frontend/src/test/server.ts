@@ -26,6 +26,7 @@ export const server = setupServer(
   http.get("*/api/kitchen/monitor", () => HttpResponse.json(QUIET_CONSUMER("kitchen"))),
   http.get("*/api/inventory/monitor", () => HttpResponse.json(QUIET_CONSUMER("inventory"))),
   http.get("*/api/kitchen/tickets", () => HttpResponse.json([])),
+  http.get("*/api/kitchen/tickets/counts", () => HttpResponse.json({ CHO_NAU: 0, DANG_NAU: 0 })),
   http.get("*/api/kitchen/alerts", () => HttpResponse.json([])),
   http.get("*/api/inventory/stock", () => HttpResponse.json([])),
   http.get("*/api/inventory/alerts", () => HttpResponse.json([])),
