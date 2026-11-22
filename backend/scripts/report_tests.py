@@ -30,12 +30,6 @@ TIER_NAMES = {"1": "Tầng 1", "2": "Tầng 2", "3": "Tầng 3"}
 PARTIAL: dict[int, str] = {
     6: "Phần đợt 1 đạt; phần món chuyển sang Hết thuộc đợt 2",
     48: "Phần đợt 1 đạt; phần món trở lại Còn thuộc đợt 2",
-    24: "Kiểm tới topic; chi nhánh áp dụng tin ở bước 6",
-    4: "Kiểm tới topic; chi nhánh hiển thị ở bước 6",
-    3: "Bếp và Kho kiểm đủ; chi nhánh áp dụng tin ở bước 6",
-    8: "Kiểm tới topic; chi nhánh tắt cờ hủy ở bước 6",
-    23: "Kiểm tới topic; chi nhánh hiển thị ở bước 6",
-    33: "Kiểm tới topic; chi nhánh hiển thị ở bước 6",
 }
 
 

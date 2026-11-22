@@ -37,8 +37,8 @@ def test_an_order_from_pos01_reaches_the_kitchen_and_only_pos01_hears_back(
     through kitchen-orders; POS01 receives Reserved through its own status-events; other
     branches receive nothing.
 
-    "Receives" is checked as the message on the branch's or the Kitchen's topic; the Kitchen
-    and POS01 acting on it is the end-to-end version after step 6 (section 7 of document 02).
+    "Receives" is checked as the message on the branch's or the Kitchen's topic; POS01
+    acting on it end to end is order-service/tests/test_branch_e2e.py.
     "Nothing" is checked over a 5-second window after the expected messages arrived."""
     with psycopg.connect(INVENTORY_DB) as conn:
         for ingredient in ("BANH_MI", "THIT_LON"):

@@ -2,7 +2,9 @@
 many times. Where the scenario names Inventory, its real handler gets the Kitchen's command, so
 the agreement between the sides is checked on both DBs."""
 
+import random
 import threading
+import time
 import uuid
 from collections.abc import Callable
 from typing import Any
@@ -28,14 +30,18 @@ RUNS = 60
 CLOCK = FixedClock(inv.NOW)
 
 
-def race(actions: list[Callable[[], None]]) -> list[str]:
+def race(actions: list[Callable[[], None]], delays: list[float] | None = None) -> list[str]:
     """Run the actions at the same moment; each result is "won", or the HTTP code of the
-    refusal (ActionError), or "done" for a message handler (it never refuses)."""
+    refusal (ActionError), or "done" for a message handler (it never refuses). ``delays``
+    holds one action back by a few milliseconds after the release, so that a side that always
+    reaches the lock later (more work before it) still wins some runs."""
     barrier = threading.Barrier(len(actions))
     results = [""] * len(actions)
 
     def run(i: int) -> None:
         barrier.wait()
+        if delays and delays[i]:
+            time.sleep(delays[i])
         try:
             actions[i]()
             results[i] = "won"
@@ -98,10 +104,14 @@ def test_cancel_and_start_cooking_at_the_same_time_one_wins_and_all_sides_agree(
     """Scenario 3: the cashier presses cancel and the Kitchen presses Start cooking at the same
     time. Exactly one operation wins; the statuses at the Kitchen, Inventory and the branch
     agree. The branch's side is what the Kitchen sends it (OrderCancelled or CancelRejected);
-    the branch applying it is step 6."""
+    the branch applying each of them is test_cancel.py of the branch.
+
+    The cancel handler does more work than the button before it reaches the row lock, so on a
+    busy machine the button can win every run; every other run holds the button back by up
+    to 15 ms, so that both winners are exercised."""
     kdb, idb, pair = conns
     wins = {"cancel": 0, "cook": 0}
-    for _ in range(RUNS):
+    for run in range(RUNS):
         refill(idb)
         order = inv.order_created(items=[("TRA_DA", 1)])
         deliver(kdb, through_inventory(idb, order))
@@ -111,7 +121,8 @@ def test_cancel_and_start_cooking_at_the_same_time_one_wins_and_all_sides_agree(
             [
                 message(kdb, pair[0], request),
                 button(pair[1], lambda c, o=order.order_id: start_cooking(c, o, CLOCK)),
-            ]
+            ],
+            delays=[0, random.uniform(0, 0.015) if run % 2 else 0],
         )
         rec = record(kdb, order.order_id)
         assert rec is not None

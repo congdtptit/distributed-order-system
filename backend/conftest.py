@@ -142,17 +142,22 @@ class _UnixHTTPConnection(http.client.HTTPConnection):
 
 
 class DockerEngine:
-    """Stops and starts services of the compose project through the Docker Engine API."""
+    """Stops and starts services of the compose project, and cuts them off a network, through
+    the Docker Engine API."""
 
     def __init__(self, socket_path: str, project: str) -> None:
         self._socket = socket_path
         self._project = project
         self.stopped: list[str] = []
+        self.disconnected: list[tuple[str, str]] = []
 
-    def _call(self, method: str, path: str) -> tuple[int, Any]:
+    def _call(self, method: str, path: str, body: Any = None) -> tuple[int, Any]:
         conn = _UnixHTTPConnection(self._socket)
         try:
-            conn.request(method, path)
+            if body is None:
+                conn.request(method, path)
+            else:
+                conn.request(method, path, json.dumps(body), {"Content-Type": "application/json"})
             response = conn.getresponse()
             body = response.read()
             return response.status, json.loads(body) if body else None
@@ -192,6 +197,29 @@ class DockerEngine:
         if status not in (204, 304):
             raise RuntimeError(f"starting {service}: HTTP {status} {body}")
 
+    def disconnect(self, service: str, network: str = "kafka-net") -> None:
+        """Cut a service off one compose network, as ``bin/chaos offline`` does: a branch keeps
+        its DB and HTTP API but cannot reach Kafka."""
+        self.disconnected.append((service, network))
+        status, body = self._call(
+            "POST",
+            f"/networks/{self._project}_{network}/disconnect",
+            {"Container": self.container_id(service), "Force": True},
+        )
+        if status != 200:
+            raise RuntimeError(f"disconnecting {service} from {network}: HTTP {status} {body}")
+
+    def connect(self, service: str, network: str = "kafka-net") -> None:
+        if (service, network) in self.disconnected:
+            self.disconnected.remove((service, network))
+        status, body = self._call(
+            "POST",
+            f"/networks/{self._project}_{network}/connect",
+            {"Container": self.container_id(service)},
+        )
+        if status != 200:
+            raise RuntimeError(f"connecting {service} to {network}: HTTP {status} {body}")
+
     def health(self, service: str) -> str:
         _, body = self._call("GET", f"/containers/{self.container_id(service)}/json")
         state = cast(dict[str, Any], body)["State"]
@@ -208,13 +236,15 @@ class DockerEngine:
 
 @pytest.fixture
 def chaos() -> Iterator[DockerEngine]:
-    """Stop and start containers of the cluster; whatever a test stopped is started again
-    and waited for after the test, so later tests see the full cluster."""
+    """Stop and start containers of the cluster, cut them off a network; whatever a test stopped
+    or cut off is started or reconnected after the test, so later tests see the full cluster."""
     socket_path = "/var/run/docker.sock"
     if not Path(socket_path).exists():
         pytest.fail("the Docker socket is not mounted: run tier 3 tests in the tools container")
     engine = DockerEngine(socket_path, os.environ.get("COMPOSE_PROJECT_NAME", "order-system"))
     yield engine
+    for service, network in list(engine.disconnected):
+        engine.connect(service, network)
     for service in engine.stopped:
         engine.start(service)
     for service in engine.stopped:

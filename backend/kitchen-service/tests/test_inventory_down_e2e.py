@@ -72,7 +72,7 @@ def test_kitchen_rejects_while_inventory_is_down_then_inventory_releases_once(
     """Scenario 4: the Kitchen rejects a ticket while Inventory is down, then Inventory comes
     back. The branch sees Cancelled immediately; Inventory releases exactly once when it comes
     back. "The branch sees" is checked as OrderCancelled on status-events.POS01; the branch
-    applying it is step 6."""
+    applying it is order-service/tests/test_cancel.py."""
     with psycopg.connect(INVENTORY_DB) as conn:
         for ingredient in ("LA_TRA", "DA"):
             assert receive_stock(conn, ingredient, inv.D("1"))

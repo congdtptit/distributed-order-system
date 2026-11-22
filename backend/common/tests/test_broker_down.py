@@ -4,7 +4,7 @@ are being sent.
 The sender is the outbox relay of Inventory and the Kitchen, with the producer settings of
 section 13.1 of docs/01-business-spec.md (``acks=all``, ``enable.idempotence=true``) and the
 topic settings (3 replicas, ``min.insync.replicas=2``). The branch's send queue uses the same
-producer settings and gets its own sender in step 6.
+producer settings; its own test is in order-service/tests/test_send_queue.py.
 """
 
 import threading

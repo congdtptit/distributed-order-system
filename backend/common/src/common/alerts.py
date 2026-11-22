@@ -1,5 +1,6 @@
-"""Rows of the ``alerts`` table of Inventory and the Kitchen (sections 3 and 4 of
-docs/02-detailed-design.md): items of Flow D that a person needs to look at.
+"""Rows of the ``alerts`` table of Inventory, the Kitchen and the branches (sections 3, 4 and
+5 of docs/02-detailed-design.md): items of Flow D that a person needs to look at. A branch
+writes only ``CAN_KIEM_TRA``.
 
 Every insert uses ON CONFLICT DO NOTHING on the unique key, so a Kafka redelivery of the same
 message does not create a second row.

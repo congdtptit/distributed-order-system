@@ -97,8 +97,6 @@ class ConsumerSettings:
     """event_type -> handler, for the types meant for this service."""
     deciding: bool
     """True for Inventory and the Kitchen, False for the branches (section 9)."""
-    alerts_table: bool = True
-    """Write alerts to the ``alerts`` table; False logs them (the branch DB has no such table)."""
     max_attempts: int = 5
     """Section 10 of the specification: attempts for a permanently failing message."""
     dlq_topic: str = DLQ
@@ -290,21 +288,21 @@ class MessageConsumer:
         self._alert(record, reason)
 
     def _alert(self, record: Record, reason: str) -> None:
-        """Raise a "needs review" alert for the message (Flow D)."""
+        """Raise a "needs review" alert for the message (Flow D): an ``alerts`` row in the
+        service's own DB, which every service has (the branch's since revision 14 of document
+        02), and a log line."""
         order_id, event_id = _identify(record)
         detail: dict[str, Any] = {"error": reason[:1000], "consumer": self.settings.name}
-        if not self.settings.alerts_table:
-            log.error(
-                "ALERT %s order_id=%s event_id=%s %s[%d]@%d: %s",
-                NEEDS_REVIEW,
-                order_id,
-                event_id,
-                record.topic,
-                record.partition,
-                record.offset,
-                reason,
-            )
-            return
+        log.error(
+            "ALERT %s order_id=%s event_id=%s %s[%d]@%d: %s",
+            NEEDS_REVIEW,
+            order_id,
+            event_id,
+            record.topic,
+            record.partition,
+            record.offset,
+            reason,
+        )
         backoff = self.settings.backoff_s
         while True:
             try:

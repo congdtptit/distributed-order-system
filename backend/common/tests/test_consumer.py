@@ -90,14 +90,12 @@ def make_consumer(
     *,
     group: str | None = None,
     deciding: bool = True,
-    alerts_table: bool = True,
     max_attempts: int = 5,
 ) -> MessageConsumer:
     settings = ConsumerSettings(
         name="inventory-test",
         handlers=handlers,
         deciding=deciding,
-        alerts_table=alerts_table,
         max_attempts=max_attempts,
         dlq_topic=dlq,
         backoff_s=0.01,
@@ -367,13 +365,14 @@ def test_a_known_type_meant_for_another_service_is_skipped_without_dlq(
     assert end_offset(kafka_bootstrap, dlq, 0) == 0
 
 
-def test_display_only_side_logs_and_skips_an_unknown_type(
+def test_display_only_side_alerts_and_skips_an_unknown_type(
     migrated: Callable[[str], str],
     new_topic: Callable[[int], str],
     kafka_bootstrap: str,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Section 9: a branch logs, raises an alert and ignores an unknown type; no dlq."""
+    """Section 9: a branch logs, raises an alert and ignores an unknown type; no dlq. The alert
+    is a row in the branch's own ``alerts`` table (revision 14 of document 02)."""
     dsn = migrated("order-service")
     topic, dlq = new_topic(1), new_topic(1)
     unknown = order_created()
@@ -387,9 +386,7 @@ def test_display_only_side_logs_and_skips_an_unknown_type(
             )
         ],
     )
-    consumer = make_consumer(
-        kafka_bootstrap, topic, dsn, dlq, {}, deciding=False, alerts_table=False
-    )
+    consumer = make_consumer(kafka_bootstrap, topic, dsn, dlq, {}, deciding=False)
     with caplog.at_level(logging.ERROR, logger="common.consumer"):
         try:
             assert [o for _, o in drive(consumer, 1)] == [Outcome.IGNORED_UNKNOWN]
@@ -399,6 +396,9 @@ def test_display_only_side_logs_and_skips_an_unknown_type(
         "ALERT CAN_KIEM_TRA" in r.message and str(unknown.order_id) in r.message
         for r in caplog.records
     )
+    assert rows(dsn, "SELECT kind, order_id, event_id, source_topic FROM alerts") == [
+        ("CAN_KIEM_TRA", unknown.order_id, unknown.event_id, topic)
+    ]
     assert end_offset(kafka_bootstrap, dlq, 0) == 0
     assert processed(dsn) == set()
 

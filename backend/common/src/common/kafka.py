@@ -46,13 +46,15 @@ class SendError(Exception):
     """Kafka did not acknowledge a message."""
 
 
-def producer_config(bootstrap: str, client_id: str) -> dict[str, str | int | float | bool]:
+def producer_config(
+    bootstrap: str, client_id: str, *, delivery_timeout_s: float = DELIVERY_TIMEOUT_S
+) -> dict[str, str | int | float | bool]:
     return {
         "bootstrap.servers": bootstrap,
         "client.id": client_id,
         "acks": "all",
         "enable.idempotence": True,
-        "message.timeout.ms": int(DELIVERY_TIMEOUT_S * 1000),
+        "message.timeout.ms": int(delivery_timeout_s * 1000),
         "linger.ms": 5,
     }
 
@@ -78,8 +80,24 @@ def consumer_config(
 class Sender:
     """A producer that reports, for each message, whether Kafka acknowledged it."""
 
-    def __init__(self, bootstrap: str, client_id: str) -> None:
-        self._producer = Producer(producer_config(bootstrap, client_id))
+    def __init__(
+        self, bootstrap: str, client_id: str, *, delivery_timeout_s: float = DELIVERY_TIMEOUT_S
+    ) -> None:
+        """``delivery_timeout_s``: after this long a message counts as failed; tests that cut
+        the connection shorten it so that a failed attempt does not take 30 s."""
+        self._delivery_timeout_s = delivery_timeout_s
+        self._producer = Producer(
+            producer_config(bootstrap, client_id, delivery_timeout_s=delivery_timeout_s)
+        )
+
+    def probe(self, timeout_s: float = 2.0) -> bool:
+        """The connectivity probe of section 5 of docs/02-detailed-design.md: True if a broker
+        answered a cluster metadata request within ``timeout_s``."""
+        try:
+            metadata = self._producer.list_topics(timeout=timeout_s)
+        except KafkaException:
+            return False
+        return bool(metadata.brokers)
 
     def send_all(self, messages: Sequence[Outgoing]) -> list[bool]:
         """Send and wait. Element i is True only if Kafka acknowledged message i."""
@@ -109,8 +127,15 @@ class Sender:
                     break
                 except BufferError:
                     self._producer.poll(0.5)  # local queue full: let deliveries drain
+                except KafkaException as exc:
+                    # Refused before sending (too large, an invalid topic name): this message
+                    # fails, the others in the batch still go (section 9: one failing entry
+                    # does not block the send queue).
+                    key = m.key.decode(errors="replace") if m.key else None
+                    log.warning("order_id=%s send to %s refused: %s", key, m.topic, exc)
+                    break
         # Every message ends within message.timeout.ms, acknowledged or failed.
-        self._producer.flush(DELIVERY_TIMEOUT_S + 10)
+        self._producer.flush(self._delivery_timeout_s + 10)
         return acked
 
     def send_one(self, message: Outgoing) -> None:

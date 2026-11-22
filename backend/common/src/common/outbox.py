@@ -7,7 +7,7 @@ and marks a row as sent only after Kafka acknowledged it (section 13.1 of the sp
 The ``payload`` column holds the whole envelope, which is the Kafka message value.
 
 The branch's send queue is a different table with the "send attempted" flag (section 5 of
-document 02) and gets its own sender in step 6.
+document 02) and has its own sender, ``order_service.sender``.
 """
 
 import json

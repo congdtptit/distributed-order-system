@@ -139,7 +139,8 @@ def test_the_order_arriving_again_after_a_cancel_creates_no_ticket_and_no_second
 def test_a_cancel_pending_order_failed_by_inventory_ends_failed(kdb: str, idb: str) -> None:
     """Scenario 8: an order that has a Cancel-pending record is rejected by Inventory. The
     branch sees Failed and the cancel flag turns off; the Kitchen record moves to Failed.
-    The branch applying Failed (and turning its flag off) is step 6; here: Inventory's
+    The branch applying Failed (and turning its flag off) is in the branch's test_cancel.py;
+    here: Inventory's
     OrderFailed to the branch, and the Kitchen's record."""
     inv.set_available(idb, "THIT_BO", inv.D("0"))
     order = inv.order_created()
@@ -162,7 +163,8 @@ def test_a_cancel_pending_order_failed_by_inventory_ends_failed(kdb: str, idb: s
 def test_a_cancel_request_while_cooking_is_refused(kdb: str) -> None:
     """Scenario 23: a cancel request arrives while the ticket is Cooking. The branch sees
     "Cannot cancel: the kitchen has started cooking" and the status is unchanged. "The branch
-    sees" is checked as CancelRejected on status-events.POS01; the branch showing it is step 6."""
+    sees" is checked as CancelRejected on status-events.POS01; the branch showing it is in
+    the branch's test_cancel.py."""
     env = order_reserved()
     deliver(kdb, env)
     assert env.order_id is not None
@@ -234,7 +236,7 @@ def test_failed_first_then_the_cancel_request_gets_failed_and_no_cancel_pending(
     """Scenario 33: Inventory's Failed report reaches the Kitchen first, and the cancel request
     for that order arrives later. The Kitchen has a Failed record; no Cancel-pending record is
     created; the branch sees Failed. "The branch sees" is checked as OrderFailed on
-    status-events.POS01; the branch applying it is step 6."""
+    status-events.POS01; the branch applying it is in the branch's test_cancel.py."""
     failed = order_failed(reason=reasons.ORDER_EXPIRED)
     deliver(kdb, failed)
     request = cancel_requested(failed.order_id)

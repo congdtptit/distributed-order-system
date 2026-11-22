@@ -18,12 +18,17 @@ TABLES = {
     "replication_heartbeat",
     "processed_events",
     "dishes",
+    "alerts",
 }
 
 
 def test_migrations_create_the_tables_of_the_design(fresh_db: str) -> None:
     with psycopg.connect(fresh_db) as conn:
-        assert apply_migrations(conn, MIGRATIONS) == ["001_schema.sql", "002_dishes.sql"]
+        assert apply_migrations(conn, MIGRATIONS) == [
+            "001_schema.sql",
+            "002_dishes.sql",
+            "003_alerts.sql",
+        ]
         assert apply_migrations(conn, MIGRATIONS) == []
         rows = conn.execute(
             "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"

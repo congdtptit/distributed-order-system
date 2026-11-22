@@ -69,12 +69,13 @@ extraPaths = [
   # Shared test helpers of a module (e.g. inventory_support.py); see pytest pythonpath below.
   "inventory-service/tests",
   "kitchen-service/tests",
+  "order-service/tests",
 ]
 
 [tool.pytest.ini_options]
 addopts = ["--strict-markers", "--import-mode=importlib", "-ra"]
 # Test helper modules shared by the test files of one module; their names are unique.
-pythonpath = ["inventory-service/tests", "kitchen-service/tests"]
+pythonpath = ["inventory-service/tests", "kitchen-service/tests", "order-service/tests"]
 # xunit1 keeps the kb(<n>) properties that scripts/report_tests.py reads.
 junit_family = "xunit1"
 testpaths = [
