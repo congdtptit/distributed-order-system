@@ -3,12 +3,14 @@ import { useDisclosure } from "@mantine/hooks";
 import { Navigate, Route, NavLink as RouterLink, Routes, useLocation } from "react-router";
 import { SCREENS, type Screen } from "./screens";
 import { BranchScreen } from "./screens/branch/BranchScreen";
+import { InventoryScreen } from "./screens/inventory/InventoryScreen";
 import { KitchenScreen } from "./screens/kitchen/KitchenScreen";
 
 /** The screens built so far; the others show a placeholder naming their step. */
 const BUILT: Record<string, () => React.JSX.Element> = {
   branch: BranchScreen,
   kitchen: KitchenScreen,
+  inventory: InventoryScreen,
 };
 
 function Placeholder({ screen }: { screen: Screen }) {

@@ -42,6 +42,11 @@ export const CANCEL_FLAG = {
   BEP_KHONG_NAU: { label: "Bếp sẽ không nấu", color: "teal" },
 } as const satisfies Record<string, StatusLabel>;
 
+/** The stock-check flag of an ingredient (BR6). */
+export const STOCK_CHECK = {
+  CHO_KIEM_KHO: { label: "Chờ kiểm kho", color: "red" },
+} as const satisfies Record<string, StatusLabel>;
+
 /** Flow D alert kinds. */
 export const ALERT_KIND = {
   CAN_KIEM_TRA: "Cần kiểm tra",

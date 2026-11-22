@@ -33,4 +33,13 @@ Màn hình chỉ hiển thị điều các dịch vụ trả về và không t�
 - **Nút theo trạng thái:** phiếu Chờ nấu có Bắt đầu nấu và Từ chối; phiếu Đang nấu chỉ có Hoàn tất. Nút cao ít nhất 44px, cách nhau 8px, để bấm nhanh khi đang đeo găng. Trả 409 nghĩa là phiếu vừa đổi trạng thái (thua trong tranh chấp với một yêu cầu hủy, BR7): màn hình báo ngắn rồi tải lại, không coi là lỗi.
 - **Hộp thoại từ chối:** bắt buộc chọn lý do thuộc nhóm Bếp từ chối; với lý do Nguyên liệu hỏng phải chọn ít nhất một nguyên liệu trong danh sách đã giữ của phiếu. Bếp kiểm tra lại và trả 400 nếu không nhận, lỗi hiện ngay trong hộp thoại.
 
-> TODO(bước 6b): các màn Kho, Giám sát, trang Demo; màn Quản lý ở bước 7.
+### 3. Màn hình Kho
+
+Đường dẫn `/inventory`; người dùng là nhân viên kho. Màn hình gồm:
+
+- **Cảnh báo của Kho** (`GET /alerts`): lệnh hoàn kho hoặc báo đã dùng không khớp bản ghi nào (`LENH_KHONG_KHOP`, tồn kho không đổi, cần kiểm tra bằng tay) và đơn cần kiểm tra (`CAN_KIEM_TRA`).
+- **Tồn kho toàn chuỗi** (`GET /stock`): mỗi nguyên liệu có bốn đại lượng của mục 3.3 đặc tả (có thể giữ, đang giữ, đã dùng, hao hụt) kèm đơn vị, và nhãn "Chờ kiểm kho" nếu bị cờ. Nguyên liệu bị cờ xếp lên đầu.
+- **Nhập kho:** hộp thoại nhập số lượng dương, tối đa 3 chữ số thập phân (`POST /stock/receipts`); Kho trả 422 thì báo ngay dưới ô nhập.
+- **Kiểm kho xong** (chỉ có trên nguyên liệu bị cờ, `POST /ingredients/{id}/clear-check`): gỡ cờ, có thể kèm tồn đếm được. Nếu tồn đếm được ít hơn lượng đang giữ, Kho trả 409; màn hình nêu lượng đang giữ và hướng dẫn từ chối các phiếu còn giữ nguyên liệu đó trên màn Bếp rồi kiểm kho lại.
+
+> TODO(bước 6b): màn Giám sát và trang Demo; màn Quản lý ở bước 7.

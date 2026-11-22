@@ -30,6 +30,7 @@ const ICONS: Record<string, ComponentType<{ size?: number; "aria-hidden"?: boole
   DA_HUY: IconBan,
   DA_TRA: IconBan,
   THAT_BAI: IconAlertTriangle,
+  CHO_KIEM_KHO: IconAlertTriangle,
   DANG_YEU_CAU: IconHandStop,
   BEP_KHONG_NAU: IconHandStop,
 };
