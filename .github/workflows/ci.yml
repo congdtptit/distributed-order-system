@@ -1,5 +1,6 @@
-# Two jobs: the TypeScript screens in frontend/ (Biome, tsc, Vitest), and the
-# Python services (formatting, lint, type check, tier 1 and 2 tests).
+# Three jobs: the TypeScript screens in frontend/ (Biome, tsc, Vitest); the
+# Python services (formatting, lint, type check, tier 1 and 2 tests); and the
+# demo setup itself (docker compose --profile full, every /health, replication).
 # The tier 3 tests (real Kafka, fault injection) are slow and run in the
 # nightly workflow instead (section 5.6 of docs/03-implementation-plan.md).
 # Locally the same commands run in compose: docker compose exec tools ...,
@@ -73,3 +74,36 @@ jobs:
         run: uv run --no-sync pyright
       - name: Tier 1 and 2 tests
         run: uv run --no-sync pytest -m "not tier3"
+
+  # In place of continuous deployment (section 5.6 of docs/03-implementation-plan.md): the
+  # demo runs on one machine with Docker Compose, so check that the full setup still starts,
+  # every service answers and every branch replicates to the Central Order Replica.
+  stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the backend image
+        run: docker compose --profile full build
+      - name: Start everything
+        run: docker compose --profile full up -d --wait --wait-timeout 600
+      - name: Every service answers /health
+        run: |
+          for port in 8101 8102 8201 8301 8302 8303 8401; do
+            curl -fsS --retry 10 --retry-all-errors --retry-delay 3 "http://localhost:$port/health"
+            echo
+          done
+          curl -fsS --retry 20 --retry-all-errors --retry-delay 3 -o /dev/null http://localhost:5173/
+      - name: Every branch replicates to the Central Order Replica
+        run: |
+          for i in $(seq 1 30); do
+            fresh=$(curl -fsS http://localhost:8401/reports/summary |
+              jq '[.branches[] | select(.data_age_s != null and .data_age_s < 15)] | length')
+            [ "$fresh" = 3 ] && echo "3 branches replicate" && exit 0
+            sleep 2
+          done
+          curl -fsS http://localhost:8401/reports/summary | jq .
+          exit 1
+      - name: Logs on failure
+        if: failure()
+        run: docker compose --profile full logs --tail 200

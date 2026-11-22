@@ -31,3 +31,6 @@ dist/
 node_modules/
 frontend/dist/
 *.tsbuildinfo
+
+# Test results the nightly workflow writes before uploading them
+report/generated/junit-*.xml
