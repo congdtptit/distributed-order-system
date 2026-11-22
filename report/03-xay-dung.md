@@ -50,4 +50,8 @@ Màn hình chỉ hiển thị điều các dịch vụ trả về và không t�
 - **Consumer chậm:** topic có tin chưa đọc cũ hơn ngưỡng 5 phút (mục 10 của đặc tả), kèm số tin chưa đọc và tuổi tin cũ nhất.
 - **Cảnh báo:** gộp cảnh báo của Kho, Bếp (`GET /alerts`) và tin trạng thái không đọc được của từng chi nhánh, mới nhất lên đầu, lọc được theo loại (`CAN_KIEM_TRA`, `LENH_KHONG_KHOP`, `HUY_SAI_CHI_NHANH`).
 
-> TODO(bước 6b): trang Demo; màn Quản lý ở bước 7.
+### 5. Trang Demo
+
+Đường dẫn `/demo/POS01` (hoặc `POS02`, `ONLINE`); dùng khi trình diễn. Trang đặt màn Chi nhánh và màn Bếp cạnh nhau, dùng lại đúng hai màn đó và không có trạng thái riêng, để xem trực tiếp một tranh chấp (kịch bản 3) hay một yêu cầu hủy tới Bếp trước đơn (kịch bản 1). Phía trên là hướng dẫn các kịch bản demo của mục 12 đặc tả (1, 3, 4, 10, 36): các bước, lệnh `bin/chaos` để gây lỗi, và kết quả mong đợi. Kịch bản 10 và 36 đi thành cặp để cho thấy ranh giới của cam kết khi hủy lúc mất mạng.
+
+> TODO(bước 7): màn Quản lý.

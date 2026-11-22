@@ -10,7 +10,13 @@ import type { BranchId } from "../../api/branch";
 import { branchApi } from "../../api/branch";
 import { ApiError, detailMessage } from "../../api/http";
 
-export function OrderForm({ branch }: { branch: BranchId }) {
+export function OrderForm({
+  branch,
+  headingLevel = 2,
+}: {
+  branch: BranchId;
+  headingLevel?: 2 | 3;
+}) {
   const api = branchApi(branch);
   const client = useQueryClient();
   const dishes = useQuery({
@@ -51,7 +57,7 @@ export function OrderForm({ branch }: { branch: BranchId }) {
   return (
     <Card withBorder padding="md">
       <Stack gap="sm">
-        <Title order={2} size="h4">
+        <Title order={headingLevel} size="h4">
           Tạo đơn
         </Title>
         {dishes.isPending ? (
@@ -59,7 +65,10 @@ export function OrderForm({ branch }: { branch: BranchId }) {
             Đang tải danh mục món…
           </Text>
         ) : (
-          <SimpleGrid cols={{ base: 1, sm: 2, lg: 1 }} spacing="xs">
+          <SimpleGrid
+            cols={headingLevel === 3 ? { base: 1, xs: 2, xl: 3 } : { base: 1, sm: 2, lg: 1 }}
+            spacing="xs"
+          >
             {(dishes.data ?? []).map((dish) => (
               <NumberInput
                 key={dish.dish_id}

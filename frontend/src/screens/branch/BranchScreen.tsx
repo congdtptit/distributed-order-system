@@ -31,10 +31,18 @@ export function BranchScreen() {
   if (!isBranch(branchId)) {
     return <Text>Không có chi nhánh {branchId}.</Text>;
   }
-  return <Branch key={branchId} branch={branchId} />;
+  return <BranchPanel key={branchId} branch={branchId} />;
 }
 
-function Branch({ branch }: { branch: BranchId }) {
+/** The branch screen's content. The demo page embeds it beside the Kitchen: a level-2
+ * heading, the branch selector staying on the demo page, and a single-column layout. */
+export function BranchPanel({
+  branch,
+  embedded = false,
+}: {
+  branch: BranchId;
+  embedded?: boolean;
+}) {
   const api = branchApi(branch);
   const navigate = useNavigate();
   const orders = useQuery({ queryKey: ["branch", branch, "orders"], queryFn: api.orders });
@@ -45,14 +53,14 @@ function Branch({ branch }: { branch: BranchId }) {
   return (
     <Stack gap="md">
       <Group justify="space-between" wrap="wrap" gap="sm">
-        <Title order={1}>Chi nhánh {branch}</Title>
+        <Title order={embedded ? 2 : 1}>Chi nhánh {branch}</Title>
         <Group gap="sm" wrap="wrap">
           <Connection monitor={monitor.data} answering={!monitor.isError} />
           <SegmentedControl
             aria-label="Chọn chi nhánh"
             data={[...BRANCHES]}
             value={branch}
-            onChange={(value) => navigate(`/branch/${value}`)}
+            onChange={(value) => navigate(`/${embedded ? "demo" : "branch"}/${value}`)}
           />
         </Group>
       </Group>
@@ -67,12 +75,12 @@ function Branch({ branch }: { branch: BranchId }) {
       {monitor.data && <BranchAlerts monitor={monitor.data} onCancel={setCancelling} />}
 
       <Grid gap="md">
-        <Grid.Col span={{ base: 12, lg: 3 }} style={{ minWidth: 0 }}>
-          <OrderForm branch={branch} />
+        <Grid.Col span={embedded ? 12 : { base: 12, lg: 3 }} style={{ minWidth: 0 }}>
+          <OrderForm branch={branch} headingLevel={embedded ? 3 : 2} />
         </Grid.Col>
-        <Grid.Col span={{ base: 12, lg: 9 }} style={{ minWidth: 0 }}>
+        <Grid.Col span={embedded ? 12 : { base: 12, lg: 9 }} style={{ minWidth: 0 }}>
           <Stack gap="xs">
-            <Title order={2} size="h4">
+            <Title order={embedded ? 3 : 2} size="h4">
               Đơn của chi nhánh
             </Title>
             {orders.isPending && !orders.isError ? (

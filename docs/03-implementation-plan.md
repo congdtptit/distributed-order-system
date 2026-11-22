@@ -1,8 +1,16 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 18 · 22 Nov 2026
+Revision 19 · 22 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the implementation phase; section 7 records what has been built so far. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 19
+
+| Section | Change | Reason |
+|---|---|---|
+| 4, 7 | Step 6b is done except the Management screen, which belongs to step 7: the branch, Kitchen, Inventory and Monitor screens and the demo page; progress and estimate updated | Built on 22 Nov 2026 |
+| 4 | `GET /alerts` and `GET /monitor` of Inventory and the Kitchen were built in step 6b instead of step 7 | The Kitchen, Inventory and Monitor screens show them, and the `/screen` skill does not stub an API that does not exist |
+| 5.7 | The screenshot script notes that headless Chrome lays no page out narrower than 500px | Found while checking the branch screen at phone width |
 
 ## Changes in revision 18
 
@@ -389,12 +397,12 @@ Updated 22 Nov 2026, after step 6. A step is done when its scenarios pass, the c
 | 4. Kitchen: tickets, buttons, warnings | Done 22 Nov 2026 | 4, 50, 52; the Kitchen parts of 6 and 48 |
 | 5. Kitchen: cancel requests | Done 22 Nov 2026 | 1, 2, 3, 8, 23, 25, 27, 28, 33, 34, 35, 51 |
 | 6. Branch | Done 22 Nov 2026 | 7, 10, 12, 36, 37, 53, 54; the branch side of 1, 3, 4, 8, 23, 24, 31, 33 |
-| 6b. Screens | Next | – |
+| 6b. Screens | Done 22 Nov 2026, except the Management screen (step 7) | – |
 | 7. Integration | After step 6 | 0 of 1 (scenario 55), plus the end-to-end versions and the performance test |
 | 8. Report material | After step 7 | – |
 | Phase 2 | After phase 1 | 0 of 4 |
 
-**Scenarios:** 39 of 44 pass at their step (89 %). Of those, 6 and 48 wait for phase 2 for their dish-status part. Left: 55 (step 7) and 18–21 (phase 2). **Estimate of work done:** about 59 % of the whole project, weighting each step by its expected effort. The report template added a performance test and report material, so the weights were rescaled on 22 Nov 2026: preparation 13 %, step 1 9 %, Inventory 13 %, Kitchen 13 %, branch 11 %, screens 11 %, integration and reporting 9 %, performance test 5 %, report material 8 %, phase 2 5 %, demo 3 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.
+**Scenarios:** 39 of 44 pass at their step (89 %). Of those, 6 and 48 wait for phase 2 for their dish-status part. Left: 55 (step 7) and 18–21 (phase 2). **Estimate of work done:** about 69 % of the whole project (59 % after step 6, then 9 of the 11 points of the screens and 1 of integration for the two Flow D APIs built early), weighting each step by its expected effort. The report template added a performance test and report material, so the weights were rescaled on 22 Nov 2026: preparation 13 %, step 1 9 %, Inventory 13 %, Kitchen 13 %, branch 11 %, screens 11 %, integration and reporting 9 %, performance test 5 %, report material 8 %, phase 2 5 %, demo 3 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.
 
 ### What step 1 built
 
@@ -500,3 +508,13 @@ Also: the branch DB's `alerts` table (migration `003`, decided by @Naul on 22 No
 - **Reviews:** the specification review found two faults, fixed: an entry the producer refuses outright (over 1 MB) stopped the whole send queue, and an unexpected error ended the sender thread for good. It also found that an order Inventory had already answered could stay on the "about to expire" list. Its other findings were choices the documents did not state; they are now "The branch in practice" in revision 14 of the design. The test audit asked for a real network cut in scenario 12, Inventory's invariants after every branch test that touches Inventory, Inventory's side in scenario 3, the Kitchen record in scenario 33, and a wait on the probe instead of a fixed sleep; all done.
 - **Also found:** the full test run showed the Kitchen's race test of scenario 3 could see only one winner on a loaded machine; fixed in the test (revision 18).
 
+### What step 6b built
+
+`frontend/src/`: the branch screen (`/branch/:branchId`), the Kitchen (`/kitchen`), Inventory (`/inventory`), Monitor (`/monitor`) and the demo page (`/demo/:branchId`), each through the `/screen` skill's steps: a state table traced to the documents, one Vitest test per row with the services stubbed by MSW, then the screen, the checklist and screenshots against the running cluster. Shared pieces: `api/http.ts` (one fetch wrapper; a 502–504 from the Vite proxy counts as "no answer"), one typed client per service on the generated types, `components/common.tsx` (status badges with an icon, short order ids, the banner of a service that does not answer), `test/` (render with providers, MSW server). Backend, built early for these screens: `GET /alerts` and `GET /monitor` (consumer lag from Kafka) of Inventory and the Kitchen.
+
+### How step 6b was checked
+
+- **Tests:** 74 frontend tests pass (branch 30, Kitchen 17, Inventory 13, Monitor 6, demo 4, layout 4); `tsc` and Biome are clean. Each screen's tests failed first because the screen did not exist. The two Flow D APIs have 7 backend tests, 5 of them in tier 3 on the real cluster.
+- **Against the running cluster:** each screen was looked at with real data: pos01 cut off Kafka (`bin/chaos offline pos01`) for the branch's connection badge, a spoiled-ingredient rejection for the Kitchen's red warning and the Inventory flag, pos02 stopped for the Monitor's "not answering" row.
+- **Checklist findings, fixed:** the branch page overflowed sideways (grid columns without `minWidth: 0`); reduced motion was not respected; some targets were under 24px; status badges lacked icons; the Kitchen's alerts sat below the tickets; the wall screen used one card per row.
+- **Process slip:** one commit of the Monitor screen went in with a failing test, because a `| grep` hid vitest's exit code; fixed in the next commit, and commits are now gated on the test command's own status.

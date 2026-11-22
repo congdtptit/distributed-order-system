@@ -48,7 +48,7 @@ Script ghép các file theo thứ tự, thay các dòng `<!-- include: … -->` 
 | Thiết kế chức năng | Có cho các giao dịch đã làm: Kho, Bếp và chi nhánh (19 giao dịch); cảnh báo của Kho, Bếp và báo cáo ở bước 7 |
 | Thiết kế CSDL | Có: danh sách CSDL, sơ đồ tổng quát, danh sách bảng; sơ đồ ER và bảng chi tiết sinh từ CSDL đang chạy |
 | Công nghệ | Có |
-| Giao diện | Có màn Chi nhánh, Bếp, Kho và Giám sát; các màn khác theo bước 6b và 7, ảnh chụp ở bước 8 |
+| Giao diện | Có màn Chi nhánh, Bếp, Kho, Giám sát và trang Demo; màn Quản lý ở bước 7, ảnh chụp ở bước 8 |
 | Kịch bản kiểm thử | Có; trạng thái sinh từ lần chạy test gần nhất |
 | Mô hình kiểm thử phân tán | Có, gồm cắt mạng chi nhánh thật (kịch bản 10, 36); bổ sung kịch bản 55 và hai instance thật ở bước 7 |
 | Kiểm thử hiệu năng | Chờ bước 7 (JMeter) |

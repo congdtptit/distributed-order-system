@@ -3,6 +3,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { Navigate, Route, NavLink as RouterLink, Routes, useLocation } from "react-router";
 import { SCREENS, type Screen } from "./screens";
 import { BranchScreen } from "./screens/branch/BranchScreen";
+import { DemoScreen } from "./screens/demo/DemoScreen";
 import { InventoryScreen } from "./screens/inventory/InventoryScreen";
 import { KitchenScreen } from "./screens/kitchen/KitchenScreen";
 import { MonitorScreen } from "./screens/monitor/MonitorScreen";
@@ -13,6 +14,7 @@ const BUILT: Record<string, () => React.JSX.Element> = {
   kitchen: KitchenScreen,
   inventory: InventoryScreen,
   monitor: MonitorScreen,
+  demo: DemoScreen,
 };
 
 function Placeholder({ screen }: { screen: Screen }) {

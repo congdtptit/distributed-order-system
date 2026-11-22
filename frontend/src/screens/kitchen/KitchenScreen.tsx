@@ -33,7 +33,9 @@ interface Request {
   spoiled?: string[];
 }
 
-export function KitchenScreen() {
+/** The Kitchen screen; the demo page embeds it beside a branch (``embedded``: a level-2
+ * heading and one card per row in each column). */
+export function KitchenScreen({ embedded = false }: { embedded?: boolean } = {}) {
   const client = useQueryClient();
   const tickets = useQuery({ queryKey: ["kitchen", "tickets"], queryFn: kitchenApi.tickets });
   const alerts = useQuery({ queryKey: ["kitchen", "alerts"], queryFn: kitchenApi.alerts });
@@ -97,7 +99,7 @@ export function KitchenScreen() {
 
   return (
     <Stack gap="md">
-      <Title order={1}>Bếp</Title>
+      <Title order={embedded ? 2 : 1}>Bếp</Title>
       {(tickets.isError || alerts.isError) && (
         <ServiceBanner
           service="Bếp"
@@ -110,8 +112,9 @@ export function KitchenScreen() {
       ) : (
         <Grid gap="md">
           <Column
-            span={{ base: 12, md: 6, xl: 8 }}
-            cards={{ base: 1, xl: 2 }}
+            span={{ base: 12, md: 6, xl: embedded ? 6 : 8 }}
+            cards={embedded ? { base: 1 } : { base: 1, xl: 2 }}
+            level={embedded ? 3 : 2}
             title="Chờ nấu"
             empty="Chưa có phiếu nào đang chờ nấu. Đơn Kho đã giữ nguyên liệu sẽ hiện ở đây."
           >
@@ -125,8 +128,9 @@ export function KitchenScreen() {
             ))}
           </Column>
           <Column
-            span={{ base: 12, md: 6, xl: 4 }}
+            span={{ base: 12, md: 6, xl: embedded ? 6 : 4 }}
             cards={{ base: 1 }}
+            level={embedded ? 3 : 2}
             title="Đang nấu"
             empty="Chưa có phiếu nào đang nấu."
           >
@@ -165,12 +169,14 @@ export function KitchenScreen() {
 function Column({
   span,
   cards,
+  level,
   title,
   empty,
   children,
 }: {
   span: { base: number; md: number; xl: number };
   cards: { base: number; xl?: number };
+  level: 2 | 3;
   title: string;
   empty: string;
   children: React.ReactNode[];
@@ -179,7 +185,7 @@ function Column({
     <Grid.Col span={span} style={{ minWidth: 0 }}>
       <section aria-label={title}>
         <Stack gap="sm">
-          <Title order={2} size="h3">
+          <Title order={level} size="h3">
             {title} ({children.length})
           </Title>
           {children.length ? (
