@@ -179,6 +179,25 @@ class DockerEngine:
             raise RuntimeError(f"expected one container for {service}, found {len(containers)}")
         return str(containers[0]["Id"])
 
+    def logs(self, service: str, since: float) -> str:
+        """What a service's container wrote to stdout and stderr since a Unix time."""
+        conn = _UnixHTTPConnection(self._socket)
+        try:
+            path = f"/containers/{self.container_id(service)}/logs?stdout=1&stderr=1&since={since}"
+            conn.request("GET", path)
+            raw = conn.getresponse().read()
+        finally:
+            conn.close()
+        # Without a TTY the stream is multiplexed: each frame has an 8-byte header whose last
+        # four bytes give the frame's size, big-endian.
+        frames: list[bytes] = []
+        i = 0
+        while i + 8 <= len(raw):
+            size = int.from_bytes(raw[i + 4 : i + 8], "big")
+            frames.append(raw[i + 8 : i + 8 + size])
+            i += 8 + size
+        return b"".join(frames).decode(errors="replace")
+
     def stop(self, service: str) -> None:
         self.stopped.append(service)
         status, body = self._call("POST", f"/containers/{self.container_id(service)}/stop?t=10")

@@ -1,8 +1,14 @@
 # Detailed design – Kafka events, DB schemas and API
 
-Revision 15 · 22 Nov 2026 · @Naul · follows business specification v1.5
+Revision 16 · 22 Nov 2026 · @Naul · follows business specification v1.5
 
 This document turns business specification v1.5 (the lean edition) into three things to code against: the Kafka event catalogue, each service's DB schema, and the API. There is no existing codebase to align with: the base flow is built in this project as well, so the event names, table names, column names and API paths here are the ones to use.
+
+## Changes in revision 16
+
+| Section | Change | Reason |
+|---|---|---|
+| 8, 9 | Point 6: the trial run of how Kafka assigns partitions to the two Inventory instances is done, and recorded in section 9 | Scenario 42 with two real instances, step 7 |
 
 ## Changes in revision 15
 
@@ -641,7 +647,7 @@ The twelve points below are design choices made by this document and not present
 - [x] **3. "Return the stored result".** Proposal: emit a new message with a new `event_id`. If the old outbox row were resent, the receiver would already have that `event_id` in `processed_events` and would ignore it, which means no reply at all; a new message is safely re-applied by the receiver thanks to the rank rule and BR12.
 - [x] **4. The `seq` counter.** Proposal: one row in `menu_version`. The cost is that transactions which change a dish's status have to queue on this row; that is rare, because most reservations change no dish's status.
 - [x] **5. A Sold out dish while the data is fresh.** Proposal: block only in the UI; `POST /orders` does not check `menu_cache`. Inventory is the only place that rejects an order because of ingredients; adding a 409 at the branch would add a second rejection path based on data that is only a hint.
-- [x] **6. Partition counts.** Proposal: 2 for `order-events.*`, `cancel-events.*`, `kitchen-orders` and `stock-commands`; 1 for `status-events.*`, `menu-events` and `dlq`. The partition key is the order ID, so an order still stays within one partition. In scenario 42, pick two order IDs that fall into two different partitions and check in the logs that the two Inventory instances each process one order; how Kafka assigns partitions to instances needs a trial run to confirm.
+- [x] **6. Partition counts.** Proposal: 2 for `order-events.*`, `cancel-events.*`, `kitchen-orders` and `stock-commands`; 1 for `status-events.*`, `menu-events` and `dlq`. The partition key is the order ID, so an order still stays within one partition. In scenario 42, pick two order IDs that fall into two different partitions and check in the logs that the two Inventory instances each process one order; how Kafka assigns partitions to instances needs a trial run to confirm. Tried in step 7 (section 9): each instance gets one partition of each topic, and the two orders are processed one by each instance.
 - [x] **7. The `alerts` table.** Proposal: one table at Inventory and one at the Kitchen for the three kinds of Flow D alerts, read through `GET /alerts`. The alternative is to log only, but then scenario 29's "needs review" mark has nowhere to be stored, and scenarios 22, 27 and 34 would have to be checked by scanning logs.
 - [x] **8. The `clear-check` parameter.** Proposal: `counted_on_hand` is the on-hand stock, and Inventory subtracts the reserved quantity itself. If the team wants the person doing the stock check to enter the available stock directly, rename the parameter and drop the subtraction.
 - [x] **9. The `epoch` bump procedure.** Proposal: as in section 3, invoked through `POST /admin/epoch/bump`. Restoring Inventory from a backup remains a manual task outside the scope; this procedure only covers the "bump the epoch" part that the specification requires the system to guarantee.
@@ -666,6 +672,7 @@ The run on 21 Nov 2026 used PostgreSQL 16.2 and a temporary script that is not p
 | Kitchen | Cancel arriving before the order; duplicate order arrival; wrong-branch cancel before and after the order arrives; reason per branch; cancel while Cooking; the ticket warning; the "needs review" mark is not duplicated | 1, 2, 6, 23, 27, 29, 34, 35 |
 | Kitchen, races | 200 runs of Cancel and Start cooking at the same time (cooking won 98 times, cancel won 102 times); 200 runs of an order and a cancel request for the same order ID arriving at the same time | 3, 28 |
 | Replication (separate run, step 0) | On PostgreSQL 16.14, the publication and subscription at the end of section 5 between a branch DB and the central DB: an order and a heartbeat arrive in about 0.2 s; with the subscription disabled for 5 s the central `beat_at` stays still while the branch keeps beating, then catches up in about 0.2 s; with the central DB paused for 5 s, three orders written meanwhile arrive once it is back. The one-off script was removed when the environment moved to Docker Compose; the `replication-init` container now sets replication up and `bin/chaos cut-replication` cuts it (section 2 of document 03) | 55 (the "data as of" part) |
+| Two Inventory instances (step 7, tier 3) | `inventory-1` and `inventory-2` in one consumer group: each holds one of the two partitions of every `order-events.*` topic (`inventory-1` partition 0, `inventory-2` partition 1 on 22 Nov 2026). The default partitioner of librdkafka (`consistent_random`, CRC32 of the key) decides the partition of an order id, so a test can pick two ids for two partitions in advance; each instance's log shows it handled exactly its own order. Over 5 rounds per run and 3 runs, exactly one of the two orders was reserved each time and the books balanced | 42 |
 
 The two statements added in revision 8 (`stock.name`, the `dishes` table) run in the schema tests of each service, not in the trial runs above.
 
