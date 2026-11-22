@@ -58,19 +58,19 @@ State: **covered** (the material exists and only needs reformatting into the tem
 | Part I: the unit, the market, the conclusion | `report/01-khao-sat.md`: a draft by Claude (22 Nov 2026), from section 1 of the specification and the public documentation of seven F&B products (KiotViet, Sapo FnB, MISA CukCuk, iPOS, Toast, Square, Lightspeed), with its sources listed | Partly | @Naul reviews it and removes the reviewer's note |
 | HLD model (**required**) | `report/02-phan-tich-thiet-ke.md`, from the component table in 01 and section 2 of 03 | Covered | The drawing's layout can be tidied in step 8 |
 | Function list | `report/02-phan-tich-thiet-ke.md`, every transaction of phases 1 and 2 | Covered | Kept in line as the APIs are built |
-| Functional design per transaction | `report/02-phan-tich-thiet-ke.md`: cards and activity diagrams for the 24 transactions of phase 1 | Covered | Dish status in phase 2 |
+| Functional design per transaction | `report/02-phan-tich-thiet-ke.md`: cards and activity diagrams for all 28 transactions, dish status included | Covered | |
 | Databases of the system | Sections 3–5 of 02; the containers in section 2 of 03 | Covered | Inventory DB, Kitchen DB, one branch DB per site (POS01, POS02, ONLINE), the Central Order Replica |
 | Overall database diagram (**required**) | `report/02-phan-tich-thiet-ke.md` (overview of the six databases and how data moves between them) and one ER diagram per database in `report/generated/csdl.md` | Covered | Regenerate after each migration |
 | Table list and table detail | `report/02-phan-tich-thiet-ke.md` (23 tables with descriptions) and `report/generated/csdl.md` (Field, Type, Null, Key, Default, Extra) | Covered | Regenerate after each migration |
 | Technology | `report/03-xay-dung.md` | Covered | |
 | User interface | `report/03-xay-dung.md`: the six screens, each with a screenshot from the running system (`report/images/`, data from `backend/scripts/demo_data.py`) | Covered | |
-| Test scenarios | `report/generated/kiem-thu.md`, from a full test run: 40 of 44 pass on 22 Nov 2026 (6 and 48 counting their phase 1 parts) | Covered | Regenerate after each step |
+| Test scenarios | `report/generated/kiem-thu.md`, from a full test run: all 44 pass on 22 Nov 2026 | Covered | Regenerate after each step |
 | Distributed testing: model and scenarios (**required**) | `report/04-kiem-thu.md`: the test setup drawing and the table of faults injected: 1, 3, 4, 10, 12, 24, 25, 26, 29, 31, 36, 42 on two real instances, 55 | Covered | |
 | Performance testing (**required**) | `report/04-kiem-thu.md` section 2.4.2 and `report/generated/hieu-nang.md`: JMeter 5.6.3 in a container on `api-net`, 250 users on each of six APIs, `docker stats`, order creation to Reserved; the two faults it found and their fixes | Covered | Run `bin/perf` again on a clean cluster before the report is final |
 | Security testing | The template lists Acunetix as a tool but does not mark security testing as required. The lean edition has no authentication (section 15 of 01) | Missing | Optional. A free scanner (OWASP ZAP baseline scan) could stand in for Acunetix. Decision pending (README) |
 | Test tools table | `report/04-kiem-thu.md` | Covered | |
 | Test environment | `report/04-kiem-thu.md`: the developer machine and the compose setup in the template's server table (there is no server); resource use idle and under load | Covered | |
-| Functional result counts | The summary table at the end of `report/generated/kiem-thu.md` (246 tests, 0 failed on 22 Nov 2026) | Covered | Regenerate after each step |
+| Functional result counts | The summary table at the end of `report/generated/kiem-thu.md` (271 tests, 0 failed on 22 Nov 2026) | Covered | Regenerate after each step |
 | Performance result table | `report/generated/hieu-nang.md`, from the JMeter result files | Covered | |
 
 ## 3. Plan

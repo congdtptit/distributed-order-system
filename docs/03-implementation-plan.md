@@ -1,8 +1,14 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 21 · 22 Nov 2026
+Revision 22 · 22 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the implementation phase; section 7 records what has been built so far. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 22
+
+| Section | Change | Reason |
+|---|---|---|
+| 7 | Phase 2 (Flow C) done: what it built and how it was checked; all 44 scenarios; progress and estimate | 22 Nov 2026 |
 
 ## Changes in revision 21
 
@@ -420,9 +426,9 @@ Updated 22 Nov 2026, during step 7. A step is done when its scenarios pass, the 
 | 6b. Screens | Done 22 Nov 2026; the Management screen followed in step 7 | – |
 | 7. Integration | Mostly done 22 Nov 2026: reporting, the Management screen, the performance test, CI. Left: the `stack` job and `nightly` run only after a push | 55; the end-to-end versions of 1, 3 and 42 |
 | 8. Report material | Under way 22 Nov 2026: screenshots of the six screens, the HLD redrawn, the Word export made reliable. Part I drafted by Claude for @Naul's review. Left: the template's page layout (needs the template file), the cover | – |
-| Phase 2 | After phase 1 | 0 of 4 |
+| Phase 2 | Done 22 Nov 2026 | 18, 19, 20, 21; the dish parts of 6 and 48 |
 
-**Scenarios:** 40 of 44 pass (91 %); the full run on 22 Nov 2026 had 246 backend tests, none failing. Of those, 6 and 48 wait for phase 2 for their dish-status part. Left: 18–21 (phase 2). **Estimate of work done:** about 82 % of the whole project: 59 % after step 6, the screens' full 11 %, 7 of the 9 points of integration and reporting (left: the CI runs on GitHub and the final review of section 5.5) and the performance test's 5 %, weighting each step by its expected effort. The weights, rescaled on 22 Nov 2026: preparation 13 %, step 1 9 %, Inventory 13 %, Kitchen 13 %, branch 11 %, screens 11 %, integration and reporting 9 %, performance test 5 %, report material 8 %, phase 2 5 %, demo 3 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.
+**Scenarios:** all 44 pass, each with every clause of its expected result, including the dish parts of 6 and 48. **Estimate of work done:** about 93 % of the whole project: everything but the rest of the report material (the template's page layout, the cover and the review of Part I, about 3 points of 8), the demo (3 %) and the two CI workflows that run only after a push (1 point of integration), weighting each step by its expected effort. The weights, rescaled on 22 Nov 2026: preparation 13 %, step 1 9 %, Inventory 13 %, Kitchen 13 %, branch 11 %, screens 11 %, integration and reporting 9 %, performance test 5 %, report material 8 %, phase 2 5 %, demo 3 %.
 
 ### What step 1 built
 
@@ -555,4 +561,17 @@ Also: the branch DB's `alerts` table (migration `003`, decided by @Naul on 22 No
 - **The tests can fail:** reconnecting without the Compose alias fails scenario 55 at "a POS01 beat after the branch was read"; a first version of that test compared the branch's figures with a beat that could never be newer, and passed only by luck: found by the mutation run and rewritten. The two pool faults each have a test that reproduced them first (`backend/common/tests/test_api.py`): ten requests on a pool of two, and twenty requests through a real server with four threads.
 - **Reviews:** the specification review of the pool found no fault: transaction boundaries, rollback on errors and the lock order are unchanged, and no handler leaves session state on a pooled connection. Its notes: when a database is down a request now waits up to about 60 s for a 503 instead of failing at once; the apps' tests replace `get_conn`, so only `test_api.py` exercises the pool. The test audit asked scenario 42's two-instance test to check that the winner holds every line of the recipe, not only that the loser holds none; added.
 - **Performance:** 1,500 requests (250 users on each of six APIs) with no error after the fix. The run that the report keeps was made on a freshly emptied cluster, with `GET /orders` and `GET /tickets` asking for a page of 20 as the screens do: `POST /orders` is the slowest (about 2.5 s on average, 250 requests sharing 10 connections while Inventory and the Kitchen process the same orders); an order goes from creation to Reserved in about 0.26 s; services, databases and Kafka peak at about 2.4 GB (the frontend held another 0.9 GB right after reinstalling its packages). An earlier run on a cluster full of test data had `GET /tickets` return all 556 Queued tickets at 4.6 s on average, which led to the paged screens (revision 18 of the design).
+
+### What phase 2 built
+
+- **Inventory:** `inventory_service/dishes.py` recomputes the dishes of every changed ingredient after a reservation, a release command, a stock receipt and `clear-check`, locking `dish_status` before reading stock and before `menu_version`; announces each dish whose status changed with `DishStatusChanged`; a heartbeat every 60 seconds from each instance; `GET /menu/snapshot`; `POST /admin/epoch/bump`.
+- **Branch:** the consumer also reads `menu-events` and merges `menu_cache` by `(epoch, seq)`; `order_service/menu.py`'s menu sync fetches the snapshot on start, after reconnecting and on a greater epoch, and hides dishes left at an older epoch; `GET /menu` with `stale` (N = 5 minutes); migration `004`. The snapshot travels on `kafka-net`, where Inventory now has the alias `inventory`, so `bin/chaos offline` cuts it with Kafka.
+- **Screen:** the order form reads `GET /menu`; a Sold-out dish is blocked while the data is fresh and warned ("Có thể đã hết") when it is stale or the branch is offline; Hidden dishes are not shown.
+
+### How phase 2 was checked
+
+- **Tests:** scenarios 6 and 48 (their dish parts), 18 (tier 1 and on the running cluster, three runs in a row: after Inventory restarts, POS01 hears a dish change in a few seconds with a greater version), 19, 20, 21 and a tier 2 race on two ingredients of one dish (100 rounds). 89 frontend tests.
+- **The tests can fail:** removing the `FOR UPDATE` on `dish_status` fails the race test.
+- **Reviews:** the specification review found the lock order right on every path and one fault in the screen, fixed with a test that reproduced it first: a quantity typed for a dish while the data was stale was still sent after the dish became blocked or Hidden. It also noted that the menu sync did not fetch the snapshot on a restart once it had a cache, as the design says; it now does. The test audit asked for the invariants after the tier 1 and race tests, the topic of `DishStatusChanged` and the `dish_status` row in scenarios 6 and 48, a guard against a skipped restart in scenario 18, and the "May be sold out" text in the offline case; all added.
+- **Found on the way:** a tier 3 test that set stock with a direct `UPDATE` left two dishes Sold out on the cluster, since a direct write skips Flow C; it now goes through a stock receipt. Code reloaded before its migration was applied sent menu messages to the dlq for two minutes; a new migration needs a restart of the service (revision 19 of the design).
 

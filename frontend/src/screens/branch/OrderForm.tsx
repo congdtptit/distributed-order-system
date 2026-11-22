@@ -33,8 +33,12 @@ export function OrderForm({
   const shown = (menu.data?.dishes ?? []).filter((dish) => dish.status !== "AN");
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [refused, setRefused] = useState<string | null>(null);
+  const blocked = (status: string | null) => status === "HET" && !stale;
+  // Only dishes on the form now and selectable go into the order: a quantity typed while the
+  // data was stale must not travel once the dish is blocked or Hidden (section 7).
+  const selectable = new Set(shown.filter((d) => !blocked(d.status)).map((d) => d.dish_id));
   const items = Object.entries(quantities)
-    .filter(([, q]) => q > 0)
+    .filter(([dish_id, q]) => q > 0 && selectable.has(dish_id))
     .map(([dish_id, quantity]) => ({ dish_id, quantity }));
 
   const place = useMutation({
@@ -89,13 +93,13 @@ export function OrderForm({
                   dish.status === "HET" ? (stale ? DISH_STALE.HET : DISH_FRESH.HET) : undefined
                 }
                 descriptionProps={{ c: stale ? "orange.9" : "red.8", fw: 600 }}
-                disabled={dish.status === "HET" && !stale}
+                disabled={blocked(dish.status)}
                 min={0}
                 max={99}
                 allowDecimal={false}
                 allowNegative={false}
                 placeholder="0"
-                value={quantities[dish.dish_id] ?? ""}
+                value={blocked(dish.status) ? "" : (quantities[dish.dish_id] ?? "")}
                 onChange={(value) =>
                   setQuantities((current) => ({
                     ...current,

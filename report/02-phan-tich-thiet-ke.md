@@ -17,7 +17,7 @@ Mỗi mũi tên hai chiều tới Kafka gom nhiều topic; bảng dưới đây 
 | `kitchen-orders` | Kho | Bếp | `OrderReserved`, `OrderFailed` |
 | `stock-commands` | Bếp | Kho | `StockConsumed`, `ReleaseRequested` |
 | `status-events.<branch>` | Kho, Bếp | Chi nhánh gốc của đơn (`CancelPending`: chi nhánh gửi yêu cầu hủy) | `OrderReserved`, `OrderFailed`, `OrderCancelled`, `OrderCompleted`, `CancelPending`, `CancelRejected` |
-| `menu-events` | Kho | Bếp; các chi nhánh (đợt 2) | `IngredientCheckChanged`; `DishStatusChanged`, `Heartbeat` (đợt 2) |
+| `menu-events` | Kho | Bếp; các chi nhánh | `IngredientCheckChanged` (cho Bếp); `DishStatusChanged`, `Heartbeat` (cho chi nhánh) |
 | `dlq` | Mọi consumer | Người vận hành | Tin không đọc được sau 5 lần thử |
 
 | Thành phần | Vai trò |
@@ -44,7 +44,8 @@ Các nguyên tắc chung: mỗi tin có `event_id` để chống trùng (`proces
 | 5 | | Đồng bộ đơn với Kho và Bếp | Gửi hàng chờ (outbox) lên Kafka | Local Order Service (tự động) |
 | | | | Áp dụng trạng thái đơn nhận về theo thứ hạng | |
 | 6 | | Nhân bản đơn về trung tâm | Ghi nhịp `replication_heartbeat` mỗi 5 giây | Local Order Service (tự động) |
-| 7 | | Xem tình trạng món (đợt 2) | Xem menu kèm trạng thái Còn, Hết, Ẩn (`GET /menu`) | Thu ngân, khách hàng online |
+| 7 | | Xem tình trạng món | Xem menu kèm trạng thái Còn, Hết, Ẩn (`GET /menu`) | Thu ngân, khách hàng online |
+| | | | Đồng bộ bộ đệm menu (`DishStatusChanged`, `Heartbeat`, snapshot) | Local Order Service (tự động) |
 | | **Kho** (Inventory Service) | | | |
 | 8 | | Giữ nguyên liệu cho đơn | Nhận đơn mới, giữ nguyên liệu hoặc trả Thất bại (`OrderCreated`) | Inventory Service (tự động) |
 | 9 | | Xử lý lệnh của Bếp | Hoàn kho hoặc ghi hao hụt (`ReleaseRequested`) | Inventory Service (tự động) |
@@ -53,7 +54,8 @@ Các nguyên tắc chung: mỗi tin có `event_id` để chống trùng (`proces
 | | | | Nhập kho (`POST /stock/receipts`) | |
 | | | | Xác nhận kiểm kho xong (`POST /ingredients/{id}/clear-check`) | |
 | 11 | | Theo dõi cảnh báo kho | Xem cảnh báo (`GET /alerts`), xem độ trễ consumer (`GET /monitor`) | Nhân viên kho |
-| 12 | | Công bố tình trạng món (đợt 2) | Gửi `DishStatusChanged`, heartbeat; cung cấp snapshot (`GET /menu/snapshot`) | Inventory Service (tự động) |
+| 12 | | Công bố tình trạng món | Tính và gửi `DishStatusChanged`, heartbeat | Inventory Service (tự động) |
+| | | | Cung cấp snapshot (`GET /menu/snapshot`), tăng epoch sau khi khôi phục (`POST /admin/epoch/bump`) | Chi nhánh, người vận hành |
 | | **Bếp** (Kitchen Service) | | | |
 | 13 | | Xử lý phiếu bếp | Xem danh sách phiếu và cảnh báo (`GET /tickets`) | Nhân viên bếp |
 | | | | Bắt đầu nấu (`POST /tickets/{order_id}/start`) | |
@@ -68,7 +70,7 @@ Các nguyên tắc chung: mỗi tin có `event_id` để chống trùng (`proces
 
 ## II. THIẾT KẾ CHỨC NĂNG PHẦN MỀM
 
-Mục này có thẻ use case cho các giao dịch đã xây dựng: Kho, Bếp, chi nhánh và báo cáo quản lý. Các giao dịch về tình trạng món được bổ sung ở đợt 2.
+Mục này có thẻ use case cho mọi giao dịch của hệ thống: Kho, Bếp, chi nhánh và báo cáo quản lý, kể cả tình trạng món (Luồng C).
 
 ### 1. Kho - module
 
@@ -251,6 +253,49 @@ flowchart TD
   c -- có --> e[Tin chưa đọc và tuổi tin cũ nhất theo topic] --> f{Quá 5 phút?}
   f -- có --> g[slow = true] --> z
   f -- không --> z
+```
+
+#### 1.5. Công bố tình trạng món - use case
+
+##### 1.5.1. Tính và công bố tình trạng món - giao dịch
+
+- **Tên Usecase:** Tính và công bố tình trạng món
+- **Mô tả Usecase:** Chức năng cho phép Kho tính lại trạng thái của các món sau mỗi lần tồn kho thay đổi và báo cho các chi nhánh khi một món đổi trạng thái (Luồng C, BR10). Trạng thái chỉ là gợi ý; Kho vẫn quyết định cuối cùng từng đơn.
+- **Tác nhân chính:** Inventory Service (tự động). **Tác nhân phụ:** các chi nhánh (nhận tin).
+- **Điều kiện bắt đầu:** một giao dịch vừa đổi tồn kho: giữ nguyên liệu, hoàn kho, hao hụt, nhập kho, gỡ cờ kiểm kho. **Điều kiện kết thúc:** `dish_status` khớp với tồn kho; món nào đổi trạng thái thì có `DishStatusChanged` trong outbox.
+- **Trình tự các sự kiện:**
+  1. Khóa các dòng `dish_status` của những món dùng nguyên liệu vừa đổi, theo `dish_id` tăng dần, rồi mới đọc tồn kho (đọc trước khi khóa thì hai giao dịch đổi hai nguyên liệu của cùng một món có thể không thấy thay đổi của nhau).
+  2. Tính theo mục 3.4 của đặc tả: Còn khi mọi nguyên liệu đủ cho một phần và không nguyên liệu nào bị cờ; Hết khi ngược lại; Ẩn khi món không có công thức.
+  3. Món nào đổi trạng thái thì lấy version mới `(epoch, seq)` từ `menu_version` (khóa sau cùng), ghi lại và gửi `DishStatusChanged` lên `menu-events`. Món không đổi trạng thái thì không gửi gì.
+  4. Song song, mỗi instance Kho gửi `Heartbeat {epoch, seq}` mỗi 60 giây.
+- **Các yêu cầu phi chức năng:** version tiếp tục tăng sau khi Kho khởi động lại (kịch bản 18); thứ tự khóa đơn → `stock` → `dish_status` → `menu_version` ở mọi giao dịch, không deadlock; hai thay đổi đồng thời cho hai nguyên liệu của cùng một món luôn cho trạng thái đúng (test tranh chấp 100 lần).
+- **Biểu đồ hoạt động:**
+
+```mermaid
+flowchart TD
+  s((Bắt đầu)) --> a[Giao dịch đổi tồn kho] --> b[Khóa dish_status của các món liên quan] --> c[Đọc tồn kho, tính trạng thái]
+  c --> d{Trạng thái đổi?}
+  d -- không --> z((Kết thúc))
+  d -- có --> e[Lấy version mới từ menu_version] --> f[Ghi dish_status, gửi DishStatusChanged] --> z
+```
+
+##### 1.5.2. Cung cấp snapshot và tăng epoch - giao dịch
+
+- **Tên Usecase:** Cung cấp snapshot và tăng epoch
+- **Mô tả Usecase:** Chức năng cho phép chi nhánh lấy toàn bộ trạng thái món, và cho phép người vận hành mở một "thế hệ" dữ liệu mới sau khi khôi phục Kho từ bản sao lưu.
+- **Tác nhân chính:** chi nhánh (`GET /menu/snapshot`), người vận hành (`POST /admin/epoch/bump`). **Tác nhân phụ:** Kitchen Service (nhận lại cờ kiểm kho).
+- **Điều kiện bắt đầu:** không có. **Điều kiện kết thúc:** snapshot không đổi dữ liệu; tăng epoch thì mọi dòng `dish_status` mang epoch mới.
+- **Trình tự các sự kiện:**
+  1. Snapshot: trả `epoch` hiện tại và trạng thái, version của mọi món, kể cả món Ẩn, trong một câu lệnh.
+  2. Tăng epoch: một giao dịch khóa mọi dòng `dish_status`, tăng `epoch` và `seq`, tính và ghi lại mọi món với version mới (kể cả món không đổi), gửi lại `IngredientCheckChanged` cho mọi nguyên liệu để Bếp có cờ của thế hệ mới; không gửi `DishStatusChanged`, vì chi nhánh thấy epoch mới trong heartbeat kế tiếp và tự lấy snapshot.
+- **Các yêu cầu phi chức năng:** kịch bản 20 (món còn mang epoch cũ chuyển Ẩn ở chi nhánh).
+- **Biểu đồ hoạt động:**
+
+```mermaid
+flowchart TD
+  s((Bắt đầu)) --> a{API}
+  a -- GET /menu/snapshot --> b[Đọc epoch và mọi dòng dish_status] --> z((Kết thúc))
+  a -- POST /admin/epoch/bump --> c[Khóa mọi dish_status] --> d[Tăng epoch, seq] --> e[Tính và ghi lại mọi món] --> f[Gửi lại cờ kiểm kho cho Bếp] --> z
 ```
 
 ### 2. Bếp - module
@@ -602,6 +647,51 @@ flowchart TD
   b -- không --> e[Ghi log] --> a
 ```
 
+#### 3.7. Xem tình trạng món - use case
+
+##### 3.7.1. Xem menu kèm trạng thái - giao dịch
+
+- **Tên Usecase:** Xem menu kèm trạng thái
+- **Mô tả Usecase:** Chức năng cho phép thu ngân, khách online thấy món nào còn, món nào hết khi tạo đơn (Luồng C).
+- **Tác nhân chính:** Thu ngân, khách hàng online. **Tác nhân phụ:** không có.
+- **Điều kiện bắt đầu:** không có. **Điều kiện kết thúc:** không có; giao dịch không đổi dữ liệu.
+- **Trình tự các sự kiện:**
+  1. Màn hình gọi `GET /menu`: danh mục món của chi nhánh kèm trạng thái trong `menu_cache`, và cờ `stale` khi không nghe được gì từ Kho quá N = 5 phút.
+  2. Dữ liệu mới: món Hết bị khóa, không chọn được. Dữ liệu cũ hoặc chi nhánh mất mạng: món Hết hiện "Có thể đã hết" và vẫn đặt được, kèm một dòng chung "Tình trạng món có thể đã thay đổi". Món Ẩn không hiện.
+  3. `POST /orders` không kiểm tra `menu_cache`: Kho vẫn là nơi duy nhất từ chối đơn vì nguyên liệu.
+- **Các yêu cầu phi chức năng:** heartbeat đều đặn thì không hiện "Có thể đã hết" dù Kho không đổi tồn kho 10 phút (kịch bản 21).
+- **Biểu đồ hoạt động:**
+
+```mermaid
+flowchart TD
+  s((Bắt đầu)) --> a[GET /menu] --> b{Dữ liệu mới và có mạng?}
+  b -- có --> c[Món Hết: khóa] --> z((Kết thúc))
+  b -- không --> d[Món Hết: Có thể đã hết, vẫn đặt được; hiện dòng chung] --> z
+```
+
+##### 3.7.2. Đồng bộ bộ đệm menu - giao dịch
+
+- **Tên Usecase:** Đồng bộ bộ đệm menu
+- **Mô tả Usecase:** Chức năng cho phép chi nhánh giữ `menu_cache` theo kịp Kho mà không bao giờ để tin cũ ghi đè tin mới (BR10).
+- **Tác nhân chính:** Local Order Service (tự động: consumer và luồng nền đồng bộ menu). **Tác nhân phụ:** Inventory Service.
+- **Điều kiện bắt đầu:** có tin trên `menu-events`, hoặc chi nhánh vừa khởi động, vừa có mạng lại, hoặc nghe thấy epoch mới. **Điều kiện kết thúc:** `menu_cache` đã gộp theo version.
+- **Trình tự các sự kiện:**
+  1. `DishStatusChanged`: ghi đè món chỉ khi `(epoch, seq)` của tin lớn hơn bản đang giữ; cập nhật lần cuối nghe được từ Kho.
+  2. `Heartbeat`: cập nhật lần cuối nghe được; nếu epoch lớn hơn epoch đang giữ thì ghi nhận cần lấy snapshot.
+  3. Luồng nền lấy snapshot của Kho khi chưa từng có, khi vừa có mạng lại, hoặc khi có epoch mới; gộp từng món theo cùng quy tắc version, không xóa bộ đệm để nạp lại. Snapshot có epoch mới thì món còn mang epoch cũ chuyển Ẩn.
+- **Các yêu cầu phi chức năng:** nhận Hết (v6) rồi snapshot Còn (v5) thì giữ Hết (kịch bản 19); Kho khôi phục và tăng epoch thì món theo snapshot mới, món không có trong snapshot chuyển Ẩn (kịch bản 20).
+- **Biểu đồ hoạt động:**
+
+```mermaid
+flowchart TD
+  s((Bắt đầu)) --> a{Nguồn}
+  a -- DishStatusChanged --> b{Version mới hơn?}
+  b -- có --> c[Ghi đè món] --> z((Kết thúc))
+  b -- không --> z
+  a -- Heartbeat --> d[Ghi lần cuối nghe được; epoch mới thì cần snapshot] --> z
+  a -- Khởi động, có mạng lại, epoch mới --> e[Lấy snapshot của Kho] --> f[Gộp theo version; epoch mới thì món epoch cũ chuyển Ẩn] --> z
+```
+
 ### 4. Báo cáo quản lý - module
 
 #### 4.1. Xem báo cáo tổng hợp - use case
@@ -692,7 +782,7 @@ Giữa các CSDL không có khóa ngoại: mỗi đơn mang cùng một `order_i
 | 2 | Inventory DB | `recipes` | Công thức: lượng mỗi nguyên liệu cho một suất của món |
 | 3 | Inventory DB | `inventory_orders` | Mỗi đơn đúng một bản ghi kết quả (BR12): `DANG_GIU`, `THAT_BAI`, `DA_TRA`, `DA_DUNG`, chi nhánh gốc, lý do |
 | 4 | Inventory DB | `inventory_reservations` | Lượng giữ của từng nguyên liệu cho từng đơn, ghi lúc giữ, và kết quả của dòng (`DA_HOAN`, `DA_DUNG`, `HAO_HUT`) |
-| 5 | Inventory DB | `dish_status` | Trạng thái món (Còn, Hết, Ẩn) kèm version (đợt 2) |
+| 5 | Inventory DB | `dish_status` | Trạng thái món (Còn, Hết, Ẩn) kèm version |
 | 6 | Inventory DB | `menu_version` | Một dòng duy nhất: bộ đếm version (`epoch`, `seq`) bền vững |
 | 7 | Inventory DB | `alerts` | Cảnh báo cho người xem: `CAN_KIEM_TRA`, `LENH_KHONG_KHOP` |
 | 8 | Inventory DB | `processed_events` | `event_id` đã xử lý, chống xử lý trùng |
@@ -705,8 +795,8 @@ Giữa các CSDL không có khóa ngoại: mỗi đơn mang cùng một `order_i
 | 15 | Branch DB | `orders` | Đơn của chi nhánh: trạng thái theo thứ hạng, cờ "Đang yêu cầu hủy", lý do |
 | 16 | Branch DB | `outbox_events` | Hàng chờ gửi của chi nhánh, có cờ "đã thử gửi" (BR9) |
 | 17 | Branch DB | `dishes` | Danh mục món nạp từ file seed, phục vụ màn hình đặt món khi mất mạng |
-| 18 | Branch DB | `menu_cache` | Trạng thái món nhận từ Kho, gộp theo version (đợt 2) |
-| 19 | Branch DB | `menu_cache_meta` | Một dòng: `epoch` hiện tại và lần cuối nghe được từ Kho (đợt 2) |
+| 18 | Branch DB | `menu_cache` | Trạng thái món nhận từ Kho, gộp theo version |
+| 19 | Branch DB | `menu_cache_meta` | Một dòng: `epoch` đang giữ, `epoch` lớn nhất đã nghe thấy và lần cuối nghe được từ Kho |
 | 20 | Branch DB | `replication_heartbeat` | Nhịp nhân bản của chi nhánh, cho mốc "dữ liệu tính đến" |
 | 21 | Branch DB | `processed_events` | Như mục 8 |
 | 22 | Branch DB | `alerts` | Cảnh báo `CAN_KIEM_TRA`: tin trạng thái không đọc được (đã chuyển `dlq`) hoặc loại lạ (bỏ qua); hiện trên `GET /monitor` |

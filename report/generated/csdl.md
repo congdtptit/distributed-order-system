@@ -309,6 +309,7 @@ erDiagram
         boolean id PK
         int epoch
         timestamptz last_heard_at
+        int newest_epoch
     }
     orders {
         uuid order_id PK
@@ -379,6 +380,7 @@ erDiagram
 | id | BOOLEAN |  | PRI | true | CHECK (id) |
 | epoch | INT |  |  |  |  |
 | last_heard_at | TIMESTAMPTZ | YES |  |  |  |
+| newest_epoch | INT |  |  | 0 |  |
 
 ###### Bảng `orders`
 

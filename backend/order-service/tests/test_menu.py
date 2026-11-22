@@ -224,3 +224,25 @@ def test_the_cache_and_the_sync_do_not_block_each_other(bdb: str) -> None:
         for t in threads:
             t.join(10)
         assert cached(bdb)["PHO_BO"] == ("HET", 1, 100 + 2 * i)
+
+
+def test_a_restarted_branch_fetches_the_snapshot_once_even_with_a_cache(bdb: str) -> None:
+    """A start counts as reconnecting (section 5 of document 02, "Flow C at the branch in
+    practice"): the messages missed while the branch was down may be gone from Kafka."""
+    with psycopg.connect(bdb) as conn:
+        merge_snapshot(conn, {"epoch": 1, "dishes": [dish("PHO_BO", "CON", 1, 1)]}, NOW)
+        assert needs_snapshot(conn) is False
+    fetched: list[int] = []
+
+    def fetch() -> dict[str, Any]:
+        fetched.append(1)
+        return {"epoch": 1, "dishes": [dish("PHO_BO", "HET", 1, 2)]}
+
+    sync = MenuSync(
+        lambda: psycopg.connect(bdb), fetch, lambda: ConnectionStatus(True, NOW), FixedClock(NOW)
+    )
+    sync.sync_once()
+    assert fetched == [1]
+    assert cached(bdb)["PHO_BO"] == ("HET", 1, 2)
+    sync.sync_once()
+    assert fetched == [1]  # once

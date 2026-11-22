@@ -67,7 +67,18 @@ def reserve(inv: str, items: list[tuple[str, int]] | None = None) -> Any:
 
 
 def dish_changes(inv: str) -> list[dict[str, Any]]:
-    return [r.payload | {"_key": r.key} for r in outbox(inv) if r.event_type == "DishStatusChanged"]
+    rows = [r for r in outbox(inv) if r.event_type == "DishStatusChanged"]
+    assert {r.topic for r in rows} <= {"menu-events"}  # Flow C travels on menu-events
+    return [r.payload | {"_key": r.key} for r in rows]
+
+
+def dish_row(inv: str, dish_id: str) -> tuple[str, int, int]:
+    with psycopg.connect(inv) as conn:
+        row = conn.execute(
+            "SELECT status, epoch, seq FROM dish_status WHERE dish_id = %s", (dish_id,)
+        ).fetchone()
+    assert row is not None
+    return str(row[0]), int(row[1]), int(row[2])
 
 
 def check_changed(inv: str) -> list[dict[str, Any]]:
@@ -134,6 +145,7 @@ def test_a_spoiled_ingredient_is_written_off_flagged_and_the_rest_released(inv: 
     assert dish_changes(inv) == [
         {"dish_id": "PHO_BO", "status": "HET", "epoch": 1, "seq": 1, "_key": "PHO_BO"}
     ]
+    assert dish_row(inv, "PHO_BO") == ("HET", 1, 1)
     # The Kitchen is told the meat is flagged, with a version from menu_version. The dish took
     # seq 1: the dish_status rows are locked before menu_version (section 3 of document 02,
     # "Lock order"), so the dish change takes its version before the flag message does.
@@ -294,6 +306,7 @@ def test_clearing_the_flag_lets_a_new_order_reserve_the_ingredient_again(
         ("PHO_BO", "HET", 1),
         ("PHO_BO", "CON", 3),
     ]
+    assert dish_row(inv, "PHO_BO") == ("CON", 1, 3)
     flag_rows = [r for r in outbox(inv) if r.event_type == "IngredientCheckChanged"]
     assert [(r.topic, r.key) for r in flag_rows] == [("menu-events", "THIT_BO")] * 2
     # A new order that uses meat is reserved.

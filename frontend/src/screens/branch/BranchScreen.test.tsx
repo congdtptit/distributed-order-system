@@ -1,7 +1,8 @@
 // The branch screen: one test per row of the state table (.claude/skills/screen/SKILL.md,
 // step 1). The services are stubbed by MSW with the generated API types.
 
-import { screen, waitFor, within } from "@testing-library/react";
+import { focusManager } from "@tanstack/react-query";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { delay, HttpResponse, http } from "msw";
 import type { Menu, Monitor, Order } from "../../api/branch";
@@ -423,7 +424,49 @@ describe("branch screen: Flow D", () => {
       withMonitor({ connection: { connected: false, checked_at: "2026-11-20T09:15:00Z" } });
       renderRoute("/branch/POS01");
       expect(await screen.findByText("Tình trạng món có thể đã thay đổi.")).toBeInTheDocument();
-      expect(screen.getByRole("textbox", { name: "Trà đá" })).toBeEnabled();
+      const tea = screen.getByRole("textbox", { name: "Trà đá" });
+      expect(tea).toBeEnabled();
+      expect(tea).toHaveAccessibleDescription("Có thể đã hết");
+    });
+
+    it("never sends a dish that became blocked or hidden after it was typed", async () => {
+      let menu: Menu["dishes"] = [
+        { dish_id: "PHO_BO", name: "Phở bò", status: "CON" },
+        { dish_id: "TRA_DA", name: "Trà đá", status: "HET" },
+        { dish_id: "GOI_CUON", name: "Gỏi cuốn", status: "CON" },
+      ];
+      let stale = true;
+      let sent: unknown = null;
+      server.use(
+        http.get("*/api/pos01/menu", () =>
+          HttpResponse.json<Menu>({ stale, last_heard_at: null, dishes: menu }),
+        ),
+        http.post("*/api/pos01/orders", async ({ request }) => {
+          sent = await request.json();
+          return HttpResponse.json(order(), { status: 201 });
+        }),
+      );
+      renderRoute("/branch/POS01");
+      // Stale data: the Sold-out tea can still be typed, and so can the rolls.
+      await userEvent.type(await screen.findByRole("textbox", { name: "Trà đá" }), "2");
+      await userEvent.type(screen.getByRole("textbox", { name: "Gỏi cuốn" }), "1");
+      await userEvent.type(screen.getByRole("textbox", { name: "Phở bò" }), "1");
+      // Fresh data arrives: the tea is blocked, the rolls are Hidden.
+      stale = false;
+      menu = [
+        { dish_id: "PHO_BO", name: "Phở bò", status: "CON" },
+        { dish_id: "TRA_DA", name: "Trà đá", status: "HET" },
+        { dish_id: "GOI_CUON", name: "Gỏi cuốn", status: "AN" },
+      ];
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await waitFor(() => expect(screen.getByRole("textbox", { name: "Trà đá" })).toBeDisabled());
+      expect(screen.getByRole("textbox", { name: "Trà đá" })).toHaveValue("");
+      expect(screen.queryByRole("textbox", { name: "Gỏi cuốn" })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Tạo đơn" }));
+      await waitFor(() => expect(sent).toEqual({ items: [{ dish_id: "PHO_BO", quantity: 1 }] }));
     });
 
     it("lets a dish Inventory has said nothing about be ordered", async () => {

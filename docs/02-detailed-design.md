@@ -1,8 +1,16 @@
 # Detailed design – Kafka events, DB schemas and API
 
-Revision 18 · 22 Nov 2026 · @Naul · follows business specification v1.5
+Revision 19 · 22 Nov 2026 · @Naul · follows business specification v1.5
 
 This document turns business specification v1.5 (the lean edition) into three things to code against: the Kafka event catalogue, each service's DB schema, and the API. There is no existing codebase to align with: the base flow is built in this project as well, so the event names, table names, column names and API paths here are the ones to use.
+
+## Changes in revision 19
+
+| Section | Change | Reason |
+|---|---|---|
+| 3 | New rule "Flow C at Inventory in practice": which stock changes recompute dishes (not Consumed), the starting rows at `(epoch, 0)`, a recipe change names its dish, the heartbeat from each instance, the bump's single version for every row and flag | Built in phase 2 (22 Nov 2026) |
+| 5 | Migration `004`: `menu_cache_meta.newest_epoch` and the one meta row at epoch 0. New rule "Flow C at the branch in practice": the menu sync, when it fetches the snapshot, the snapshot over `kafka-net`, the lock order of the cache | Built in phase 2 |
+| 6 | The rows of `GET /menu`, `GET /menu/snapshot` and `POST /admin/epoch/bump` give their fields | Built in phase 2 |
 
 ## Changes in revision 18
 
@@ -356,6 +364,14 @@ Rules that go with the schema:
 - **Computing dish status**: after changing `stock`, the transaction locks the `dish_status` rows of the dishes that use the changed ingredients with `SELECT ... FOR UPDATE`, and only then reads the stock of every ingredient in the recipes and recomputes according to section 3.4 of the specification. Reading stock before locking is wrong: two transactions that change two different ingredients of the same dish would not see each other's change, and the dish could sit at Available when it should be Sold out.
 - **Dish version**: each time a dish changes status, or an ingredient's stock-check flag changes, the transaction runs `UPDATE menu_version SET seq = seq + 1 RETURNING epoch, seq`. Locking this row makes the `seq` order match the commit order; a PostgreSQL `SEQUENCE` does not guarantee that.
 - **Bumping `epoch`** (after restoring Inventory from a backup): one transaction locks every `dish_status` row, runs `UPDATE menu_version SET epoch = epoch + 1, seq = seq + 1`, and only then reads stock, recomputes and rewrites every `dish_status` row with the new `epoch` and `seq`, including dishes whose status did not change. The transaction emits `IngredientCheckChanged` for every ingredient so that the Kitchen has flags for the new generation, and does not emit `DishStatusChanged`: branches see the new `epoch` in the next `Heartbeat` and then fetch the snapshot themselves.
+
+**Flow C at Inventory in practice** (built in phase 2):
+
+- **What recomputes.** A reservation (once it succeeded), a release command (released and wasted lines, and before the flag messages, so that `dish_status` is locked before `menu_version`), a stock receipt and `clear-check` each recompute the dishes of the ingredients they changed, in the same transaction. A Consumed report does not: section 3.4 of the specification decides from available stock and the flag only, and Consumed moves reserved stock to consumed without touching either.
+- **Starting rows.** On every start, a dish of the recipes without a `dish_status` row gets one at the current epoch and seq 0, computed from the stock and not announced: `(epoch, 0)` is older than any change, and a branch fetches the snapshot when it starts.
+- **A recipe change** names its dish: once a recipe is deleted, no ingredient leads to the dish any more. There is no API that changes recipes; the tests delete one to stand for a removed dish.
+- **Heartbeat.** Each Inventory instance puts a `Heartbeat {epoch, seq}` in its outbox every 60 seconds (section 10), keyed `heartbeat`. Two instances send two a minute: harmless, a branch needs to hear one.
+- **The bump** gives every row and every resent `IngredientCheckChanged` the one `(epoch, seq)` it took; the Kitchen compares flags per ingredient, so one version for all of them is enough.
 - **Invariants** (run after every test): an ingredient's `stock.reserved` equals the sum of `quantity` over the `inventory_reservations` rows with `outcome IS NULL`; and every row with `outcome IS NULL` belongs to an order currently at `DANG_GIU`.
 - **Outbox relay with 2 instances**: read in ascending `id` with `FOR UPDATE SKIP LOCKED`. The two instances may relay out of order relative to each other, and so may one instance, since a row Kafka did not acknowledge stays unsent while later rows of the same batch are marked sent; this is acceptable because every receiver processes by the state table, not by message order. The row locks are held while the relay waits for Kafka (up to `message.timeout.ms`), which blocks no business transaction because those only insert outbox rows. `payload` holds the whole envelope, which is the Kafka message value; `msg_key` is the order ID, or the dish or ingredient ID on `menu-events`. At the branch, the condition of operation (4) in section 5 is what guarantees this.
 
@@ -573,6 +589,20 @@ The specification requires the branch order DBs to replicate asynchronously to t
 - **"Data as of":** each branch service updates its single `replication_heartbeat` row every 5 seconds. The value that has reached the central DB is that branch's "data as of" time. When replication from a branch is cut, its value stops moving while the other branches' values keep moving (scenario 55).
 - **Reading:** the Order Query Service reads the central DB only, never a branch DB.
 
+**Flow C at the branch in practice** (built in phase 2), migration `004`:
+
+```sql
+ALTER TABLE menu_cache_meta ADD COLUMN newest_epoch INT NOT NULL DEFAULT 0;
+INSERT INTO menu_cache_meta (epoch) VALUES (0) ON CONFLICT (id) DO NOTHING;
+```
+
+- **Messages.** The branch's consumer group (`branch-<branch>`) reads `menu-events` beside its status topic, so every branch gets every message. `DishStatusChanged` overwrites a `menu_cache` row only when its `(epoch, seq)` is greater; it and `Heartbeat` move `last_heard_at` and raise `newest_epoch` to the epoch they carry.
+- **The menu sync** (a thread of the branch service, every 2 seconds) fetches `GET /menu/snapshot` once when the branch starts (a start counts as reconnecting: messages missed while it was down may be gone from Kafka), when the send queue's connectivity probe turns from failed to succeeded (reconnecting), and when `newest_epoch` is greater than `epoch`. It merges each dish by the same version rule; when the snapshot's epoch is greater, every dish still at an older epoch becomes `AN` and `epoch` moves up. A failed fetch is tried again on the next round; while the probe fails it does not try.
+- **The snapshot travels on `kafka-net`**, the branch's link to the centre, where Inventory has the alias `inventory`. `bin/chaos offline <branch>` cuts it together with Kafka, as a real network loss would.
+- **Lock order.** The message handlers and the snapshot merge both lock the `menu_cache_meta` row before any `menu_cache` row.
+- **Fresh or stale.** `GET /menu` is stale when nothing has been heard from Inventory (message, heartbeat or snapshot) for more than N = 5 minutes (section 10, proposed), or ever. The screen also treats the data as stale while the branch's probe fails (the "Offline" row of the table in section 7 of the specification).
+- **New migrations need a restart.** The services reload changed code without restarting, but apply migrations only when they start: after adding a migration, restart the service (`docker compose restart pos01 pos02 online`). Until then the new code fails on the missing column and its messages go to the dlq, as happened once while this was built.
+
 **Reporting in practice** (built in step 7):
 
 - **The heartbeat** runs in its own thread of every branch service, also without Kafka. Each beat is one transaction with the upsert below, at the branch database's `now()`: "data as of" is a wall-clock time, so the service's replaceable clock is not used. A failed beat (the branch DB restarting) is logged and retried at the next beat; meanwhile the central value simply stops moving.
@@ -605,7 +635,7 @@ Each service exposes only the APIs that a person or a screen needs; services do 
 | Branch | `GET /dishes` | The dish catalogue from the branch's own `dishes` table; answers while the branch is offline | 200 |
 | Branch | `POST /orders/{id}/cancel` | Runs operation (2) in section 5 with `reason_code` | 200 `DA_HUY` for a local cancel; 202 `DANG_YEU_CAU` if it goes through the Kitchen or a cancel request is already pending; 409 if the order is already in a terminal status; 404 if the order does not exist; 400 if `reason_code` is not a customer cancel reason (checked first). The body is the order |
 | Branch | `GET /orders`, `GET /orders/{id}` | Reads orders with the cancel flag and message and the send states ("The branch in practice", section 5); the list holds the `limit` most recent (1–200, default 200; the screen asks for 20 and grows the page) | 200; 404 for an unknown order; 400 for a `limit` out of range |
-| Branch | `GET /menu` (phase 2) | Reads `menu_cache`, with a `stale` flag when nothing has been heard from Inventory for more than N minutes | 200 |
+| Branch | `GET /menu` | Reads `menu_cache` joined with `dishes`: `{stale, last_heard_at, dishes:[{dish_id, name, status}]}`, `status` null while nothing was heard about the dish; `stale` when nothing has been heard from Inventory for more than N minutes ("Flow C at the branch in practice", section 5) | 200 |
 | Branch | `GET /monitor` | Flow D: connection status, number of entries waiting to be sent, orders in Awaiting Inventory longer than N minutes, orders about to pass X, orders with the cancel flag, message alerts ("The branch in practice", section 5) | 200 |
 | Kitchen | `GET /tickets` | Queued and Cooking tickets, oldest first, with warnings for flagged ingredients; with `limit` (1–500), at most that many of each status | 200; 422 for a `limit` out of range |
 | Kitchen | `GET /tickets/counts` | How many tickets are Queued and how many Cooking (`CHO_NAU`, `DANG_NAU`): the column totals beside a page of tickets | 200 |
@@ -613,13 +643,13 @@ Each service exposes only the APIs that a person or a screen needs; services do 
 | Kitchen | `POST /tickets/{order_id}/reject` | Queued → Cancelled with `reason_code`, `spoiled_ingredients[]`; emits `OrderCancelled` and `ReleaseRequested` | 200; 409 as above; 400 if the reason is Spoiled ingredient but no ingredient is given, or an ingredient does not belong to the ticket |
 | Kitchen | `POST /tickets/{order_id}/complete` | Cooking → Completed, emits `OrderCompleted` | 200; 409 if the ticket is not Cooking |
 | Kitchen | `GET /alerts` | Flow D: orders that need review and wrong-branch cancel requests; filterable by `kind` | 200 |
-| Inventory | `GET /menu/snapshot` (phase 2) | Status and version of every dish, including Hidden dishes, with the current `epoch` | 200 |
+| Inventory | `GET /menu/snapshot` | Status and version of every dish, including Hidden dishes, with the current `epoch`: `{epoch, dishes:[{dish_id, status, epoch, seq}]}`, read in one statement | 200 |
 | Inventory | `POST /ingredients/{id}/clear-check` | Clears the stock-check flag after the check is done; optionally takes `counted_on_hand`, the counted on-hand stock | 200; 409 if `counted_on_hand` is less than the reserved quantity |
 | Inventory | `POST /stock/receipts` | Stock receipt: adds to `available` for one ingredient | 200 |
 | Inventory | `GET /stock` | The four stock quantities and the stock-check flag; used for testing, the demo and Flow D's list of ingredients awaiting a stock check | 200 |
 | Inventory | `GET /alerts` | Flow D: orders that need review and unmatched commands; filterable by `kind` | 200 |
 | Inventory, Kitchen | `GET /monitor` | Flow D: age of the oldest unread message on each topic, with a warning when it exceeds the slow-consumer threshold | 200 |
-| Inventory | `POST /admin/epoch/bump` (phase 2) | Runs the `epoch` bump procedure in section 3; used after restoring Inventory and for scenario 20 | 200 with the new `epoch` |
+| Inventory | `POST /admin/epoch/bump` | Runs the `epoch` bump procedure in section 3; used after restoring Inventory and for scenario 20 | 200 with `{epoch}`, the new epoch |
 | Reporting | `GET /reports/summary` | For each branch: the "data as of" time, the number of orders by status, and the number by reason for Cancelled and Failed orders; reads the Central Order Replica only | 200 with `generated_at` and, per branch, `branch_id`, `data_as_of` (null before the first heartbeat arrives), `data_age_s`, `total`, `by_status` (all five statuses), `reasons[{status, reason_code, count}]` for `DA_HUY` and `THAT_BAI` ("Reporting in practice", section 5) |
 
 - **Busy database.** Each service process serves its HTTP requests from at most 10 database connections (`DB_POOL_SIZE`); a request waits for one, and gets 503 "The database is busy; try again" if none frees up within 30 seconds (twice that if the database itself is down). The screens treat 503 like a service that does not answer. Added after the performance test of step 7.

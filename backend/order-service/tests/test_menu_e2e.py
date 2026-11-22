@@ -108,6 +108,7 @@ def test_after_inventory_restarts_a_dish_change_reaches_pos_at_once_with_a_great
     # Inventory restarts.
     before = inventory_version()
     instances = running_inventories(chaos)
+    assert instances, "no Inventory instance is running, so nothing would restart"
     for service in instances:
         chaos.stop(service)
     for service in instances:

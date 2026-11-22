@@ -178,6 +178,8 @@ def test_versions_keep_increasing_after_a_restart(inv: str) -> None:
     assert after[0] == "CON"
     assert (after[1], after[2]) > (before[1], before[2])
     assert [(c["epoch"], c["seq"]) for c in status_changes(inv)] == [(1, 1), (1, 2)]
+    assert_statuses_match_stock(inv)
+    assert_invariants(inv)
 
 
 def test_the_snapshot_holds_every_dish_with_its_version_and_the_epoch(
@@ -224,6 +226,11 @@ def test_bumping_the_epoch_rewrites_every_dish_and_resends_every_flag(
     assert {r.payload["ingredient_id"] for r in flags} == INGREDIENTS
     assert {(r.payload["epoch"], r.payload["seq"]) for r in flags} == {(2, 1)}
     assert_statuses_match_stock(inv)
+    assert_invariants(inv)
+    # The snapshot carries the new generation.
+    snap = api.get("/menu/snapshot").json()
+    assert snap["epoch"] == 2
+    assert {(d["epoch"], d["seq"]) for d in snap["dishes"]} == {(2, 1)}
     with psycopg.connect(inv) as conn:
         assert bump_epoch(conn, CLOCK) == 3
 
@@ -254,6 +261,7 @@ def recompute_race(dsn: str, conns: list[psycopg.Connection[Any]]) -> None:
         t.start()
     for t in threads:
         t.join(30)
+    assert not any(t.is_alive() for t in threads), "a transaction hung (a deadlock?)"
     assert errors == []
 
 
@@ -275,6 +283,7 @@ def test_two_changes_to_two_ingredients_of_one_dish_at_once_leave_the_right_stat
             recompute_race(inv, conns)
             assert dishes(inv)["COM_TAM"][0] == "HET"
             assert_statuses_match_stock(inv)
+            assert_invariants(inv)
     finally:
         for c in conns:
             c.close()

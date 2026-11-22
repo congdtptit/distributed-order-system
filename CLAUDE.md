@@ -12,7 +12,7 @@ Course project on distributed systems: order taking for a restaurant chain. Bran
 ## Current phase: implementation
 
 - `.claude/project-phase` contains `code`. Only the user changes that file; a hook blocks edits to it.
-- The order of work is section 4 of `docs/03-implementation-plan.md`; steps 0 to 6b are done (preparation, the shared `common` module, Inventory, the Kitchen, the branch, the screens) and most of step 7 (reporting and scenario 55, scenario 42 on two instances, the performance test, CI); section 7 there records the progress. Next: the rest of step 7, then the report material (step 8) and phase 2. The final report follows the lecturer's template; document 04 says what it needs. Business code is written one scenario at a time with `/scenario <n>`, screens one at a time with `/screen <name>`.
+- The order of work is section 4 of `docs/03-implementation-plan.md`; steps 0 to 7 and phase 2 (Flow C) are done, and all 44 scenarios pass; step 8 (report material) is under way; section 7 there records the progress. Next: the template's page layout and the demo. A new migration needs `docker compose restart <service>`: reload applies code, not migrations. The final report follows the lecturer's template; document 04 says what it needs. Business code is written one scenario at a time with `/scenario <n>`, screens one at a time with `/screen <name>`.
 - The project is built from scratch, with no existing codebase to follow.
 
 ## Layout and commands

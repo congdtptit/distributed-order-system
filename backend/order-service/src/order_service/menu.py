@@ -5,10 +5,10 @@ docs/02-detailed-design.md).
 - ``DishStatusChanged`` overwrites a dish only if its ``(epoch, seq)`` is greater than the one
   held (epochs first). Any message from Inventory, and every heartbeat, moves ``last_heard_at``;
   an epoch greater than the one held is noted in ``newest_epoch``.
-- ``MenuSync`` fetches Inventory's snapshot when the cache has never had one, when the
-  connection to Kafka comes back, and when a greater epoch was heard. The snapshot is merged
-  by the same rule, never by clearing the cache; when it brings a new epoch, every dish still at
-  an older epoch moves to Hidden.
+- ``MenuSync`` fetches Inventory's snapshot when the branch starts (a start counts as
+  reconnecting), when the connection to Kafka comes back, and when a greater epoch was heard.
+  The snapshot is merged by the same rule, never by clearing the cache; when it brings a new
+  epoch, every dish still at an older epoch moves to Hidden.
 - The data is fresh while something was heard from Inventory within N minutes (section 10).
   Fresh or not, the screen decides only how to show a dish; ``POST /orders`` never looks at
   this cache (point 5 in section 8 of the design).
@@ -179,7 +179,8 @@ class MenuSync:
         self._connection = connection
         self._clock = clock
         self._was_connected: bool | None = None
-        self._pending_reconnect = False
+        # A start counts as reconnecting: what was missed while down may be gone from Kafka.
+        self._pending_reconnect = True
 
     def sync_once(self) -> bool:
         """One look; True if a snapshot was merged."""

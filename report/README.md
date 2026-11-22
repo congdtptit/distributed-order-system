@@ -46,7 +46,7 @@ Script vẽ các sơ đồ trong `diagrams/` vào `images/`, ghép các file the
 | Phần I | Bản nháp (Claude soạn, @Naul duyệt); có danh sách nguồn |
 | Mô hình HLD | Có |
 | Danh sách chức năng | Có đủ các chức năng của đợt 1 và đợt 2 |
-| Thiết kế chức năng | Có cho mọi giao dịch đợt 1: Kho, Bếp, chi nhánh và báo cáo quản lý (24 giao dịch); tình trạng món ở đợt 2 |
+| Thiết kế chức năng | Có cho mọi giao dịch: Kho, Bếp, chi nhánh, báo cáo quản lý và tình trạng món (28 giao dịch) |
 | Thiết kế CSDL | Có: danh sách CSDL, sơ đồ tổng quát, danh sách bảng; sơ đồ ER và bảng chi tiết sinh từ CSDL đang chạy |
 | Công nghệ | Có |
 | Giao diện | Có đủ sáu màn: Chi nhánh, Bếp, Kho, Giám sát, Quản lý và trang Demo, mỗi màn có ảnh chụp (`images/`, dữ liệu từ `backend/scripts/demo_data.py`) |

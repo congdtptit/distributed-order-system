@@ -21,10 +21,11 @@ Màn hình chỉ hiển thị điều các dịch vụ trả về và không t�
 - **Thanh trên:** trạng thái kết nối Kafka của chi nhánh (kết quả lần thăm dò gần nhất) và số mục chờ gửi, lấy từ `GET /monitor`; nút chọn chi nhánh.
 - **Cảnh báo Luồng D:** đơn chờ Kho quá N phút kèm nút Yêu cầu hủy; đơn còn trong hàng chờ sắp quá hạn X giờ; đơn đang yêu cầu hủy kèm thời gian đã chờ; tin trạng thái không đọc được.
 - **Tạo đơn:** danh mục món của chi nhánh (`GET /dishes`, dùng được khi mất mạng), nhập số lượng, bấm Tạo đơn. Đơn hiện ở Chờ kho cho tới khi có tin trạng thái.
+- **Tình trạng món trên form đặt món** (`GET /menu`, Luồng C): khi dữ liệu từ Kho còn mới, món Hết bị khóa và ghi "Hết"; khi dữ liệu đã cũ quá 5 phút hoặc chi nhánh mất kết nối Kafka, món Hết ghi "Có thể đã hết" và vẫn đặt được, kèm một dòng chung "Tình trạng món có thể đã thay đổi."; món Ẩn không hiện. Đây là luật duy nhất chỉ nằm trên màn hình: Kho vẫn quyết định từng đơn.
 - **Danh sách đơn:** mã đơn rút gọn (bấm để chép mã đầy đủ), giờ tạo, món, trạng thái dạng nhãn có màu và biểu tượng, cờ yêu cầu hủy, lý do, thông báo "Không hủy được: bếp đã bắt đầu nấu", tình trạng gửi theo BR5 ("Chưa gửi, bếp chưa nhận", "Đang gửi, chưa biết bếp đã nhận chưa"), và nút Hủy đơn. Đơn đã kết thúc hoặc đang có yêu cầu hủy thì không có nút này. Danh sách hiện 20 đơn mới nhất (`GET /orders?limit=20`); nút "Xem thêm 20 đơn cũ hơn" mở rộng tới tối đa 200 đơn. Lúc đầu màn tải cả 200 đơn sau mỗi 2 giây và bị giật khi dữ liệu nhiều; giờ mỗi lần hỏi lại chỉ còn khoảng 7 KB thay vì 67 KB.
 - **Hộp thoại hủy:** bắt buộc chọn lý do thuộc nhóm khách hủy, kèm lời giải thích: đơn chưa gửi đi thì hủy ngay, đơn đã gửi thì Bếp quyết định. Kết quả 200 báo đã hủy tại chi nhánh; 202 báo đã gửi yêu cầu tới Bếp và chưa chắc hủy được; 409 báo đơn vừa đổi trạng thái rồi tải lại.
 
-![Hình 3.1. Màn hình Chi nhánh POS01: form tạo đơn, danh sách đơn với trạng thái, lý do hủy và tình trạng gửi](images/chi-nhanh.png)
+![Hình 3.1. Màn hình Chi nhánh POS01: form tạo đơn (Cơm tấm sườn bị khóa vì Hết), danh sách đơn với trạng thái, lý do hủy và tình trạng gửi](images/chi-nhanh.png)
 
 ### 2. Màn hình Bếp
 

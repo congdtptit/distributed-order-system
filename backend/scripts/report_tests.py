@@ -27,10 +27,8 @@ SCENARIOS_VI = DOCS / "archive" / "vi-2026-11-21" / "01-dac-ta-nghiep-vu.md"
 PLAN = DOCS / "03-implementation-plan.md"
 
 TIER_NAMES = {"1": "Tầng 1", "2": "Tầng 2", "3": "Tầng 3"}
-PARTIAL: dict[int, str] = {
-    6: "Phần đợt 1 đạt; phần món chuyển sang Hết thuộc đợt 2",
-    48: "Phần đợt 1 đạt; phần món trở lại Còn thuộc đợt 2",
-}
+PARTIAL: dict[int, str] = {}
+"""Empty since phase 2 (22 Nov 2026): the dish parts of scenarios 6 and 48 are tested."""
 
 
 def scenarios() -> list[tuple[int, str, str, str]]:
