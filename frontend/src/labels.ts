@@ -97,6 +97,13 @@ export const CANCEL_MESSAGE: Record<string, string> = {
   "Cannot cancel: the kitchen has started cooking": "Không hủy được: bếp đã bắt đầu nấu",
 };
 
+/** The reasons Kitchen staff may give for a rejection (section 10 of the specification). */
+export const KITCHEN_REJECTION_REASONS = [
+  "EQUIPMENT_FAILURE",
+  "SHORT_STAFFED",
+  "SPOILED_INGREDIENT",
+] as const;
+
 /** What the cancel dialog says before the request: the branch, not the screen, decides
  * which case applies (BR9, section 6 of the specification). */
 export const CANCEL_EXPLANATION =

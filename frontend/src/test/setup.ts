@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom/vitest";
+import { notifications } from "@mantine/notifications";
 import { cleanup } from "@testing-library/react";
 import { server } from "./server";
 
@@ -29,6 +30,7 @@ window.HTMLElement.prototype.scrollIntoView = () => {};
 beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
 afterEach(() => {
   cleanup();
+  notifications.clean(); // the store is module-wide: a notice must not leak into the next test
   server.resetHandlers();
 });
 afterAll(() => server.close());

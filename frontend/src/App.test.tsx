@@ -12,9 +12,9 @@ describe("layout", () => {
     }
   });
 
-  it("highlights the current screen and shows its title", () => {
+  it("highlights the current screen and shows its title", async () => {
     renderAt("/kitchen");
-    expect(screen.getByRole("heading", { level: 1, name: "Bếp" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Bếp" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Bếp" })).toHaveAttribute("data-active", "true");
   });
 

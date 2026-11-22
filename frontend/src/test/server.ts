@@ -16,6 +16,8 @@ export const EMPTY_MONITOR: Monitor = {
 };
 
 export const server = setupServer(
+  http.get("*/api/kitchen/tickets", () => HttpResponse.json([])),
+  http.get("*/api/kitchen/alerts", () => HttpResponse.json([])),
   http.get("*/api/:branch/orders", () => HttpResponse.json<Order[]>([])),
   http.get("*/api/:branch/monitor", () => HttpResponse.json(EMPTY_MONITOR)),
   http.get("*/api/:branch/dishes", () =>

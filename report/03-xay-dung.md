@@ -24,4 +24,13 @@ Màn hình chỉ hiển thị điều các dịch vụ trả về và không t�
 - **Danh sách đơn:** mã đơn rút gọn (bấm để chép mã đầy đủ), giờ tạo, món, trạng thái dạng nhãn có màu và biểu tượng, cờ yêu cầu hủy, lý do, thông báo "Không hủy được: bếp đã bắt đầu nấu", tình trạng gửi theo BR5 ("Chưa gửi, bếp chưa nhận", "Đang gửi, chưa biết bếp đã nhận chưa"), và nút Hủy đơn. Đơn đã kết thúc hoặc đang có yêu cầu hủy thì không có nút này.
 - **Hộp thoại hủy:** bắt buộc chọn lý do thuộc nhóm khách hủy, kèm lời giải thích: đơn chưa gửi đi thì hủy ngay, đơn đã gửi thì Bếp quyết định. Kết quả 200 báo đã hủy tại chi nhánh; 202 báo đã gửi yêu cầu tới Bếp và chưa chắc hủy được; 409 báo đơn vừa đổi trạng thái rồi tải lại.
 
-> TODO(bước 6b): các màn Bếp, Kho, Giám sát, trang Demo; màn Quản lý ở bước 7.
+### 2. Màn hình Bếp
+
+Đường dẫn `/kitchen`; người dùng là nhân viên bếp, trên máy tính bảng (1024×768) hoặc màn hình treo tường (1920×1080). Màn hình gồm:
+
+- **Cảnh báo của Bếp** (`GET /alerts`), đặt trên cùng: yêu cầu hủy từ chi nhánh không phải chi nhánh gốc (`HUY_SAI_CHI_NHANH`, kèm chi nhánh gốc và các chi nhánh bị bỏ qua, để kiểm tra cấu hình chi nhánh gửi) và đơn cần kiểm tra (`CAN_KIEM_TRA`).
+- **Hai cột Chờ nấu và Đang nấu** (`GET /tickets`). Phiếu đã kết thúc không hiện ở đây. Mỗi phiếu có mã đơn, chi nhánh gốc, giờ đặt, món, nguyên liệu đã giữ kèm lượng. Phiếu Chờ nấu có nguyên liệu đang chờ kiểm kho thì hiện cảnh báo đỏ nêu tên nguyên liệu (Luồng A, bước 6); đây chỉ là cảnh báo, hệ thống không tự hủy phiếu.
+- **Nút theo trạng thái:** phiếu Chờ nấu có Bắt đầu nấu và Từ chối; phiếu Đang nấu chỉ có Hoàn tất. Nút cao ít nhất 44px, cách nhau 8px, để bấm nhanh khi đang đeo găng. Trả 409 nghĩa là phiếu vừa đổi trạng thái (thua trong tranh chấp với một yêu cầu hủy, BR7): màn hình báo ngắn rồi tải lại, không coi là lỗi.
+- **Hộp thoại từ chối:** bắt buộc chọn lý do thuộc nhóm Bếp từ chối; với lý do Nguyên liệu hỏng phải chọn ít nhất một nguyên liệu trong danh sách đã giữ của phiếu. Bếp kiểm tra lại và trả 400 nếu không nhận, lỗi hiện ngay trong hộp thoại.
+
+> TODO(bước 6b): các màn Kho, Giám sát, trang Demo; màn Quản lý ở bước 7.
