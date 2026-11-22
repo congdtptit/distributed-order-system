@@ -1,8 +1,15 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 22 · 22 Nov 2026
+Revision 23 · 22 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the implementation phase; section 7 records what has been built so far. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 23
+
+| Section | Change | Reason |
+|---|---|---|
+| 2 | Repository layout: `demo/` (the presenter's runbook, in Vietnamese) and `bin/demo`; compose takes `MENU_STALE_MINUTES` and `INVENTORY_HEARTBEAT_S` from the environment | Demo preparation |
+| 7 | The demo is prepared: rehearsal, the pre-demo review from three angles and what it found | 22 Nov 2026 |
 
 ## Changes in revision 22
 
@@ -208,6 +215,7 @@ The hardest parts of the project, races and deduplication, are solved by row loc
 | `frontend/` | The npm project of the screens |
 | `bin/chaos` | Fault injection for the tier 3 scenarios and the demo |
 | `perf/`, `bin/perf` | The JMeter load test (`perf/plan.jmx`, its image `perf/Dockerfile`) and the script that runs it; the summary files of the latest run stay in `perf/results/` |
+| `demo/`, `bin/demo` | The presenter's runbook in Vietnamese (`demo/kich-ban.md`); `bin/demo reset` empties the cluster, starts it in demo mode (dish data stale after 1 minute, heartbeat every 20 seconds) and loads the demo data; `bin/demo check` |
 
 End-to-end tests across services live in the `tests/` folder of the module whose outcome they check (`*_e2e.py`, marker `tier3`).
 
@@ -300,7 +308,7 @@ The order follows the steps and phase 2 in section 7 of the detailed design; the
 | 7. Integration | Tier 3 scenarios, Flow D (`/monitor`, `/alerts`), the Order Query Service and its report (scenario 55; replication itself runs since step 0), the Management screen; the performance test with Apache JMeter (section 2 of document 04) | One main session; slow test runs are delegated to a subagent |
 | 8. Report material | The report in `report/` grows with every step (document 04); step 8 tidies the diagrams, applies the template's page layout and reads it through | One session after step 7; Part I and the cover are @Naul's unless Claude is asked |
 | Phase 2 | Flow C, including blocking a Sold-out dish on the branch screen while the data is fresh and the "may be sold out" warning when it is stale | One session, scenarios 18–21 |
-| Demo | Scenarios 1, 3, 4, 10, 36 on all services | One repeatable demo script |
+| Demo | Scenarios 1, 3, 4, 10, 36 on all services. Prepared on 22 Nov 2026: `bin/demo`, the runbook `demo/kich-ban.md`, a rehearsal of every step | One repeatable demo script |
 
 The detailed design allows Inventory and the branch to proceed in parallel after step 1. This plan proposes running the Kitchen in parallel as well: the message contract is fixed by the design, and the Kitchen's handler-level tests need neither Inventory nor the branch.
 
@@ -428,7 +436,7 @@ Updated 22 Nov 2026, during step 7. A step is done when its scenarios pass, the 
 | 8. Report material | Under way 22 Nov 2026: screenshots of the six screens, the HLD redrawn, the Word export made reliable. Part I drafted by Claude for @Naul's review. Left: the template's page layout (needs the template file), the cover | – |
 | Phase 2 | Done 22 Nov 2026 | 18, 19, 20, 21; the dish parts of 6 and 48 |
 
-**Scenarios:** all 44 pass, each with every clause of its expected result, including the dish parts of 6 and 48. **Estimate of work done:** about 93 % of the whole project: everything but the rest of the report material (the template's page layout, the cover and the review of Part I, about 3 points of 8), the demo (3 %) and the two CI workflows that run only after a push (1 point of integration), weighting each step by its expected effort. The weights, rescaled on 22 Nov 2026: preparation 13 %, step 1 9 %, Inventory 13 %, Kitchen 13 %, branch 11 %, screens 11 %, integration and reporting 9 %, performance test 5 %, report material 8 %, phase 2 5 %, demo 3 %.
+**Scenarios:** all 44 pass, each with every clause of its expected result, including the dish parts of 6 and 48. **Estimate of work done:** about 96 % of the whole project: what is left is the template's page layout and the cover (step 8, which needs the template file and @Naul's details), @Naul's review of the Part I draft, and the two CI workflows that run only after a push. The weights, rescaled on 22 Nov 2026: preparation 13 %, step 1 9 %, Inventory 13 %, Kitchen 13 %, branch 11 %, screens 11 %, integration and reporting 9 %, performance test 5 %, report material 8 %, phase 2 5 %, demo 3 %.
 
 ### What step 1 built
 
@@ -574,4 +582,11 @@ Also: the branch DB's `alerts` table (migration `003`, decided by @Naul on 22 No
 - **The tests can fail:** removing the `FOR UPDATE` on `dish_status` fails the race test.
 - **Reviews:** the specification review found the lock order right on every path and one fault in the screen, fixed with a test that reproduced it first: a quantity typed for a dish while the data was stale was still sent after the dish became blocked or Hidden. It also noted that the menu sync did not fetch the snapshot on a restart once it had a cache, as the design says; it now does. The test audit asked for the invariants after the tier 1 and race tests, the topic of `DishStatusChanged` and the `dish_status` row in scenarios 6 and 48, a guard against a skipped restart in scenario 18, and the "May be sold out" text in the offline case; all added.
 - **Found on the way:** a tier 3 test that set stock with a direct `UPDATE` left two dishes Sold out on the cluster, since a direct write skips Flow C; it now goes through a stock receipt. Code reloaded before its migration was applied sent menu messages to the dlq for two minutes; a new migration needs a restart of the service (revision 19 of the design).
+
+### Demo preparation
+
+- **What it built:** `bin/demo` and the runbook `demo/kich-ban.md` (the order of the presentation, the commands, what to point at, the waits measured in the rehearsal, what to do when something is off); the demo page's guide gained what the rehearsal showed: pressed together, Start cooking usually wins scenario 3 because the cancel travels through Kafka (cancel first, half a second earlier, to show the other end), and scenario 10 also shows the stale dish data after a minute.
+- **Rehearsal:** every step of scenarios 1, 3, 4, 10 and 36 on a freshly emptied cluster in demo mode, through `bin/chaos` and the screens' APIs: each ended as the guide says. Waits: a status change under 1 second; the branch sees a lost connection in 5–7 seconds and the connection back in about 4; Inventory catches up about 3 seconds after it starts; stale dish data after 52 seconds.
+- **The pre-demo review from three angles** (section 5.5): deduplication and stock accounting found no fault. Races found the lock orders and BR7, BR9 right, and one gap against section 13.2: a wrong-branch cancel request raised no warning when the origin branch's own request was also in the list, or when Inventory failed the order; fixed. The deduplication review also found that a dish message of an older epoch, read after the branch had moved to a new one (it could wait in Kafka while the branch was offline), brought back a dish the new generation had hidden; fixed. Both with tests written first. Left as notes: a receipt could in principle push stock past NUMERIC(12,3) (about a billion units), and a message moved to the dlq twice gives two dlq copies (the dlq has no business effect).
+- **One flaky run:** one of four runs of the Kitchen's tier 1–2 tests had a failure the summary did not name; the three runs after it passed. The likely test is the Kitchen's race of scenario 3, which needs both winners to appear and has been timing-sensitive before.
 

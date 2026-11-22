@@ -54,10 +54,11 @@ function scenarios(branch: string): Scenario[] {
       title: "Hủy và Bắt đầu nấu cùng lúc",
       steps: [
         "Tạo đơn, chờ đơn Đã giữ và phiếu hiện ở cột Chờ nấu.",
-        "Bấm Hủy đơn ở chi nhánh và Bắt đầu nấu ở Bếp gần như cùng lúc.",
+        "Bấm Hủy đơn ở chi nhánh và Bắt đầu nấu ở Bếp gần như cùng lúc: yêu cầu hủy còn phải đi qua Kafka, nên thường Bắt đầu nấu thắng.",
+        "Làm lại với đơn mới: bấm Hủy đơn trước, khoảng nửa giây sau mới bấm Bắt đầu nấu, để thấy hủy thắng.",
       ],
       expected:
-        'Đúng một thao tác thắng; chi nhánh, Bếp và Kho cùng một kết cục (Đã hủy, hoặc "Không hủy được: bếp đã bắt đầu nấu").',
+        'Mỗi lần đúng một thao tác thắng; chi nhánh, Bếp và Kho cùng một kết cục (Đã hủy, hoặc "Không hủy được: bếp đã bắt đầu nấu"); bên thua nhận "Phiếu vừa đổi trạng thái".',
     },
     {
       n: 4,
@@ -74,10 +75,11 @@ function scenarios(branch: string): Scenario[] {
       steps: [
         `Cắt mạng chi nhánh: bin/chaos offline ${branch}; chờ thanh trên báo mất kết nối Kafka.`,
         "Tạo đơn (dòng gửi đi báo chưa gửi), rồi bấm Hủy đơn.",
+        'Chờ khoảng 1 phút (chế độ demo của bin/demo): form đặt món hiện "Tình trạng món có thể đã thay đổi", món Hết đổi thành "Có thể đã hết" và vẫn đặt được.',
         `Nối mạng lại: bin/chaos online ${branch}.`,
       ],
       expected:
-        "Đơn Đã hủy ngay tại chi nhánh; không gì được gửi; Kho và Bếp không có bản ghi; đơn không bao giờ được nấu.",
+        "Đơn Đã hủy ngay tại chi nhánh; không gì được gửi; Kho và Bếp không có bản ghi; đơn không bao giờ được nấu. Có mạng lại thì chi nhánh lấy lại tình trạng món và món Hết lại bị khóa.",
     },
     {
       n: 36,

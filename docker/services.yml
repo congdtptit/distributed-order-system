@@ -20,6 +20,10 @@ x-service: &service
 x-service-env: &service-env
   KAFKA_BOOTSTRAP: kafka1:19092,kafka2:19092,kafka3:19092
   RELOAD: "1"
+  # Flow C parameters (section 10 of the specification): N, after which a branch's dish data
+  # counts as stale, and Inventory's heartbeat interval. bin/demo lowers both for the demo.
+  MENU_STALE_MINUTES: ${MENU_STALE_MINUTES:-5}
+  INVENTORY_HEARTBEAT_S: ${INVENTORY_HEARTBEAT_S:-60}
 
 x-inventory: &inventory
   <<: *service

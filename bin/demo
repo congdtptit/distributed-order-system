@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# The demo (the runbook in Vietnamese is demo/kich-ban.md):
+#
+#   bin/demo reset    empty the cluster, start everything in demo mode, load the demo data
+#   bin/demo check    every service answers, every branch replicates and hears Inventory
+#
+# Demo mode: a branch's dish data turns stale after 1 minute instead of 5, with Inventory's
+# heartbeat every 20 seconds instead of 60, so "Có thể đã hết" shows without a long wait.
+# N must stay above two heartbeat intervals (section 10 of the specification).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+export MENU_STALE_MINUTES="${MENU_STALE_MINUTES:-1}"
+export INVENTORY_HEARTBEAT_S="${INVENTORY_HEARTBEAT_S:-20}"
+compose=(docker compose --profile full)
+
+check() {
+  local failed=0
+  for port in 8101 8102 8201 8301 8302 8303 8401; do
+    if curl -fsS -o /dev/null --max-time 3 "http://localhost:$port/health"; then
+      echo "ok    service on port $port answers"
+    else
+      echo "FAIL  service on port $port does not answer"; failed=1
+    fi
+  done
+  for port in 8301 8302 8303; do
+    if curl -fsS --max-time 3 "http://localhost:$port/menu" | grep -q '"stale":false'; then
+      echo "ok    branch on port $port hears Inventory (dish data fresh)"
+    else
+      echo "FAIL  branch on port $port has stale dish data"; failed=1
+    fi
+  done
+  fresh=$(curl -fsS --max-time 3 http://localhost:8401/reports/summary |
+    python3 -c 'import json,sys; print(sum(1 for b in json.load(sys.stdin)["branches"] if (b["data_age_s"] or 1e9) < 15))')
+  if [ "$fresh" = 3 ]; then
+    echo "ok    all three branches replicate to the Central Order Replica"
+  else
+    echo "FAIL  only $fresh of 3 branches replicate"; failed=1
+  fi
+  return $failed
+}
+
+case "${1:-}" in
+  reset)
+    "${compose[@]}" down -v --remove-orphans
+    "${compose[@]}" up -d --wait --wait-timeout 600
+    for _ in $(seq 1 30); do  # the branches fetch the snapshot within a few seconds
+      curl -fsS --max-time 3 http://localhost:8301/menu 2>/dev/null | grep -q '"stale":false' && break
+      sleep 2
+    done
+    docker compose exec -T tools python scripts/demo_data.py
+    check
+    echo
+    echo "Demo page:  http://localhost:5173/demo/POS01"
+    echo "Screens:    http://localhost:5173  (Kho, Giám sát, Quản lý in the menu)"
+    echo "Kafka UI:   http://localhost:8080"
+    ;;
+  check)
+    check ;;
+  *)
+    sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+    exit 2 ;;
+esac

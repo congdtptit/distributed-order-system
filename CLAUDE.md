@@ -12,7 +12,7 @@ Course project on distributed systems: order taking for a restaurant chain. Bran
 ## Current phase: implementation
 
 - `.claude/project-phase` contains `code`. Only the user changes that file; a hook blocks edits to it.
-- The order of work is section 4 of `docs/03-implementation-plan.md`; steps 0 to 7 and phase 2 (Flow C) are done, and all 44 scenarios pass; step 8 (report material) is under way; section 7 there records the progress. Next: the template's page layout and the demo. A new migration needs `docker compose restart <service>`: reload applies code, not migrations. The final report follows the lecturer's template; document 04 says what it needs. Business code is written one scenario at a time with `/scenario <n>`, screens one at a time with `/screen <name>`.
+- The order of work is section 4 of `docs/03-implementation-plan.md`; steps 0 to 7 and phase 2 (Flow C) are done, and all 44 scenarios pass; step 8 (report material) is under way; section 7 there records the progress. The demo is prepared (`demo/kich-ban.md`). Next: the template's page layout and the cover. A new migration needs `docker compose restart <service>`: reload applies code, not migrations. The final report follows the lecturer's template; document 04 says what it needs. Business code is written one scenario at a time with `/scenario <n>`, screens one at a time with `/screen <name>`.
 - The project is built from scratch, with no existing codebase to follow.
 
 ## Layout and commands
@@ -41,7 +41,7 @@ Everything runs in Docker; nothing is installed on the host. Source is mounted i
 | Frontend tests, types, format and lint | `docker compose exec frontend npx --no-install vitest run`, `… tsc --noEmit`, `… biome check --write .` |
 | Faults | `bin/chaos offline pos01`, `bin/chaos stop kafka2`, `bin/chaos cut-replication pos01`, `bin/chaos status` |
 | Performance test | `bin/perf` (250 users per API; `-Jusers=50` for a lighter run) |
-| Demo data, report | `docker compose exec -T tools python scripts/demo_data.py` on an emptied cluster; `report/build.sh` → `report/build/bao-cao.docx` |
+| Demo, report | `bin/demo reset` (emptied cluster in demo mode with demo data; runbook `demo/kich-ban.md`), `bin/demo check`; `report/build.sh` → `report/build/bao-cao.docx` |
 | API types for the screens | `docker compose exec tools python scripts/dump_openapi.py`, then `docker compose exec frontend npm run gen:api` |
 
 | URL | What |
