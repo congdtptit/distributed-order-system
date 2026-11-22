@@ -15,3 +15,10 @@ function Image(img)
   end
   return nil
 end
+
+-- Convert HTML comment <!--PAGEBREAK--> into a Word page break while keeping Markdown clean.
+function RawBlock(el)
+  if el.format == "html" and el.text:match("^%s*<!%-%-%s*PAGEBREAK%s*%-%->%s*$") then
+    return pandoc.RawBlock("openxml", '<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
+  end
+end
