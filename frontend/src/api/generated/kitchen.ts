@@ -42,6 +42,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/monitor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Monitor
+         * @description Flow D: unread messages per topic and the slow-consumer alert.
+         */
+        get: operations["monitor_monitor_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tickets": {
         parameters: {
             query?: never;
@@ -158,6 +178,17 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** Monitor */
+        Monitor: {
+            /** Consumer Group */
+            consumer_group: string;
+            /** Kafka Reachable */
+            kafka_reachable: boolean;
+            /** Slow After S */
+            slow_after_s: number;
+            /** Topics */
+            topics: components["schemas"]["TopicState"][];
+        };
         /** Rejection */
         Rejection: {
             /** Reason Code */
@@ -197,6 +228,19 @@ export interface components {
             status: string;
             /** Warnings */
             warnings: string[];
+        };
+        /** TopicState */
+        TopicState: {
+            /** Oldest Unread Age S */
+            oldest_unread_age_s: number | null;
+            /** Oldest Unread At */
+            oldest_unread_at: string | null;
+            /** Slow */
+            slow: boolean;
+            /** Topic */
+            topic: string;
+            /** Unread */
+            unread: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -269,6 +313,26 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    monitor_monitor_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Monitor"];
                 };
             };
         };

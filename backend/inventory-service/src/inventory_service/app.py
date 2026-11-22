@@ -26,6 +26,7 @@ from common.api import get_clock, get_conn
 from common.clock import Clock, SystemClock
 from common.consumer import ConsumerSettings, MessageConsumer
 from common.kafka import Receiver, Sender
+from common.monitor import ConsumerMonitor
 from common.outbox import OutboxRelay
 from common.runtime import Workers, configure_logging, instance_name
 from common.seed import load_menu
@@ -215,3 +216,40 @@ def alerts(
     """Orders that need review and unmatched commands,
     newest first (at most 100); ``kind`` filters."""
     return [Alert(**a) for a in list_alerts(conn, kind)]
+
+
+class TopicState(BaseModel):
+    topic: str
+    unread: int
+    oldest_unread_at: datetime | None
+    oldest_unread_age_s: int | None
+    slow: bool
+    """The oldest unread message is older than ``slow_after_s`` (section 10: 5 minutes)."""
+
+
+class Monitor(BaseModel):
+    consumer_group: str
+    slow_after_s: int
+    kafka_reachable: bool
+    topics: list[TopicState]
+
+
+_monitor: ConsumerMonitor | None = None
+
+
+def get_monitor() -> ConsumerMonitor:
+    global _monitor
+    if _monitor is None:
+        _monitor = ConsumerMonitor(
+            os.environ.get("KAFKA_BOOTSTRAP"),
+            CONSUMER_GROUP,
+            [ORDER_EVENTS_PATTERN, STOCK_COMMANDS],
+            SystemClock(),
+        )
+    return _monitor
+
+
+@app.get("/monitor")
+def monitor(consumer: Annotated[ConsumerMonitor, Depends(get_monitor)]) -> Monitor:
+    """Flow D: unread messages per topic and the slow-consumer alert."""
+    return Monitor(**consumer.view())

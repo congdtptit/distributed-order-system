@@ -107,6 +107,37 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "Monitor": {
+        "properties": {
+          "consumer_group": {
+            "title": "Consumer Group",
+            "type": "string"
+          },
+          "kafka_reachable": {
+            "title": "Kafka Reachable",
+            "type": "boolean"
+          },
+          "slow_after_s": {
+            "title": "Slow After S",
+            "type": "integer"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/TopicState"
+            },
+            "title": "Topics",
+            "type": "array"
+          }
+        },
+        "required": [
+          "consumer_group",
+          "slow_after_s",
+          "kafka_reachable",
+          "topics"
+        ],
+        "title": "Monitor",
+        "type": "object"
+      },
       "Receipt": {
         "properties": {
           "ingredient_id": {
@@ -180,6 +211,54 @@
           "needs_check"
         ],
         "title": "StockItem",
+        "type": "object"
+      },
+      "TopicState": {
+        "properties": {
+          "oldest_unread_age_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Unread Age S"
+          },
+          "oldest_unread_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Unread At"
+          },
+          "slow": {
+            "title": "Slow",
+            "type": "boolean"
+          },
+          "topic": {
+            "title": "Topic",
+            "type": "string"
+          },
+          "unread": {
+            "title": "Unread",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "topic",
+          "unread",
+          "oldest_unread_at",
+          "oldest_unread_age_s",
+          "slow"
+        ],
+        "title": "TopicState",
         "type": "object"
       },
       "ValidationError": {
@@ -366,6 +445,25 @@
           }
         },
         "summary": "Clear Stock Check"
+      }
+    },
+    "/monitor": {
+      "get": {
+        "description": "Flow D: unread messages per topic and the slow-consumer alert.",
+        "operationId": "monitor_monitor_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Monitor"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Monitor"
       }
     },
     "/stock": {

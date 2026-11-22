@@ -13,6 +13,7 @@ This document turns business specification v1.5 (the lean edition) into three th
 | 5 | Note: the rank condition of write (4) never decides on its own | The step 6 mutation check: every write that makes an order terminal turns the flag off, and write (2) refuses a terminal order, so a terminal order with the flag `DANG_YEU_CAU` cannot exist. The condition stays as a guard |
 | 6 | The branch API rows: `POST /orders` returns the order, invalid input is 400 (also for the cancel reason), the fields of `GET /monitor` | Built in step 6 |
 | 6 | `GET /alerts` of Inventory and the Kitchen: newest first, at most 100, `kind` limited to that service's kinds (422 otherwise) | Built in step 6b, ahead of step 7, because the Kitchen screen shows these alerts |
+| 6 | `GET /monitor` of Inventory and the Kitchen: for each topic the service's consumer group reads, the unread messages, the write time and age of the oldest one, and `slow` past 5 minutes; `kafka_reachable` false when Kafka cannot be asked. A partition never committed counts from its first message; a reading is kept 3 seconds | Built in step 6b, ahead of step 7, for the Monitor screen |
 
 ## Changes in revision 13
 

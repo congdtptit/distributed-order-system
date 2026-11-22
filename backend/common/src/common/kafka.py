@@ -6,10 +6,12 @@ auto-commit off (section 13.3) and commits each message's offset itself.
 """
 
 import logging
+import re
 import time
 from collections.abc import Sequence
 from concurrent.futures import Future
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from confluent_kafka import Consumer, KafkaError, KafkaException, Message, Producer, TopicPartition
@@ -297,5 +299,81 @@ def committed_offset(bootstrap: str, group_id: str, topic: str, partition: int) 
     try:
         [tp] = consumer.committed([TopicPartition(topic, partition)], timeout=10)
         return tp.offset if tp.offset >= 0 else None
+    finally:
+        consumer.close()
+
+
+# ---------- consumer lag: the slow-consumer alert of Flow D ----------
+
+
+@dataclass(frozen=True)
+class TopicLag:
+    """What a consumer group has not read yet on one topic (all partitions together)."""
+
+    topic: str
+    unread: int
+    oldest_unread_at: datetime | None
+    """When the oldest unread message was written; None if nothing is unread."""
+
+
+def consumer_lag(
+    bootstrap: str, group_id: str, topics: Sequence[str], *, timeout_s: float = 5.0
+) -> list[TopicLag]:
+    """Unread messages of ``group_id`` on ``topics`` (patterns starting with ``^`` are matched
+    against the cluster's topics), and the write time of the oldest unread one: the slow
+    consumer alert of section 8 of docs/01-business-spec.md.
+
+    A partition with no committed offset counts from its first message, as the consumers do
+    (``auto.offset.reset=earliest``). The group is only read, never joined or committed.
+    """
+    consumer = Consumer(
+        {
+            **consumer_config(bootstrap, group_id, f"{group_id}-lag"),
+            "enable.partition.eof": False,
+        }
+    )
+    try:
+        names = sorted(consumer.list_topics(timeout=timeout_s).topics)
+        wanted = sorted(
+            {
+                name
+                for t in topics
+                for name in names
+                if (re.match(t, name) if t.startswith("^") else name == t)
+            }
+        )
+        meta = consumer.list_topics(timeout=timeout_s).topics
+        partitions = [
+            TopicPartition(name, p) for name in wanted for p in sorted(meta[name].partitions)
+        ]
+        committed = consumer.committed(partitions, timeout=timeout_s) if partitions else []
+        unread: dict[str, int] = dict.fromkeys(wanted, 0)
+        starts: list[TopicPartition] = []
+        for tp in committed:
+            low, high = consumer.get_watermark_offsets(
+                TopicPartition(tp.topic, tp.partition), timeout=timeout_s
+            )
+            start = tp.offset if tp.offset >= 0 else low
+            if high > start:
+                unread[tp.topic] += high - start
+                starts.append(TopicPartition(tp.topic, tp.partition, start))
+        oldest: dict[str, datetime] = {}
+        if starts:
+            consumer.assign(starts)
+            pending = {(tp.topic, tp.partition) for tp in starts}
+            deadline = time.monotonic() + timeout_s
+            while pending and time.monotonic() < deadline:
+                msg = consumer.poll(0.5)
+                if msg is None or msg.error() is not None:
+                    continue
+                key = (msg.topic() or "", msg.partition() or 0)
+                if key not in pending:
+                    continue
+                pending.discard(key)
+                _kind, millis = msg.timestamp()
+                at = datetime.fromtimestamp(millis / 1000, UTC)
+                if key[0] not in oldest or at < oldest[key[0]]:
+                    oldest[key[0]] = at
+        return [TopicLag(t, unread[t], oldest.get(t)) for t in wanted]
     finally:
         consumer.close()
