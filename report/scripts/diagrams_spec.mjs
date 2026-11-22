@@ -1,3 +1,7 @@
+import { P2_ARCH_DIAGRAMS } from "./diagrams_p2_arch.mjs";
+import { P2_ACT_DIAGRAMS } from "./diagrams_p2_act.mjs";
+import { P4_DIAGRAMS } from "./diagrams_p4.mjs";
+
 export const DIAGRAMS = [
   {
     name: "hinh-1-1-bai-toan-da-kenh",
@@ -212,4 +216,7 @@ export const DIAGRAMS = [
       </div>
     `,
   },
+  ...P2_ARCH_DIAGRAMS,
+  ...P2_ACT_DIAGRAMS,
+  ...P4_DIAGRAMS,
 ];

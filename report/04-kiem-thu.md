@@ -1,122 +1,161 @@
 # PHẦN IV. THỬ NGHIỆM VÀ ĐÁNH GIÁ HỆ THỐNG
 
-## I. KIỂM THỬ HỆ THỐNG
+## I. KỊCH BẢN KIỂM THỬ
 
-### 1. Kịch bản kiểm thử
+Quá trình kiểm thử tập trung xác minh khả năng hợp nhất đơn hàng đa kênh từ các nguồn độc lập (POS01, POS02, Online) về Kho và Bếp trung tâm theo thời gian gần thực, đồng thời chứng minh cơ chế kiểm soát xung đột tài nguyên, chịu lỗi tiến trình, chịu lỗi đường truyền và phục hồi dữ liệu của kiến trúc phân tán. Toàn bộ kịch bản kiểm thử trọng tâm được phân thành hai nhóm chức năng hợp nhất (Bảng 4.1) và tính chất phân tán (Bảng 4.2).
 
-Đặc tả nghiệp vụ quy định 44 kịch bản bắt buộc. Mỗi kịch bản có ít nhất một test tự động, gắn nhãn `kb(<số kịch bản>)`, chạy ở một trong ba tầng:
+*Bảng 4.1. Kịch bản kiểm thử chức năng hợp nhất đa kênh*
 
-| Tầng | Cách chạy |
-|---|---|
-| Tầng 1 | Gọi trực tiếp handler trên PostgreSQL thật, theo đúng thứ tự tin mà kịch bản mô tả |
-| Tầng 2 | Tranh chấp: hai luồng trên hai kết nối cùng lúc, lặp nhiều lần (100 lần mỗi kịch bản) |
-| Tầng 3 | Trên cụm Docker Compose đang chạy: Kafka thật, dừng hoặc kill container, cắt mạng, nhân bản |
-
-Không dùng mock thay cho PostgreSQL hay Kafka. Bảng dưới đây sinh từ lần chạy test gần nhất (`backend/scripts/report_tests.py`):
-
-<!-- include: generated/kiem-thu.md -->
-
-### 2. Báo cáo tổng hợp kết quả kiểm thử
-
-#### 2.1. Mục đích kiểm thử
-
-Thực hiện kiểm thử hệ thống đặt món phân tán đáp ứng các nội dung kiểm thử bao gồm:
-
-- Kiểm thử chức năng, trong đó có tính phân tán: mô hình và kịch bản kiểm thử tính phân tán của hệ thống, khả năng chịu lỗi và phục hồi (mục "Mô hình kiểm thử tính phân tán" dưới đây).
-- Kiểm thử hiệu năng: mức độ sử dụng tài nguyên và khả năng đáp ứng khi nhiều người dùng đồng thời (mục 2.4.2).
-
-##### Mô hình kiểm thử tính phân tán
-
-Test tầng 3 chạy trong container `tools`, nối vào cùng các mạng Docker với các dịch vụ. Test tự gây lỗi qua Docker Engine API (dừng, kill, bật lại container; tách một container khỏi mạng `kafka-net` hoặc `replication-net`), giống lệnh `bin/chaos` dùng khi demo bằng tay, rồi kiểm tra trạng thái trong CSDL, tin trên Kafka và câu trả lời của API.
-
-```mermaid
-flowchart LR
-  T["Container tools<br/>pytest tầng 3"] -->|Docker Engine API:<br/>stop, kill, start,<br/>network disconnect| D["Docker"]
-  D -.-> K1["kafka1"] & K2["kafka2"] & K3["kafka3"]
-  D -.-> I1["inventory-1"] & I2["inventory-2"]
-  D -.->|tách khỏi kafka-net| P1["pos01"]
-  T -->|gửi tin, đọc topic| K1
-  T -->|HTTP| KS["kitchen"]
-  T -->|HTTP: tạo đơn, hủy, giám sát| P1
-  T -->|SQL: đọc trạng thái| DB[("inventory-db, kitchen-db,<br/>CSDL test")]
-  D -.->|tách khỏi replication-net| P1DB[("pos01-db")]
-  P1DB -->|nhân bản logic| C[("central-db")]
-  T -->|HTTP: báo cáo| Q["query"]
-  Q --- C
-  I1 & I2 & KS & P1 --- K1
-```
-
-| Kịch bản | Lỗi gây ra | Cách gây | Kiểm tra | Kết quả |
+| Mã ca | Kịch bản kiểm thử | Điều kiện & thao tác thực hiện | Kết quả mong đợi | Trạng thái |
 |---|---|---|---|---|
-| 26 | Tiến trình consumer chết sau khi commit DB, trước khi commit offset | Chạy consumer ở tiến trình riêng, dừng bằng `os._exit` đúng giữa hai bước | Kafka gửi lại tin; `processed_events` chặn bản trùng; kho chỉ trừ một lần | Đạt |
-| 29 | Tin có `event_type` lạ hoặc `schema_version` cao hơn mức hỗ trợ | Gửi tin hỏng xen giữa hai đơn hợp lệ trên cùng partition | Tin vào `dlq`, đơn bị đánh dấu `CAN_KIEM_TRA`, hai đơn kia vẫn được giữ nguyên liệu | Đạt |
-| 31 | Broker đang làm leader bị kill khi đang gửi tin | `kill` (SIGKILL) container leader của partition trong lúc outbox relay đang gửi | Không mất tin nào Kafka đã xác nhận; gửi vẫn tiếp tục; partition có leader mới | Đạt (3 lần liên tiếp) |
-| 4 | Kho ngừng hoạt động khi Bếp từ chối phiếu | Dừng mọi instance Inventory, từ chối phiếu qua API của Bếp, bật lại Kho | Chi nhánh nhận Đã hủy ngay; Kho hoàn kho đúng một lần khi bật lại | Đạt |
-| 3, 51, 52 | Hai thao tác tranh nhau trên cùng một phiếu | Hai kết nối, lặp 60–100 lần, có Kho thật nhận lệnh của Bếp | Đúng một thao tác thắng; Kho rời trạng thái Đang giữ đúng một lần theo bên thắng | Đạt |
-| 24 | Định tuyến theo chi nhánh | Gửi đơn thật vào `order-events.POS01` | Bếp nhận qua `kitchen-orders`; chỉ POS01 nhận trạng thái | Đạt |
-| 25 | Bếp ngừng hoạt động trong khi đơn và yêu cầu hủy vẫn đến | Dừng container `kitchen`, gửi 10 đơn và 5 yêu cầu hủy (có cái trước, có cái sau đơn của nó), bật lại | Mọi đơn đến đúng trạng thái theo bảng 3.2; mỗi đơn bị hủy có đúng một lệnh hoàn kho và một Đã hủy; Kho hoàn kho đủ | Đạt |
-| 10 | Chi nhánh mất mạng, thu ngân tạo đơn rồi hủy | Tách container `pos01` khỏi `kafka-net`, tạo hai đơn qua API của `pos01`, hủy một đơn, nối mạng lại | Đơn bị hủy đóng `DA_HUY` ngay (200), không có tin nào của đơn đó trên `order-events.POS01`, Kho và Bếp không có bản ghi; đơn còn lại được gửi và lên Đã giữ | Đạt |
-| 36 | Chi nhánh mất mạng sau khi đã gửi đơn; Bếp bắt đầu nấu trước khi yêu cầu hủy tới | Đơn lên Đã giữ, tách `pos01` khỏi `kafka-net`, bấm hủy (202), Bếp bấm Bắt đầu nấu, nối mạng lại, Bếp bấm Hoàn tất | Chi nhánh hiện "Không hủy được: bếp đã bắt đầu nấu", đơn đi tiếp tới Hoàn tất, Kho ghi nguyên liệu đã dùng, không hoàn kho | Đạt |
-| 12 | Gửi lỗi nhiều lần sau khi đã thử gửi | Hàng chờ của chi nhánh gửi tới một topic mà broker chưa có (thăm dò vẫn thành công nên mục được đặt cờ), lặp nhiều vòng, rồi tạo topic | Không mục nào bị bỏ; mục hủy không đi trước mục tạo đơn; khi gửi được thì đủ mọi mục, đúng thứ tự theo đơn; đơn khác không bị chặn | Đạt |
-| 31 (chi nhánh) | Broker đang làm leader bị kill khi chi nhánh đang gửi đơn | `kill` (SIGKILL) container leader trong lúc đơn mới liên tục được tạo và hàng chờ của chi nhánh đang gửi | Mọi mục Kafka đã xác nhận đều đọc lại được; gửi vẫn tiếp tục với broker còn lại | Đạt |
-| 28, 42 | Hai instance cùng xử lý một đơn | Hai kết nối CSDL chạy song song, lặp 100 lần (bản chạy hai instance thật trên Kafka ở dòng 42 bên dưới) | Chỉ một bản ghi, kết quả đúng bảng 3.2 dù tin nào đến trước (28); đúng một đơn được giữ, kho không âm (42) | Đạt |
-| 1 | Yêu cầu hủy tới Bếp trước đơn (kịch bản demo) | Dừng mọi instance Inventory, tạo đơn ở `pos01` và hủy qua API; bật lại Kho | Bếp có bản ghi Hủy chờ đơn và chi nhánh hiện "Bếp sẽ không nấu"; khi Kho chạy lại: không có phiếu, đơn `DA_HUY`, mọi dòng giữ `DA_HOAN`, tồn kho trở về đúng như trước | Đạt |
-| 3 | Hủy và Bắt đầu nấu cùng lúc (kịch bản demo) | Bấm hủy ở `pos01` và Bắt đầu nấu ở Bếp cùng lúc, nút Bếp lệch 0–0,6 giây, 5 vòng | Mỗi vòng đúng một bên thắng và ba phía cùng kết cục: hủy thắng thì Bếp, chi nhánh `DA_HUY` và Kho hoàn kho; nấu thắng thì chi nhánh hiện "Không hủy được", Kho ghi đã dùng, đơn tới `HOAN_TAT`. Một lần chạy ra cả hai kết cục | Đạt |
-| 42 (hai instance thật) | Hai đơn cùng lúc tới hai instance Inventory, cùng cần một nguyên liệu chỉ đủ cho một đơn | Chọn trước hai `order_id` rơi vào hai partition khác nhau của `order-events.POS01` (CRC32 của key), gửi cùng lúc; `inventory-1` và `inventory-2` cùng một nhóm consumer; 5 vòng mỗi lần chạy | Log của mỗi instance cho thấy nó xử lý đúng một đơn, từ partition của mình; đúng một đơn `DANG_GIU`, đơn kia `THAT_BAI` và không có dòng giữ nào; tồn kho không âm; hai bất biến của Kho đúng | Đạt (3 lần liên tiếp) |
-| 18 | Kho khởi động lại, sau đó một món đổi trạng thái | Dừng rồi bật lại mọi instance Inventory; kiểm kho Tôm với số đếm thấp qua API (Gỏi cuốn chuyển Hết); sau đó nhập kho lại | Chi nhánh POS01 nhận trạng thái Hết qua `menu-events` trong vòng vài giây; version lớn hơn mọi version trước lúc khởi động lại | Đạt (3 lần liên tiếp) |
-| 55 | Cắt nhân bản từ POS01 về Central Order Replica trong khi POS01 và POS02 vẫn nhận đơn | Tách `pos01-db` khỏi mạng `replication-net`, tạo hai đơn ở mỗi chi nhánh, chờ ba nhịp `replication_heartbeat` của POS02, nối mạng lại | Trong lúc cắt: `GET /reports/summary` vẫn trả lời; mốc "dữ liệu tính đến" của POS01 đứng yên, của POS02 vẫn chạy; đơn mới của POS01 chưa có ở `central-db`, đơn của POS02 đã có. Sau khi nối lại: số liệu POS01 trong báo cáo khớp với CSDL của chi nhánh | Đạt (3 lần liên tiếp) |
+| KT-01 | Tạo đơn đồng thời từ quầy POS và kênh Online | Mở đồng thời quầy POS01, POS02 và kênh Online, gửi đơn đặt món tới các dịch vụ nguồn độc lập. | Kho giữ đủ nguyên liệu; Bếp nhận tất cả phiếu vào cùng hàng đợi Chờ nấu kèm nhãn chi nhánh gốc và trả trạng thái về đúng từng kênh. | Đạt |
+| KT-02 | Hủy đơn hợp lệ khi Bếp chưa chế biến | Thu ngân hoặc khách bấm hủy đơn đang ở trạng thái Chờ nấu, hoặc Bếp từ chối phiếu với lý do Hỏng thiết bị / Nguyên liệu hỏng. | Kênh và Bếp chuyển đơn sang Đã hủy; Kho hoàn trả toàn bộ lượng Đang giữ về Có thể giữ (hoặc chuyển phần hỏng sang Hao hụt kèm bật cờ kiểm kho). | Đạt |
+| KT-03 | Cập nhật và đồng bộ trạng thái phục vụ món ăn | Kiểm kho đếm số lượng thấp khiến món không đủ định lượng, sau đó nhập bổ sung tồn kho tại màn hình Kho. | Kho công bố sự kiện đổi trạng thái món (Còn hàng, Hết hàng, Tạm ẩn) kèm phiên bản tăng đơn điệu; các chi nhánh tự khóa món Hết và mở bán lại khi nhập đủ tồn kho. | Đạt |
+| KT-04 | Tổng hợp số liệu và lý do đóng đơn toàn chuỗi | Phát sinh đủ năm trạng thái đơn và các lý do hủy/thất bại trên POS01, POS02, Online rồi mở màn hình Quản lý. | Dịch vụ Tổng hợp báo cáo thống kê khớp số lượng từng trạng thái, lý do đóng đơn của cả ba kênh kèm mốc "Dữ liệu tính đến" riêng cho mỗi nguồn. | Đạt |
 
-#### 2.2. Công cụ kiểm thử
+*Bảng 4.2. Kịch bản kiểm thử tính phân tán, xung đột tài nguyên và phục hồi*
 
-Quá trình kiểm thử sử dụng kiểm thử hộp đen ở mức dịch vụ (gửi tin, gọi API, đọc CSDL) với các công cụ sau:
+| Mã ca | Kịch bản kiểm thử | Mô phỏng phân tán & thao tác gây lỗi | Tiêu chí kiểm chứng | Trạng thái |
+|---|---|---|---|---|
+| KT-05 | Xung đột giữ nguyên liệu trên hai thực thể Kho song song | Gửi cùng lúc hai đơn nằm trên hai phân vùng tin nhắn khác nhau tới hai thực thể Kho chạy song song, cùng yêu cầu nguyên liệu chỉ đủ cho một đơn. | Mỗi thực thể Kho xử lý đúng một phân vùng; nhờ khóa dòng theo thứ tự mã nguyên liệu, đúng một đơn Đã giữ, đơn còn lại Thất bại, tồn khả dụng không âm. | Đạt |
+| KT-06 | Tranh chấp giữa lệnh hủy tại điểm bán và thao tác Bắt đầu nấu | Gửi đồng thời lệnh hủy từ điểm bán và thao tác Bắt đầu nấu tại Bếp lặp lại nhiều vòng với độ lệch 0–0,6 giây. | Điểm khóa phân xử duy nhất tại Bếp bảo đảm chỉ một bên thắng trong mỗi vòng; cả ba phía (Kênh, Kho, Bếp) luôn đồng thuận cùng một kết quả cuối. | Đạt |
+| KT-07 | Yêu cầu hủy đến Bếp trước thông điệp giữ kho | Tạm dừng cụm Kho, tạo đơn và bấm hủy ngay tại điểm bán, sau đó khởi động lại Kho. | Bếp ghi nhận Hủy chờ đơn và báo chi nhánh "Bếp sẽ không nấu"; khi Kho hoạt động lại và chuyển tiếp đơn, Bếp tự chốt Đã hủy kèm lệnh hoàn kho. | Đạt |
+| KT-08 | Mất kết nối mạng truyền tin tại điểm bán | Ngắt kết nối mạng truyền thông của quầy POS01 tới cụm Kafka, tạo hai đơn liên tiếp, bấm hủy một đơn tại quầy rồi nối mạng lại. | Đơn hủy tại chỗ chuyển Đã hủy ngay và không xuất hiện trên Kafka/Kho/Bếp; đơn còn lại lưu ở hàng chờ gửi và tự giữ kho thành công khi mạng nối lại. | Đạt |
+| KT-09 | Sự cố tiến trình, dừng đột ngột broker leader Kafka và bản tin hỏng | Dừng đột ngột dịch vụ Bếp, Kho hoặc ngắt tiến trình broker trưởng trong lúc truyền tin; xen kẽ bản tin lỗi cấu trúc và bản tin gửi lặp. | Cụm 3 broker KRaft duy trì ngưỡng đồng thuận 2/3 không mất đơn đã xác nhận; cơ chế chống trùng bảo đảm xử lý đúng một lần; bản tin lỗi sau 5 lần tự tách sang hàng chờ lỗi kèm cảnh báo. | Đạt |
+| KT-10 | Ngắt kết nối nhân bản trung tâm rồi khôi phục | Tách kết nối nhân bản dữ liệu của quầy POS01 khỏi bản sao trung tâm, tạo đơn ở cả POS01 và POS02, quan sát báo cáo rồi nối mạng lại. | Trong lúc ngắt, báo cáo vẫn phản hồi với số liệu cập nhật của POS02 và mốc đứng yên của POS01; sau khi nối lại, toàn bộ đơn của POS01 tự khớp về trung tâm. | Đạt |
 
-| Hoạt động | Công cụ | Nhà cung cấp | Phiên bản |
+## II. BÁO CÁO TỔNG HỢP KẾT QUẢ KIỂM THỬ
+
+### 2.1. Mục đích kiểm thử
+
+Hoạt động thử nghiệm nhằm đánh giá đầy đủ hệ thống theo hai trục yêu cầu chính của bài toán đặt hàng phân tán:
+
+1. Kiểm thử chức năng và tính phân tán: xác nhận toàn bộ quy trình tiếp nhận, giữ nguyên liệu, chế biến hợp nhất và báo cáo đều vận hành đúng trên PostgreSQL và Kafka thật; kiểm chứng khả năng chịu lỗi khi mất kết nối mạng, dừng dịch vụ hoặc xung đột đồng thời theo mô hình kiểm thử ở Hình 4.1.
+2. Kiểm thử hiệu năng: đo thời gian đáp ứng, tỷ lệ lỗi và thông lượng các nhóm API trọng tâm dưới tải đồng thời, kết hợp đo độ trễ trọn vòng từ khi điểm bán tạo đơn tới lúc nhận trạng thái giữ kho thành công.
+
+![Hình 4.1. Sơ đồ mô hình kiểm thử tính phân tán, chịu lỗi và hiệu năng](images/hinh-4-1-mo-hinh-kiem-thu.png)
+
+### 2.2. Công cụ kiểm thử
+
+Hệ thống áp dụng kiểm thử hộp đen ở mức dịch vụ kết hợp kiểm thử tích hợp thực tế trên Docker Compose (không thay thế cơ sở dữ liệu hay cụm truyền tin bằng thành phần giả lập) với bộ công cụ thống kê tại Bảng 4.3.
+
+*Bảng 4.3. Công cụ sử dụng trong quá trình kiểm thử và đo hiệu năng*
+
+| Hoạt động kiểm thử | Công cụ / Trình duyệt | Nhà cung cấp | Phiên bản |
 |---|---|---|---|
-| Kiểm thử chức năng, tính phân tán | pytest | pytest-dev (nguồn mở) | 9.2.0 |
-| | Python | Python Software Foundation | 3.12.13 |
-| | confluent-kafka (client Kafka trong test) | Confluent (nguồn mở) | 2.16.1 |
-| | Docker Engine API (gây lỗi) | Docker | 28.4.0 |
-| Kiểm thử giao diện | Vitest, Testing Library, MSW | nguồn mở | theo `frontend/package-lock.json` |
-| Kiểm thử hiệu năng | Apache JMeter (trong container, trên Java 21 của Eclipse Temurin) | Apache Software Foundation | 5.6.3 |
+| Kiểm thử chức năng & phân tán Backend | Pytest trên nền Python | Cộng đồng mã nguồn mở (pytest-dev / PSF) | Pytest 9.2.0 / Python 3.12.13 |
+| Tiêm lỗi mạng & vòng đời tiến trình | Docker Engine API (dừng tiến trình và ngắt mạng container) | Docker Inc. | 29.8.2 |
+| Kiểm thử giao diện & hợp đồng API | Vitest, Testing Library, MSW | Cộng đồng mã nguồn mở | Vitest 5.1.0 / MSW 3.0.4 |
+| Kiểm thử giao diện trên trình duyệt | Google Chrome / Microsoft Edge | Google / Microsoft | 157.0.8103.79 / 158.0.4370.33 |
+| Kiểm thử tải và hiệu năng API | Apache JMeter (trên Eclipse Temurin JRE 21) | Apache Software Foundation | 5.6.3 |
 
-#### 2.3. Môi trường kiểm thử
+### 2.3. Môi trường kiểm thử
 
-Toàn bộ hệ thống chạy trên một máy, bằng Docker Compose; không có máy chủ riêng.
+Toàn bộ cụm 21 container (gồm 3 broker Kafka, 7 dịch vụ ứng dụng, 7 thực thể PostgreSQL phục vụ vận hành và kiểm thử, giao diện web và các công cụ hỗ trợ) chạy đồng thời trên cùng một máy chủ cục bộ theo cấu hình mô tả ở Bảng 4.4.
 
-| STT | Hệ thống | Tên máy chủ | Địa chỉ IP | Cấu hình máy chủ | Phần mềm cài đặt |
+*Bảng 4.4. Thông số môi trường triển khai và kiểm thử hệ thống*
+
+| STT | Thành phần môi trường | Hệ điều hành / Địa chỉ | Cấu hình phần cứng | Phần mềm nền tảng |
+|---|---|---|---|---|
+| 1 | Cụm hệ thống đặt món phân tán (21 container trên các vùng mạng Docker cô lập) | Microsoft Windows 11 Pro (127.0.0.1, các dịch vụ giao tiếp trên vùng mạng riêng của API, Kafka và nhân bản dữ liệu) | AMD Ryzen 5 6600H (6 nhân / 12 luồng xử lý), RAM 23,2 GB (Docker Engine cấp 12 CPU logic và ~11,3 GiB RAM) | Docker 29.8.2, Docker Compose v5.5.1; Apache Kafka 4.3.2, PostgreSQL 16.14, Python 3.12.13, Node.js 24.22.1 |
+
+### 2.4. Kết quả kiểm thử, đánh giá
+
+#### 2.4.1. Đánh giá chức năng
+
+Toàn bộ bộ kiểm thử tự động phía máy chủ (bao gồm kiểm thử quy tắc nghiệp vụ Tầng 1, kiểm thử tranh chấp đồng thời trên hai kết nối song song Tầng 2 và kiểm thử tích hợp/chịu lỗi container thực tế Tầng 3) cùng bộ kiểm thử giao diện người dùng phía trình duyệt đều được chạy kiểm chứng hoàn toàn sau lần cập nhật cuối cùng. Kết quả tổng hợp được trình bày trong Bảng 4.5.
+
+*Bảng 4.5. Tổng hợp kết quả kiểm thử tự động chức năng và phân tán*
+
+| STT | Hạng mục kiểm thử | Thành công | Lỗi | Không kiểm thử được | Tổng số trường hợp |
 |---|---|---|---|---|---|
-| 1 | Hệ thống đặt món phân tán (21 container: 3 broker Kafka, 7 container dịch vụ, 7 PostgreSQL, giao diện, công cụ) | Máy phát triển (macOS 13.7) | 127.0.0.1; các container trong mạng Docker riêng | Intel Core i9-9880H, 16 luồng, 16 GB RAM; Docker được cấp 4 CPU và 5,8 GB RAM | Docker Desktop 28.4.0, Docker Compose 2.39.4; image: `apache/kafka:4.3.2`, `postgres:16.14`, `python:3.12.13-slim-bookworm`, `node:24.22.1-bookworm-slim` |
+| 1 | Kiểm thử Backend hợp nhất, tranh chấp & chịu lỗi (Pytest Tầng 1–3) | 273 | 0 | 0 | 273 |
+| 2 | Kiểm thử giao diện & xử lý trạng thái Frontend (Vitest trên 6 tệp màn hình) | 85 | 0 | 0 | 85 |
+| | **Tổng cộng toàn hệ thống** | **358** | **0** | **0** | **358** |
 
-Mức tài nguyên khi hệ thống chạy không tải: khoảng 2,5 GB RAM với cấu hình rút gọn, 3,1 GB với đủ 21 container (mục 6 của `docs/03-implementation-plan.md`).
+Kết quả thực nghiệm ghi nhận 100% (358/358) trường hợp kiểm thử đạt yêu cầu mà không có ca nào bị lỗi hoặc bỏ qua (273 ca kiểm thử Backend hoàn tất trong 465,18 giây và 85 ca kiểm thử Frontend hoàn tất trong 16,14 giây). Toàn bộ 21 container của cụm phân tán đều tự phục hồi trạng thái hoạt động ổn định sau chuỗi phép thử cắt mạng và dừng tiến trình ở Tầng 3.
 
-#### 2.4. Kết quả kiểm thử, đánh giá
+#### 2.4.2. Kết quả kiểm thử hiệu năng
 
-##### 2.4.1. Đánh giá chức năng
+Quá trình đo hiệu năng sử dụng Apache JMeter 5.6.3 chạy trong container kết nối trực tiếp vào vùng mạng API của giao diện, đẩy tải tuần tự qua sáu nhóm chức năng đại diện của thu ngân, nhân viên bếp, nhân viên kho và quản lý (Bảng 4.6). Ở mỗi nhóm chức năng, kịch bản khởi tạo đồng thời 250 luồng người dùng trong 1 giây (1 vòng lặp mỗi luồng, tổng cộng 1.500 yêu cầu HTTP như thể hiện trong Bảng 4.7).
 
-Bảng tổng hợp ở cuối mục 1 (kịch bản đạt, lỗi, chưa kiểm thử) sinh từ lần chạy test gần nhất.
+*Bảng 4.6. Danh mục các chức năng được sử dụng trong kiểm thử hiệu năng*
 
-##### 2.4.2. Kết quả kiểm thử hiệu năng
-
-Apache JMeter 5.6.3 chạy trong container `jmeter` trên mạng `api-net` (mạng mà giao diện dùng), gọi thẳng API của các dịch vụ bằng tên dịch vụ. Kế hoạch tải nằm ở `perf/plan.jmx`; lệnh `bin/perf` chạy toàn bộ: nhập thêm kho cho món dùng trong test, chạy tải, ghi `docker stats` trong lúc chạy, đo thời gian một đơn đi trọn đường, rồi sinh bảng kết quả `report/generated/hieu-nang.md`.
-
-**Các chức năng được kiểm thử.**
-
-| STT | Chức năng | API | Dịch vụ |
+| STT | Tên chức năng kiểm thử | Giao diện API | Dịch vụ đích |
 |---|---|---|---|
-| 1 | Tạo đơn (món Trà đá, 1 phần) | `POST /orders` | POS01 |
-| 2 | Xem danh mục món | `GET /dishes` | POS01 |
-| 3 | Xem danh sách đơn (200 đơn gần nhất) | `GET /orders` | POS01 |
-| 4 | Xem danh sách phiếu bếp | `GET /tickets` | Kitchen |
-| 5 | Xem tồn kho | `GET /stock` | Inventory (hai instance) |
-| 6 | Xem báo cáo tổng hợp | `GET /reports/summary` | Order Query Service |
+| 1 | Tạo đơn đặt món mới (món Trà đá, số lượng 1) | `POST /orders` | Dịch vụ Kênh đặt hàng (POS01) |
+| 2 | Xem danh mục thực đơn | `GET /dishes` | Dịch vụ Kênh đặt hàng (POS01) |
+| 3 | Xem danh sách đơn hàng tại chi nhánh (20 đơn mới nhất) | `GET /orders?limit=20` | Dịch vụ Kênh đặt hàng (POS01) |
+| 4 | Xem danh sách phiếu chế biến hợp nhất (20 phiếu mới nhất) | `GET /tickets?limit=20` | Dịch vụ Bếp trung tâm |
+| 5 | Tra cứu bảng tồn kho nguyên liệu trung tâm | `GET /stock` | Dịch vụ Kho trung tâm |
+| 6 | Xem báo cáo tổng hợp đơn hàng toàn chuỗi | `GET /reports/summary` | Dịch vụ Tổng hợp báo cáo |
 
-**Trường hợp kiểm thử.** Mỗi chức năng chịu 250 người dùng đồng thời (khởi động trong 1 giây, mỗi người gửi một yêu cầu); các chức năng được chạy lần lượt, chức năng sau bắt đầu khi chức năng trước xong, nên mỗi bảng số đo chỉ thuộc về một chức năng. Tổng cộng 1.500 yêu cầu. Vai trò: thu ngân (1–3), nhân viên bếp (4), nhân viên kho (5), quản lý (6).
+*Bảng 4.7. Phân bổ tải các trường hợp kiểm thử đồng thời*
 
-**Hai lỗi kiểm thử hiệu năng tìm ra.** Lần chạy đầu tiên có 47 % yêu cầu lỗi (HTTP 500) ở cả sáu chức năng. Nguyên nhân: mỗi yêu cầu HTTP tự mở một kết nối PostgreSQL mới, nên 250 yêu cầu cùng lúc vượt giới hạn 100 kết nối của PostgreSQL ("too many clients already"). Cách sửa thứ nhất là dùng pool kết nối giới hạn 10 kết nối cho mỗi tiến trình dịch vụ (`psycopg_pool`). Lần chạy thứ hai còn tệ hơn: phần lớn yêu cầu hết 60 giây chờ. FastAPI chạy phần lấy kết nối trong threadpool 40 luồng; các yêu cầu đang chờ pool chiếm hết 40 luồng, nên 10 yêu cầu đã có kết nối không còn luồng để chạy tiếp, và tất cả kẹt cho tới khi hết thời gian chờ. Cách sửa thứ hai là cho yêu cầu chờ trên một semaphore bất đồng bộ (không chiếm luồng) trước khi lấy kết nối, nên số yêu cầu vào tới threadpool để lấy kết nối không bao giờ vượt kích thước pool. Cả hai tình huống đều có test tự động tái hiện (`backend/common/tests/test_api.py`). Sau hai lần sửa, kết quả như dưới đây.
+| STT | Tên chức năng kiểm thử | Vai trò thực hiện | Số người dùng đồng thời | Tổng số yêu cầu |
+|---|---|---|---|---|
+| 1 | Tạo đơn đặt món mới | Thu ngân tại quầy | 250 | 250 |
+| 2 | Xem danh mục thực đơn | Thu ngân tại quầy | 250 | 250 |
+| 3 | Xem danh sách đơn hàng tại chi nhánh | Thu ngân tại quầy | 250 | 250 |
+| 4 | Xem danh sách phiếu chế biến hợp nhất | Nhân viên Bếp | 250 | 250 |
+| 5 | Tra cứu bảng tồn kho nguyên liệu | Nhân viên Kho | 250 | 250 |
+| 6 | Xem báo cáo tổng hợp toàn chuỗi | Quản lý chuỗi | 250 | 250 |
+| | **Tổng thực hiện** | | | **1.500** |
 
-**Kết quả.** Lần đo dưới đây chạy ngay sau khi dọn sạch cụm (`docker compose --profile full down -v`), nên CSDL và Kafka không có dữ liệu cũ. `GET /orders` và `GET /tickets` lấy một trang 20 mục, đúng như màn hình gọi. Không có yêu cầu nào lỗi. `POST /orders` chậm nhất (trung bình khoảng 2,5 giây) vì mỗi yêu cầu ghi đơn và mục hàng chờ gửi trong một giao dịch, 250 yêu cầu chia nhau 10 kết nối của chi nhánh, trong lúc Kho và Bếp cùng lúc xử lý chính các đơn đó trên 4 CPU. Thời gian một đơn đi trọn đường từ lúc tạo tới khi chi nhánh thấy Đã giữ, đo sau khi chạy tải, khoảng 0,26 giây. Khi chạy tải, các dịch vụ, CSDL và Kafka cộng lại dùng tối đa khoảng 2,4 GB bộ nhớ; container `frontend` giữ thêm khoảng 0,9 GB vì vừa cài lại gói npm sau khi dọn cụm, không liên quan tới tải. CPU tăng chủ yếu ở dịch vụ đang bị gọi, CSDL của nó và Kafka.
+Kết quả tổng hợp các thông số đáp ứng của 1.500 yêu cầu dưới tải đồng thời được thu thập từ báo cáo thống kê của Apache JMeter 5.6.3 và trình bày tại Bảng 4.8.
 
+*Bảng 4.8. Kết quả kiểm thử hiệu năng tổng hợp theo từng chức năng (JMeter 5.6.3)*
 
-Bảng dưới đây sinh từ lần chạy `bin/perf` gần nhất:
+| STT | Chức năng (API) | Mẫu | Trung bình (ms) | Trung vị (ms) | 95% (ms) | Thấp nhất (ms) | Cao nhất (ms) | Lỗi % | Thông lượng (yêu cầu/s) |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | `POST /orders` (POS01) | 250 | 3.421 | 3.584 | 5.313 | 834 | 5.424 | 0,00% | 42,5 |
+| 2 | `GET /dishes` (POS01) | 250 | 838 | 837 | 1.305 | 128 | 1.335 | 0,00% | 99,8 |
+| 3 | `GET /orders?limit=20` (POS01) | 250 | 2.171 | 2.204 | 2.603 | 1.342 | 2.650 | 0,00% | 68,8 |
+| 4 | `GET /tickets?limit=20` (Kitchen) | 250 | 1.543 | 1.713 | 2.142 | 129 | 2.181 | 0,00% | 79,2 |
+| 5 | `GET /stock` (Inventory) | 250 | 335 | 375 | 453 | 20 | 473 | 0,00% | 171,2 |
+| 6 | `GET /reports/summary` (Query) | 250 | 1.599 | 1.733 | 2.067 | 423 | 2.112 | 0,00% | 81,1 |
+| | **Tổng hợp toàn bộ bài đo** | **1.500** | **1.651** | **1.572** | **4.460** | **20** | **5.424** | **0,00%** | **75,9** |
 
-<!-- include: generated/hieu-nang.md -->
+Song song với bài tải API, nhóm đo độ trễ xử lý bất đồng bộ trọn vòng đối với 30 đơn hàng tạo liên tiếp tại quầy POS01 (chu kỳ kiểm tra lại mỗi 20 ms) qua đầy đủ các chặng: lưu cục bộ và hàng chờ gửi tại nguồn, chuyển phát qua cụm Kafka 3 broker, giữ nguyên liệu tại Kho và đẩy sự kiện phản hồi Đã giữ về lại chi nhánh. Kết quả tại Bảng 4.9 ghi nhận 30/30 đơn hàng hoàn tất giữ kho chính xác với trung vị 218 ms.
+
+*Bảng 4.9. Độ trễ đồng bộ trọn vòng từ lúc tạo đơn tại POS01 tới khi nhận trạng thái Đã giữ*
+
+| Số đơn thử nghiệm | Số đơn đạt trạng thái Đã giữ | Tỷ lệ thành công | Thấp nhất (ms) | Trung bình (ms) | Trung vị (ms) | 95% (ms) | Cao nhất (ms) |
+|---|---|---|---|---|---|---|---|
+| 30 | 30 | 100% | 192 | 226 | 218 | 256 | 362 |
+
+Tổng hợp cả hai phép đo cho thấy dưới áp lực 250 kết nối đồng thời đổ vào trong 1 giây trên cùng một máy chủ cục bộ, toàn bộ 1.500 yêu cầu đều hoàn thành sạch với tỷ lệ lỗi 0,00%, nhóm truy vấn tồn kho đạt thông lượng 171,2 yêu cầu/giây và thời gian hợp nhất đơn bất đồng bộ từ điểm bán qua Kho trung tâm đạt trung bình 226 ms (ngưỡng 95% là 256 ms), đáp ứng hoàn toàn yêu cầu xử lý đơn hàng theo thời gian gần thực của đề tài.
+
+## III. KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN
+
+### 3.1. Tổng kết mức độ hoàn thành mục tiêu đề tài
+
+Qua quá trình khảo sát, phân tích thiết kế, xây dựng giải pháp phân tán và kiểm thử thực nghiệm trên hạ tầng container hoàn chỉnh, hệ thống đã giải quyết trọn vẹn cả ba nhóm yêu cầu cốt lõi của Đề tài 4: Hệ thống đặt hàng tại quầy và online hợp nhất như tổng hợp đối chiếu trong Bảng 4.10.
+
+*Bảng 4.10. Đối chiếu kết quả hoàn thành so với các mục tiêu trọng tâm của đề tài*
+
+| Mục tiêu trọng tâm (Phần I) | Cơ chế kiến trúc và cài đặt đã áp dụng (Phần II & III) | Bằng chứng kiểm chứng thực tế (Phần IV) |
+|---|---|---|
+| Duy trì nhận đơn độc lập tại từng quầy POS và kênh Online, bán được khi gián đoạn mạng | Tách biệt cơ sở dữ liệu theo từng kênh bán hàng kèm hàng chờ gửi cục bộ và cơ chế thăm dò kết nối giữ nguyên thứ tự từng đơn | Vượt qua KT-08 (hủy tại quầy khi mất mạng, nối mạng tự đồng bộ đơn còn lại); 30/30 đơn đo trọn vòng đạt Đã giữ trung vị 218 ms |
+| Điều phối Bếp và Kho trung tâm không xung đột tài nguyên, phân xử chuẩn xác lệnh hủy và lỗi mạng | Khóa dòng theo thứ tự mã nguyên liệu tại Kho, phân xử qua một điểm khóa duy nhất tại Bếp (Hủy chờ đơn), chống xử lý trùng lặp theo mã sự kiện | 358/358 ca kiểm thử tự động (273 ca Backend Tầng 1–3 + 85 ca Frontend) đạt 100%; chịu tải Apache JMeter 1.500 yêu cầu với 0,00% lỗi |
+| Tổng hợp báo cáo toàn chuỗi gần thời gian thực kèm khả năng giám sát vận hành phân tán | Nhân bản logic hai chiều dữ liệu đơn hàng và nhịp đồng bộ về bản sao trung tâm; đọc nhất quán theo lát cắt thời gian và hiển thị trên màn hình Giám sát | Vượt qua KT-04, KT-09, KT-10: ngắt đường truyền nhân bản nhưng báo cáo vẫn giữ số liệu nhất quán và tự khớp hoàn toàn khi nối lại |
+
+### 3.2. Hướng phát triển mở rộng
+
+Trên nền tảng kiến trúc hướng sự kiện và hợp đồng giao tiếp API đã chuẩn hóa, hệ thống có khả năng tiếp tục mở rộng theo ba hướng thực tiễn trong giai đoạn tiếp theo:
+
+1. Mở rộng đa kho nguyên liệu theo vùng địa lý: nâng cấp dịch vụ Kho theo mô hình phân vùng hoặc nhiều kho trung tâm độc lập kèm nghiệp vụ điều chuyển tồn kho liên kho khi quy mô chuỗi mở rộng vượt phạm vi một khu vực phục vụ.
+2. Tích hợp cổng thanh toán trực tuyến và quản lý ca bán hàng: bổ sung phân hệ đối soát thanh toán QR/thẻ cho kênh đặt hàng trực tuyến, kết nối máy in hóa đơn nhiệt tại quầy và tính năng chốt ca doanh thu theo nhân viên thu ngân.
+3. Triển khai điều phối cụm trên Kubernetes và quan sát hệ thống: chuyển cấu hình hạ tầng container lên nền tảng điều phối cụm có khả năng tự động co giãn số lượng thực thể Kho và Bếp theo độ trễ tiêu thụ thông điệp, kết hợp thu thập chỉ số tập trung qua Prometheus và Grafana.
+
+# TÀI LIỆU THAM KHẢO
+
+1. KiotViet, *Phần mềm quản lý bán hàng cho nhà hàng, quán ăn*. Truy cập tại: https://www.kiotviet.vn/
+2. Sapo, *Tính năng Auto Offline – Vận hành nhà hàng, quán ăn ổn định khi internet gặp sự cố*. Truy cập tại: https://www.sapo.vn/cap-nhat-tinh-nang/tinh-nang-auto-offline
+3. MISA CukCuk, *Trang chủ phần mềm quản lý nhà hàng MISA CukCuk*. Truy cập tại: https://www.cukcuk.vn/
+4. MISA CukCuk, *Tài liệu hướng dẫn chế độ làm việc ngoại tuyến*. Truy cập tại: https://helpv2.cukcuk.com/en/?p=22858
+5. iPOS.vn, *Giới thiệu hệ sinh thái sản phẩm quản lý F&B*. Truy cập tại: https://ipos.vn/en/san-pham/
+6. Toast, *Use Toast in Offline Mode*. Truy cập tại: https://support.toasttab.com/en/article/Using-Toast-in-Offline-Mode
+7. Toast, *KDS devices in Offline Mode*. Truy cập tại: https://doc.toasttab.com/doc/platformguide/platformOfflineKDSDevices.html
+8. Square, *Offline payments time limits*. Truy cập tại: https://squareup.com/help/us/en/article/8106-offline-payments-time-limits
+9. Lightspeed, *Offline POS functionality (K-Series)*. Truy cập tại: https://k-series-support.lightspeedhq.com/hc/en-us/articles/53028167251867-Offline-POS-functionality

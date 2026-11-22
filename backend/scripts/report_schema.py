@@ -1,7 +1,7 @@
 """Write the database part of the course report from the live schemas.
 
 For each kind of database (Inventory, Kitchen, branch, Central Order Replica) it prints, in
-Markdown: an entity-relationship diagram (Mermaid ``erDiagram``) and one table per DB table in
+Markdown: an introduction linking to its ER PNG diagram and one table per DB table in
 the template's columns Field, Type, Null, Key, Default, Extra (section 1 of
 docs/04-course-report.md). Reading the running databases keeps the report in line with the
 migrations. Table and column names stay as they are in the schema; the prose is Vietnamese
@@ -12,17 +12,46 @@ because the report is.
 (run from backend/ on the host, or redirect wherever the report lives).
 """
 
+import re
 import sys
 from collections import defaultdict
 from typing import Any
 
 import psycopg
 
-DATABASES: list[tuple[str, str, str]] = [
-    ("Inventory DB", "postgresql://app:app@inventory-db:5432/inventory", "inventory-db"),
-    ("Kitchen DB", "postgresql://app:app@kitchen-db:5432/kitchen", "kitchen-db"),
-    ("Branch DB (POS01, POS02, ONLINE)", "postgresql://app:app@pos01-db:5432/branch", "pos01-db"),
-    ("Central Order Replica", "postgresql://app:app@central-db:5432/central", "central-db"),
+DATABASES: list[tuple[str, str, str, str, str, str]] = [
+    (
+        "Inventory DB",
+        "postgresql://app:app@inventory-db:5432/inventory",
+        "inventory-db",
+        "images/er-inventory-db.png",
+        "Hình 2.20",
+        "Sơ đồ thực thể - quan hệ của cơ sở dữ liệu Inventory DB",
+    ),
+    (
+        "Kitchen DB",
+        "postgresql://app:app@kitchen-db:5432/kitchen",
+        "kitchen-db",
+        "images/er-kitchen-db.png",
+        "Hình 2.21",
+        "Sơ đồ thực thể - quan hệ của cơ sở dữ liệu Kitchen DB",
+    ),
+    (
+        "Branch DB (POS01, POS02, ONLINE)",
+        "postgresql://app:app@pos01-db:5432/branch",
+        "pos01-db",
+        "images/er-branch-db.png",
+        "Hình 2.22",
+        "Sơ đồ thực thể - quan hệ của cơ sở dữ liệu Branch DB",
+    ),
+    (
+        "Central Order Replica",
+        "postgresql://app:app@central-db:5432/central",
+        "central-db",
+        "images/er-central-db.png",
+        "Hình 2.23",
+        "Sơ đồ thực thể - quan hệ của cơ sở dữ liệu Central Order Replica",
+    ),
 ]
 SKIP = {"schema_migrations"}  # the migration runner's ledger, not part of the design
 
@@ -93,11 +122,37 @@ def cell(value: object) -> str:
     return "" if value is None else str(value).replace("|", "\\|").replace("\n", " ")
 
 
-def render(title: str, host: str, conn: psycopg.Connection[Any]) -> str:
+def format_default(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    text = re.sub(r"::(?:text|jsonb|text\[\]|numeric)", "", text)
+    return text
+
+
+def format_check(expr: str) -> str:
+    m = re.match(r"^CHECK \(\((.+?) = ANY \(ARRAY\[(.+?)\]\)\)\)$", expr)
+    if m:
+        col = m.group(1)
+        items = re.sub(r"::text", "", m.group(2))
+        return f"CHECK ({col} IN ({items}))"
+    cleaned = re.sub(r"::(?:text|numeric)", "", expr)
+    cleaned = re.sub(r"\(\((\w+)\s*([><=]+)\s*\(?(-?\d+)\)?\)\)", r"(\1 \2 \3)", cleaned)
+    return cleaned
+
+
+def render(
+    title: str,
+    host: str,
+    er_img: str,
+    fig_label: str,
+    fig_caption: str,
+    table_num: int,
+    conn: psycopg.Connection[Any],
+) -> tuple[str, int]:
     columns, constraints = describe(conn)
     keys: dict[tuple[str, str], list[str]] = defaultdict(list)
     checks: dict[tuple[str, str], list[str]] = defaultdict(list)
-    relations: list[tuple[str, str, str]] = []
     for table, kind, _name, cols, ref_table, ref_cols, definition in constraints:
         cols = list(cols)
         if kind == "p":
@@ -109,33 +164,29 @@ def render(title: str, host: str, conn: psycopg.Connection[Any]) -> str:
         elif kind == "f":
             for c, rc in zip(cols, ref_cols, strict=True):
                 keys[(table, c)].append(f"FK → {ref_table}.{rc}")
-            relations.append((str(ref_table), str(table), ", ".join(cols)))
         elif kind == "c" and len(cols) == 1:
-            checks[(table, cols[0])].append(str(definition))
+            checks[(table, cols[0])].append(format_check(str(definition)))
 
-    out = [f"##### {title}", "", f"Nguồn: CSDL `{host}` đang chạy.", ""]
-    out += ["```mermaid", "erDiagram"]
-    for parent, child, via in relations:
-        out.append(f'    {parent} ||--o{{ {child} : "{via}"')
-    for table, rows in columns.items():
-        out.append(f"    {table} {{")
-        for r in rows:
-            mark = (
-                " PK"
-                if "PRI" in keys[(table, str(r[1]))]
-                else (" FK" if any(k.startswith("FK") for k in keys[(table, str(r[1]))]) else "")
-            )
-            mermaid_type = type_name(r).split("(")[0].replace("[]", "_array").lower()
-            out.append(f"        {mermaid_type} {r[1]}{mark}")
-        out.append("    }")
-    out += ["```", ""]
+    out = [
+        f"##### {title}",
+        "",
+        f"Lược đồ thực thể và các ràng buộc bảng của `{host}` thể hiện trên {fig_label}.",
+        "",
+        f"![{fig_label}. {fig_caption}]({er_img})",
+        "",
+    ]
 
     for table, rows in columns.items():
-        out += [f"###### Bảng `{table}`", ""]
-        out += ["| Field | Type | Null | Key | Default | Extra |", "|---|---|---|---|---|---|"]
+        out += [
+            f"*Bảng 2.{table_num}. Cấu trúc bảng `{table}` ({title})*",
+            "",
+            "| Field | Type | Null | Key | Default | Extra |",
+            "|---|---|---|---|---|---|",
+        ]
+        table_num += 1
         for r in rows:
             name = str(r[1])
-            default = r[5]
+            default = format_default(r[5])
             extra: list[str] = []
             if isinstance(default, str) and default.startswith("nextval("):
                 default, extra = None, ["auto_increment"]
@@ -147,7 +198,7 @@ def render(title: str, host: str, conn: psycopg.Connection[Any]) -> str:
                     for v in (
                         name,
                         type_name(r),
-                        "YES" if r[4] == "YES" else "",
+                        "YES" if r[4] == "YES" else "NO",
                         ", ".join(sorted(keys[(table, name)], key=_key_order)),
                         default,
                         "; ".join(extra),
@@ -156,7 +207,7 @@ def render(title: str, host: str, conn: psycopg.Connection[Any]) -> str:
                 + " |"
             )
         out.append("")
-    return "\n".join(out)
+    return "\n".join(out), table_num
 
 
 def main() -> int:
@@ -165,10 +216,14 @@ def main() -> int:
         " Không sửa tay: chạy lại script sau mỗi migration. -->",
         "",
     ]
-    for title, dsn, host in DATABASES:
+    table_num = 6
+    for title, dsn, host, er_img, fig_label, fig_caption in DATABASES:
         try:
             with psycopg.connect(dsn, connect_timeout=5) as conn:
-                parts.append(render(title, host, conn))
+                block, table_num = render(
+                    title, host, er_img, fig_label, fig_caption, table_num, conn
+                )
+                parts.append(block)
         except psycopg.OperationalError as exc:
             print(f"{host}: not reachable ({exc}); start the cluster first", file=sys.stderr)
             return 1

@@ -1,810 +1,454 @@
 # PHẦN II. NGHIÊN CỨU, PHÂN TÍCH THIẾT KẾ HỆ THỐNG
 
-## MÔ HÌNH HLD CỦA HỆ THỐNG
+## I. MÔ HÌNH KIẾN TRÚC TỔNG QUAN (HLD)
 
-Hệ thống gồm các chi nhánh nhận đơn (POS tại quầy, kênh Online), một Kho dùng chung và một Bếp trung tâm. Các bên chỉ trao đổi với nhau qua Kafka; mỗi dịch vụ có CSDL riêng. Báo cáo quản lý đọc một bản sao tập trung của các CSDL đơn hàng ở chi nhánh.
+Hệ thống đặt hàng tại quầy và online hợp nhất được thiết kế theo kiến trúc hướng sự kiện phân tán, tách biệt hoàn toàn hai kênh tiếp nhận đơn hàng (POS và Online) khỏi cụm xử lý trung tâm gồm Kho nguyên liệu (Inventory Service), Bếp trung tâm (Kitchen Service) và dịch vụ tổng hợp báo cáo (Order Query Service). Mỗi dịch vụ quản lý độc lập một cơ sở dữ liệu riêng, không truy cập chéo bảng dữ liệu của nhau và trao đổi trạng thái qua cụm truyền tin Apache Kafka. Mô hình kiến trúc tổng quan cùng các luồng xử lý chính được minh họa trên Hình 2.1.
 
-![Hình 2.1. Mô hình HLD: các chi nhánh, Kho và Bếp chỉ trao đổi qua Kafka; báo cáo đọc bản sao trung tâm](images/hld.png)
+![Hình 2.1. Mô hình kiến trúc tổng quan (HLD) hệ thống đặt hàng tại quầy và online hợp nhất](images/hinh-2-1-mo-hinh-hld.png)
 
-Mã nguồn sơ đồ: `report/diagrams/hld.mmd` (Mermaid, dàn trang ELK), vẽ lại bằng `report/build.sh`.
+Để bảo đảm đơn hàng từ nhiều nguồn độc lập được hợp nhất đầy đủ và không sai lệch trạng thái khi mạng gián đoạn hoặc có nhiều giao dịch xảy ra đồng thời, toàn bộ kiến trúc tuân thủ ba nguyên tắc thiết kế cốt lõi. Thứ nhất, mọi thao tác tạo đơn hay yêu cầu hủy đều ghi đồng thời bản ghi nghiệp vụ và bản tin chờ gửi vào bảng hàng chờ cục bộ (`outbox_events`) trong cùng một giao dịch cơ sở dữ liệu, sau đó tiến trình nền mới truyền bản tin lên cụm truyền tin ở chế độ xác nhận lưu bền vững. Thứ hai, bên nhận sự kiện kiểm tra mã định danh duy nhất của thông điệp để loại bỏ gói tin lặp và chỉ xác nhận đã đọc sau khi giao dịch dữ liệu hoàn tất; bản tin lỗi định dạng sau năm lần thử được tách sang hàng chờ lỗi kèm cảnh báo vận hành để không làm ách tắc các đơn hàng hợp lệ. Thứ ba, số liệu đơn hàng cùng tín hiệu nhịp đồng bộ từ các kênh nguồn được nhân bản bất đồng bộ về bản sao tập trung Central Order Replica theo đúng thứ tự xác nhận giao dịch, giúp dịch vụ truy vấn tổng hợp báo cáo nhất quán theo một lát cắt thời gian.
 
-Mỗi mũi tên hai chiều tới Kafka gom nhiều topic; bảng dưới đây cho biết từng topic đi từ đâu tới đâu.
+Vai trò từng thành phần và kho dữ liệu trong kiến trúc tổng quan được tổng hợp trong Bảng 2.1.
 
-| Topic | Bên gửi | Bên nhận | Tin |
+*Bảng 2.1. Thành phần dịch vụ và kho dữ liệu trong kiến trúc hệ thống*
+
+| Thành phần | Tiến trình / Kho dữ liệu | Vai trò trong kiến trúc |
+|---|---|---|
+| Kênh Quầy (POS01, POS02) | Local Order Service, CSDL từng quầy | Tiếp nhận đơn hàng và yêu cầu hủy tại quầy ngay cả khi mất kết nối mạng; lưu hàng chờ gửi cục bộ và cập nhật trạng thái đơn theo thứ hạng tăng dần. |
+| Kênh Trực tuyến (Online) | Online Order Service, CSDL kênh Online | Chạy trên tiến trình và cơ sở dữ liệu độc lập với các quầy bán hàng; tiếp nhận đơn từ xa, theo dõi tiến độ chế biến và đồng bộ cùng chuẩn về trung tâm. |
+| Kho nguyên liệu trung tâm | Inventory Service (2 tiến trình song song), Inventory DB | Xử lý song song các đơn từ nhiều nguồn; kiểm tra công thức món, giữ đủ nguyên liệu cho cả đơn hoặc từ chối toàn bộ, hoàn kho, ghi hao hụt và công bố trạng thái món. |
+| Bếp trung tâm | Kitchen Service, Kitchen DB | Hợp nhất phiếu chế biến từ tất cả các kênh vào hàng đợi chung, điều phối nấu món và đóng vai trò trọng tài duy nhất phân xử yêu cầu hủy đơn sau khi đã rời điểm bán. |
+| Tổng hợp gần thời gian thực | Order Query Service, Central Order Replica | Truy vấn đồng bộ trên bản sao dữ liệu hợp nhất từ các kênh để lập báo cáo tổng hợp kèm mốc thời gian cập nhật của từng nguồn. |
+| Hạ tầng truyền thông sự kiện | Apache Kafka (3 broker) | Bảo đảm truyền dẫn thông điệp bất đồng bộ theo cơ chế ít nhất một lần qua các kênh sự kiện tách biệt theo chức năng và theo điểm bán. |
+
+Quy hoạch các luồng thông điệp sự kiện trao đổi liên dịch vụ được trình bày tại Bảng 2.2.
+
+*Bảng 2.2. Quy hoạch luồng sự kiện và thông điệp trao đổi liên dịch vụ*
+
+| Luồng sự kiện | Bên gửi | Bên nhận | Nội dung thông điệp & ý nghĩa nghiệp vụ |
 |---|---|---|---|
-| `order-events.<branch>` | Chi nhánh | Kho | `OrderCreated` |
-| `cancel-events.<branch>` | Chi nhánh | Bếp | `CancelRequested` |
-| `kitchen-orders` | Kho | Bếp | `OrderReserved`, `OrderFailed` |
-| `stock-commands` | Bếp | Kho | `StockConsumed`, `ReleaseRequested` |
-| `status-events.<branch>` | Kho, Bếp | Chi nhánh gốc của đơn (`CancelPending`: chi nhánh gửi yêu cầu hủy) | `OrderReserved`, `OrderFailed`, `OrderCancelled`, `OrderCompleted`, `CancelPending`, `CancelRejected` |
-| `menu-events` | Kho | Bếp; các chi nhánh | `IngredientCheckChanged` (cho Bếp); `DishStatusChanged`, `Heartbeat` (cho chi nhánh) |
-| `dlq` | Mọi consumer | Người vận hành | Tin không đọc được sau 5 lần thử |
+| Sự kiện tạo đơn theo kênh | Kênh POS01, POS02, ONLINE | Inventory Service | Thông báo đơn hàng mới kèm danh sách món và thời điểm tạo để Kho kiểm tra nguyên liệu. |
+| Sự kiện yêu cầu hủy theo kênh | Kênh POS01, POS02, ONLINE | Kitchen Service | Chuyển yêu cầu hủy từ điểm bán tới Bếp phân xử khi gói tạo đơn đã được thử gửi ra mạng. |
+| Sự kiện giữ kho tới Bếp | Inventory Service | Kitchen Service | Báo kết quả giữ đủ nguyên liệu (OrderReserved) để lập phiếu nấu hoặc từ chối do hết hàng (OrderFailed). |
+| Lệnh xử lý tồn kho | Kitchen Service | Inventory Service | Báo chốt đã tiêu thụ nguyên liệu khi bắt đầu nấu (StockConsumed) hoặc hoàn trả/ghi hao hụt khi hủy phiếu (ReleaseRequested). |
+| Phản hồi trạng thái về kênh gốc | Inventory Service, Kitchen Service | Đúng kênh đã phát sinh đơn | Thông báo kết quả giữ kho, hết hàng, hoàn tất nấu, đã hủy, chờ đối chiếu hủy hoặc từ chối hủy vì Bếp đã bắt đầu nấu. |
+| Sự kiện thực đơn và kiểm kho | Inventory Service | Kitchen Service và tất cả các kênh | Công bố thay đổi trạng thái món còn/hết/ẩn (DishStatusChanged), cờ cần kiểm kho nguyên liệu (IngredientCheckChanged) và nhịp hoạt động Kho. |
+| Hàng chờ bản tin lỗi | Mọi dịch vụ nhận sự kiện | Bộ phận Giám sát vận hành | Lưu riêng các bản tin hỏng cấu trúc hoặc sai phiên bản sau năm lần thử lại để kiểm tra mà không chặn luồng chính. |
 
-| Thành phần | Vai trò |
-|---|---|
-| Local Order Service (mỗi chi nhánh POS một instance), Online Order Service | Nhận đơn và yêu cầu hủy, kể cả khi mất mạng; ghi đơn và tin cần gửi trong cùng một giao dịch vào Branch DB (outbox), gửi lên Kafka khi có mạng; áp dụng trạng thái nhận về theo thứ hạng |
-| Kafka (3 broker) | Truyền mọi tin giữa các bên, at-least-once. Mỗi chi nhánh có topic riêng (`order-events`, `cancel-events`, `status-events`), cộng các topic nội bộ `kitchen-orders`, `stock-commands`, `menu-events`, `dlq` |
-| Inventory Service (2 instance) và Inventory DB | Giữ nguyên liệu cho đơn hoặc trả Thất bại; hoàn kho, ghi hao hụt, ghi nhận đã dùng; cờ kiểm kho |
-| Kitchen Service và Kitchen DB | Phiếu bếp; nút Bắt đầu nấu, Từ chối, Hoàn tất; bên duy nhất quyết định hủy đơn đã gửi đi |
-| Central Order Replica, Order Query Service | Bản sao tập trung các bảng `orders` của chi nhánh (logical replication), phục vụ báo cáo có mốc "dữ liệu tính đến" |
-| Các màn hình (`frontend`) | Chỉ gọi API của các dịch vụ, không tự suy ra trạng thái |
+## II. DANH SÁCH CHỨC NĂNG PHẦN MỀM
 
-Các nguyên tắc chung: mỗi tin có `event_id` để chống trùng (`processed_events`); tin gửi đi được ghi vào `outbox_events` trong cùng giao dịch với thay đổi trạng thái; consumer tắt auto-commit và chỉ commit offset sau khi commit DB; tin hỏng chuyển vào `dlq` mà không chặn các đơn khác.
+### 2.1. Sơ đồ Use Case tổng quát
 
-## I. DANH SÁCH CHỨC NĂNG PHẦN MỀM
+Phạm vi tương tác của năm nhóm tác nhân gồm Thu ngân tại quầy, Khách hàng Online, Nhân viên Kho, Nhân viên Bếp và Quản lý / Giám sát vận hành cùng luồng xử lý nền Đồng bộ Outbox & Kafka được khái quát trên Hình 2.2. Hai nhóm tác nhân bán hàng sử dụng chung tập ca sử dụng tiếp nhận và theo dõi đơn trên hai kênh dịch vụ tách biệt, còn hai bộ phận trung tâm nắm quyền kiểm soát tồn kho dùng chung, chế biến hợp nhất và phân xử tranh chấp.
+
+![Hình 2.2. Sơ đồ Use Case tổng quát hệ thống đặt hàng tại quầy và online hợp nhất](images/hinh-2-2-use-case-tong-quat.png)
+
+### 2.2. Danh sách chức năng phần mềm
+
+Từ mô hình Use Case trên Hình 2.2, nghiệp vụ toàn hệ thống được phân rã thành bốn phân hệ gồm 10 ca sử dụng và 16 giao dịch trọng tâm như liệt kê trong Bảng 2.3. Các cơ chế xử lý nền phục vụ tính toàn vẹn phân tán như chuyển phát hàng chờ gửi, chống xử lý trùng và phát nhịp đồng bộ được gắn trực tiếp trong luồng của từng giao dịch liên quan.
+
+*Bảng 2.3. Danh sách chức năng phần mềm theo module, use case và giao dịch*
 
 | TT | Tên module | Tên usecase | Giao dịch (Transaction) | Tên tác nhân chính |
 |---|---|---|---|---|
-| | **Đặt món tại chi nhánh** (Local Order Service, Online Order Service) | | | |
-| 1 | | Đặt đơn | Xem danh mục món (`GET /dishes`) | Thu ngân, khách hàng online |
-| | | | Tạo đơn (`POST /orders`) | |
-| 2 | | Hủy đơn | Yêu cầu hủy đơn (`POST /orders/{id}/cancel`) | Thu ngân, khách hàng online |
-| 3 | | Theo dõi đơn | Xem danh sách đơn và trạng thái (`GET /orders`, `GET /orders/{id}`) | Thu ngân, khách hàng online |
-| 4 | | Giám sát chi nhánh | Xem kết nối, số tin chờ gửi, cảnh báo (`GET /monitor`) | Thu ngân |
-| 5 | | Đồng bộ đơn với Kho và Bếp | Gửi hàng chờ (outbox) lên Kafka | Local Order Service (tự động) |
-| | | | Áp dụng trạng thái đơn nhận về theo thứ hạng | |
-| 6 | | Nhân bản đơn về trung tâm | Ghi nhịp `replication_heartbeat` mỗi 5 giây | Local Order Service (tự động) |
-| 7 | | Xem tình trạng món | Xem menu kèm trạng thái Còn, Hết, Ẩn (`GET /menu`) | Thu ngân, khách hàng online |
-| | | | Đồng bộ bộ đệm menu (`DishStatusChanged`, `Heartbeat`, snapshot) | Local Order Service (tự động) |
-| | **Kho** (Inventory Service) | | | |
-| 8 | | Giữ nguyên liệu cho đơn | Nhận đơn mới, giữ nguyên liệu hoặc trả Thất bại (`OrderCreated`) | Inventory Service (tự động) |
-| 9 | | Xử lý lệnh của Bếp | Hoàn kho hoặc ghi hao hụt (`ReleaseRequested`) | Inventory Service (tự động) |
-| | | | Ghi nhận nguyên liệu đã dùng (`StockConsumed`) | |
-| 10 | | Quản lý tồn kho | Xem tồn kho (`GET /stock`) | Nhân viên kho |
-| | | | Nhập kho (`POST /stock/receipts`) | |
-| | | | Xác nhận kiểm kho xong (`POST /ingredients/{id}/clear-check`) | |
-| 11 | | Theo dõi cảnh báo kho | Xem cảnh báo (`GET /alerts`), xem độ trễ consumer (`GET /monitor`) | Nhân viên kho |
-| 12 | | Công bố tình trạng món | Tính và gửi `DishStatusChanged`, heartbeat | Inventory Service (tự động) |
-| | | | Cung cấp snapshot (`GET /menu/snapshot`), tăng epoch sau khi khôi phục (`POST /admin/epoch/bump`) | Chi nhánh, người vận hành |
-| | **Bếp** (Kitchen Service) | | | |
-| 13 | | Xử lý phiếu bếp | Xem danh sách phiếu và cảnh báo (`GET /tickets`) | Nhân viên bếp |
-| | | | Bắt đầu nấu (`POST /tickets/{order_id}/start`) | |
-| | | | Từ chối phiếu (`POST /tickets/{order_id}/reject`) | |
-| | | | Hoàn tất (`POST /tickets/{order_id}/complete`) | |
-| 14 | | Nhận đơn và yêu cầu hủy | Nhận đơn đã giữ hoặc thất bại từ Kho (`OrderReserved`, `OrderFailed`) | Kitchen Service (tự động) |
-| | | | Quyết định yêu cầu hủy (`CancelRequested`) | |
-| | | | Nhận cờ kiểm kho (`IngredientCheckChanged`) | |
-| 15 | | Theo dõi cảnh báo bếp | Xem cảnh báo (`GET /alerts`), xem độ trễ consumer (`GET /monitor`) | Nhân viên bếp |
-| | **Báo cáo quản lý** (Order Query Service) | | | |
-| 16 | | Xem báo cáo tổng hợp | Xem số đơn theo trạng thái và lý do, mốc "dữ liệu tính đến" của từng chi nhánh (`GET /reports/summary`) | Quản lý |
+| | **1. Tiếp nhận và theo dõi đơn hàng đa kênh (POS & Online)** | | | |
+| 1 | | Xem thực đơn và đặt món | GD-01: Xem thực đơn kèm trạng thái còn/hết món | Thu ngân tại quầy, Khách hàng Online |
+| 2 | | | GD-02: Tạo đơn đặt món mới và đưa vào hàng chờ gửi | Thu ngân tại quầy, Khách hàng Online |
+| 3 | | Hủy đơn đặt món | GD-03: Gửi yêu cầu hủy đơn đặt món | Thu ngân tại quầy, Khách hàng Online |
+| 4 | | Theo dõi đơn và giám sát kênh | GD-04: Theo dõi danh sách đơn, tiến độ gửi và cảnh báo kênh | Thu ngân tại quầy, Khách hàng Online |
+| | **2. Quản lý kho và giữ nguyên liệu trung tâm (Inventory)** | | | |
+| 5 | | Xử lý nguyên liệu cho đơn đa nguồn | GD-05: Tiếp nhận đơn mới, kiểm tra và giữ nguyên liệu | Inventory Service (tự động) |
+| 6 | | | GD-06: Hoàn trả nguyên liệu, ghi hao hụt và chốt đã dùng | Inventory Service (tự động) |
+| 7 | | Quản lý tồn kho | GD-07: Tra cứu tồn kho, cảnh báo kiểm kho và độ trễ đọc tin | Nhân viên Kho, Quản lý vận hành |
+| 8 | | | GD-08: Nhập bổ sung tồn kho nguyên liệu | Nhân viên Kho |
+| 9 | | | GD-09: Xác nhận kiểm kho xong và đối chiếu tồn thực tế | Nhân viên Kho |
+| 10 | | Đồng bộ trạng thái thực đơn | GD-10: Tính lại, công bố trạng thái món và cấp ảnh chụp thực đơn | Inventory Service, Kênh bán hàng |
+| | **3. Điều phối chế biến tại Bếp trung tâm (Kitchen)** | | | |
+| 11 | | Tiếp nhận đơn và phân xử hủy | GD-11: Hợp nhất đơn từ Kho, lập phiếu bếp và phân xử yêu cầu hủy | Kitchen Service (tự động) |
+| 12 | | Xử lý phiếu chế biến | GD-12: Theo dõi danh sách phiếu chế biến và cảnh báo bếp | Nhân viên Bếp |
+| 13 | | | GD-13: Bắt đầu chế biến phiếu bếp | Nhân viên Bếp |
+| 14 | | | GD-14: Từ chối phiếu chế biến và báo nguyên liệu hỏng | Nhân viên Bếp |
+| 15 | | | GD-15: Xác nhận hoàn tất chế biến món | Nhân viên Bếp |
+| | **4. Tổng hợp đơn hàng trung tâm và giám sát toàn chuỗi (Query)** | | | |
+| 16 | | Xem báo cáo hợp nhất | GD-16: Tổng hợp và xem báo cáo đơn hàng toàn chuỗi gần thời gian thực | Quản lý chuỗi |
 
-## II. THIẾT KẾ CHỨC NĂNG PHẦN MỀM
+## III. THIẾT KẾ CHỨC NĂNG PHẦN MỀM
 
-Mục này có thẻ use case cho mọi giao dịch của hệ thống: Kho, Bếp, chi nhánh và báo cáo quản lý, kể cả tình trạng món (Luồng C).
+### 3.1. Module 1: Tiếp nhận và theo dõi đơn hàng đa kênh (POS & Online)
 
-### 1. Kho - module
+Hai nhóm điểm bán tại quầy (POS01, POS02) và kênh đặt hàng trực tuyến (ONLINE) dùng chung một mô hình xử lý nghiệp vụ nhưng vận hành trên các tiến trình và cơ sở dữ liệu tách biệt hoàn toàn. Nguyên tắc phân định ranh giới là điểm bán chỉ tự chốt hủy tại chỗ khi gói tin tạo đơn chưa từng được thử gửi ra cụm truyền tin trung tâm; mọi trường hợp đã phát sinh liên lạc mạng đều phải do Bếp trung tâm phân xử.
 
-#### 1.1. Giữ nguyên liệu cho đơn - use case
+#### 3.1.1. Xem thực đơn và đặt món
 
-##### 1.1.1. Nhận đơn mới, giữ nguyên liệu hoặc trả Thất bại - giao dịch
+##### GD-01. Xem thực đơn kèm trạng thái món
 
-- **Tên Usecase:** Nhận đơn mới, giữ nguyên liệu hoặc trả Thất bại
-- **Mô tả Usecase:** Chức năng cho phép Inventory Service nhận đơn mới từ chi nhánh và giữ đủ nguyên liệu cho cả đơn, hoặc trả Thất bại kèm lý do.
-- **Tác nhân chính:** Inventory Service (tự động, khi có tin `OrderCreated` trên `order-events.<branch>`)
-- **Tác nhân phụ:** Kitchen Service, chi nhánh gốc (nhận kết quả)
-- **Điều kiện bắt đầu (Pre-Condition):** chi nhánh đã gửi đơn lên Kafka; tin chưa từng được xử lý (`event_id` chưa có trong `processed_events`).
-- **Điều kiện kết thúc (Post-Condition):** đơn có đúng một bản ghi trong `inventory_orders` (`DANG_GIU` hoặc `THAT_BAI`); kết quả nằm trong `outbox_events` để gửi đi.
+- **Tên Usecase:** Xem thực đơn kèm trạng thái còn/hết món
+- **Mô tả Usecase:** Chức năng cho phép Thu ngân tại quầy hoặc Khách hàng Online xem danh sách món ăn và tình trạng sẵn sàng phục vụ tại thời điểm đặt món, kể cả khi kết nối tới cụm trung tâm tạm thời gián đoạn.
+- **Tác nhân chính:** Thu ngân tại quầy, Khách hàng Online
+- **Tác nhân phụ:** Inventory Service (cập nhật trạng thái món qua sự kiện và ảnh chụp thực đơn)
+- **Điều kiện bắt đầu (Pre-Condition):** Dịch vụ của kênh đã khởi động và có sẵn danh mục món ăn cục bộ.
+- **Điều kiện kết thúc (Post-Condition):** Không thay đổi dữ liệu trạng thái; màn hình đặt món hiển thị đúng trạng thái khả dụng và cảnh báo độ mới thực đơn nếu có.
 - **Trình tự các sự kiện:**
-  1. Ghi `event_id` vào `processed_events`; nếu đã có thì bỏ qua tin.
-  2. Nếu đơn đã có bản ghi (gửi lại), trả lại kết quả cũ cho chi nhánh gốc và dừng.
-  3. Kiểm tra dữ liệu đơn; sai thì ghi Thất bại `INVALID_ORDER_DATA`.
-  4. Kiểm tra giờ tạo: quá X giờ thì `ORDER_EXPIRED`, ở tương lai quá dung sai thì `FUTURE_CREATION_TIME`.
-  5. Có món không có công thức thì `NO_RECIPE`.
-  6. Khóa các dòng `stock` của đơn theo thứ tự mã nguyên liệu; có nguyên liệu đang chờ kiểm kho thì `AWAITING_STOCK_CHECK`, thiếu thì `INSUFFICIENT_INGREDIENTS`.
-  7. Đủ thì trừ `available`, cộng `reserved`, ghi từng dòng `inventory_reservations`, chuyển `DANG_GIU`.
-  8. Ghi kết quả vào outbox: `OrderReserved` hoặc `OrderFailed` tới `kitchen-orders` và `status-events.<chi nhánh gốc>`; commit, rồi commit offset.
-- **Các yêu cầu phi chức năng:** giữ đủ hoặc không giữ gì (BR1); hai instance chạy song song không làm kho âm (kịch bản 42); gửi lại không giữ lần hai (BR12).
-- **Biểu đồ hoạt động:**
+  1. Người dùng mở màn hình đặt món, hệ thống đọc danh mục món ăn cục bộ kết hợp với bộ đệm trạng thái món hiện giữ tại kênh.
+  2. Hệ thống đối chiếu thời điểm liên lạc gần nhất với Kho trung tâm (ngưỡng tươi mới 5 phút) và tình trạng kết nối tới cụm truyền tin.
+  3. Nếu dữ liệu còn mới và kết nối ổn định, món Hết hàng bị khóa không cho chọn và món Tạm ẩn được loại khỏi danh sách; nếu dữ liệu quá 5 phút hoặc mất kết nối trung tâm, các món đang đánh dấu hết chuyển sang nhãn "Có thể đã hết" và vẫn cho phép đặt để không gián đoạn bán hàng tại chỗ.
+- **Các yêu cầu phi chức năng:** Việc hiển thị thực đơn chỉ đọc trên cơ sở dữ liệu cục bộ của kênh nên phản hồi tức thì ngay cả khi mất mạng ra Kho trung tâm.
+- **Biểu đồ hoạt động:** Trình tự kiểm tra độ mới dữ liệu và phân nhánh hiển thị thực đơn được thể hiện trên Hình 2.3.
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a{event_id đã xử lý?}
-  a -- có --> z((Kết thúc))
-  a -- chưa --> b{Đơn đã có bản ghi?}
-  b -- có --> b1[Trả lại kết quả cũ cho chi nhánh gốc] --> z
-  b -- chưa --> c{Dữ liệu đơn hợp lệ?}
-  c -- không --> f[Ghi THAT_BAI với lý do]
-  c -- có --> d{Trong giới hạn thời gian?}
-  d -- không --> f
-  d -- có --> e{Mọi món có công thức?}
-  e -- không --> f
-  e -- có --> g[Khóa các dòng stock theo thứ tự]
-  g --> h{Có nguyên liệu chờ kiểm kho hoặc thiếu?}
-  h -- có --> f
-  h -- không --> i[Trừ available, cộng reserved, ghi DANG_GIU]
-  i --> j[Outbox: OrderReserved tới Bếp và chi nhánh]
-  f --> k[Outbox: OrderFailed tới Bếp và chi nhánh]
-  j --> z
-  k --> z
-```
+![Hình 2.3. Biểu đồ hoạt động GD-01: Xem thực đơn và trạng thái món](images/hinh-2-3-hd-xem-thuc-don.png)
 
-#### 1.2. Xử lý lệnh của Bếp - use case
+##### GD-02. Tạo đơn đặt món mới và đưa vào hàng chờ gửi
 
-##### 1.2.1. Hoàn kho hoặc ghi hao hụt - giao dịch
-
-- **Tên Usecase:** Hoàn kho hoặc ghi hao hụt
-- **Mô tả Usecase:** Chức năng cho phép Inventory Service hoàn nguyên liệu của một đơn khi Bếp hủy hoặc từ chối, và ghi hao hụt nguyên liệu bị báo hỏng.
-- **Tác nhân chính:** Inventory Service (tự động, tin `ReleaseRequested` trên `stock-commands`)
-- **Tác nhân phụ:** Kitchen Service (gửi lệnh)
-- **Điều kiện bắt đầu:** Bếp đã hủy hoặc từ chối đơn và ghi lệnh hoàn kho vào outbox của Bếp.
-- **Điều kiện kết thúc:** nếu bản ghi đang `DANG_GIU`: chuyển `DA_TRA`, mỗi dòng giữ được đóng đúng một lần (`DA_HOAN` hoặc `HAO_HUT`); ngược lại kho không đổi.
+- **Tên Usecase:** Tạo đơn đặt món mới và đưa vào hàng chờ gửi
+- **Mô tả Usecase:** Chức năng cho phép Thu ngân hoặc Khách hàng Online lập đơn đặt món mới, lưu bền vững tại chỗ ở trạng thái Chờ kho và xếp vào hàng chờ gửi bất đồng bộ ngay cả khi đường truyền tới cụm trung tâm gặp sự cố.
+- **Tác nhân chính:** Thu ngân tại quầy, Khách hàng Online
+- **Tác nhân phụ:** Apache Kafka, Inventory Service (tiếp nhận sự kiện tạo đơn)
+- **Điều kiện bắt đầu (Pre-Condition):** Người đặt đã chọn ít nhất một món có số lượng nguyên dương thuộc danh mục hiện hành của kênh.
+- **Điều kiện kết thúc (Post-Condition):** Đơn được lưu bền vững với trạng thái Chờ kho kèm một mục chờ gửi tương ứng đánh dấu chưa từng thử gửi; sau khi truyền thành công, hệ thống ghi nhận dấu thời gian đã gửi.
 - **Trình tự các sự kiện:**
-  1. Chuyển bản ghi từ `DANG_GIU` sang `DA_TRA` bằng một câu UPDATE có điều kiện.
-  2. Không đổi được: bản ghi đã `DA_TRA` hoặc `DA_DUNG` thì bỏ qua (tin trùng); không có bản ghi hoặc `THAT_BAI` thì ghi cảnh báo `LENH_KHONG_KHOP` và không cộng kho.
-  3. Với từng dòng giữ: nếu lý do là `SPOILED_INGREDIENT` và nguyên liệu nằm trong danh sách hỏng thì chuyển lượng giữ sang `wasted` và bật `needs_check`; còn lại thì cộng lại `available`. Lượng hoàn là lượng đã ghi lúc giữ, không tính lại theo công thức.
-  4. Mỗi nguyên liệu vừa bị bật cờ: lấy version mới từ `menu_version`, ghi `IngredientCheckChanged` tới `menu-events` cho Bếp.
-- **Các yêu cầu phi chức năng:** lệnh tới nhiều lần chỉ cộng kho một lần (kịch bản 5); Kho tắt khi Bếp từ chối thì hoàn đúng một lần khi bật lại (kịch bản 4).
-- **Biểu đồ hoạt động:**
+  1. Người dùng xác nhận danh sách món và số lượng cần đặt để gửi yêu cầu tạo đơn.
+  2. Hệ thống kiểm tra danh sách món không rỗng, số lượng là số nguyên dương và mọi mã món đều tồn tại trong danh mục; nếu vi phạm thì từ chối yêu cầu và không lưu dữ liệu.
+  3. Trong cùng một giao dịch cục bộ, hệ thống cấp mã định danh duy nhất toàn cục cho đơn hàng, lưu bản ghi đơn ở trạng thái Chờ kho đồng thời tạo một mục chờ gửi tạo đơn ở trạng thái chưa từng thử gửi.
+  4. Ở luồng đồng bộ nền, hệ thống chọn mục chờ gửi hợp lệ đầu tiên của mỗi đơn, kiểm tra nhanh khả năng kết nối tới cụm truyền tin trong tối đa 2 giây; nếu mất mạng, hệ thống giữ nguyên trạng thái chưa từng thử gửi và chờ chu kỳ sau.
+  5. Khi cụm truyền tin sẵn sàng, hệ thống đánh dấu mục chờ gửi sang đã từng thử gửi và xác nhận vào cơ sở dữ liệu trước khi phát thông điệp đi; khi broker xác nhận lưu an toàn mới ghi dấu thời gian hoàn tất gửi, còn nếu đứt kết nối giữa chừng thì giữ cờ đang gửi để gửi lại theo thời gian chờ tăng dần.
+- **Các yêu cầu phi chức năng:** Hàng chờ gửi xử lý độc lập theo từng đơn nên lỗi đường truyền ở một đơn không chặn các đơn khác; giao diện phân biệt rõ hai trạng thái "Chưa gửi, bếp chưa nhận" và "Đang gửi, chưa biết bếp đã nhận chưa" để hỗ trợ xử lý hủy chính xác.
+- **Biểu đồ hoạt động:** Quy trình tạo đơn nguyên tử và chuyển phát bất đồng bộ qua hàng chờ gửi thể hiện trên Hình 2.4.
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a{Bản ghi đang DANG_GIU?}
-  a -- DA_TRA hoặc DA_DUNG --> z((Kết thúc))
-  a -- không có hoặc THAT_BAI --> w[Ghi cảnh báo LENH_KHONG_KHOP, kho không đổi] --> z
-  a -- có --> b[Chuyển DA_TRA]
-  b --> c{Từng dòng giữ: lý do hỏng và nguyên liệu bị báo hỏng?}
-  c -- có --> d[reserved → wasted, bật needs_check]
-  c -- không --> e[reserved → available]
-  d --> f[Outbox: IngredientCheckChanged tới Bếp]
-  e --> z
-  f --> z
-```
+![Hình 2.4. Biểu đồ hoạt động GD-02: Tạo đơn đặt món tại quầy / Online](images/hinh-2-4-hd-tao-don.png)
 
-##### 1.2.2. Ghi nhận nguyên liệu đã dùng - giao dịch
+#### 3.1.2. Hủy đơn đặt món
 
-- **Tên Usecase:** Ghi nhận nguyên liệu đã dùng
-- **Mô tả Usecase:** Chức năng cho phép Inventory Service chuyển lượng đang giữ của một đơn sang đã dùng khi Bếp bắt đầu nấu.
-- **Tác nhân chính:** Inventory Service (tự động, tin `StockConsumed` trên `stock-commands`)
-- **Tác nhân phụ:** Kitchen Service
-- **Điều kiện bắt đầu:** nhân viên bếp đã bấm Bắt đầu nấu.
-- **Điều kiện kết thúc:** bản ghi `DA_DUNG`; `reserved` giảm, `consumed` tăng đúng lượng đã giữ; `available` không đổi.
-- **Trình tự các sự kiện:** như giao dịch 1.2.1 bước 1–2 với trạng thái đích `DA_DUNG`; sau đó với từng dòng: `reserved` giảm q, `consumed` tăng q, dòng giữ đóng là `DA_DUNG`.
-- **Các yêu cầu phi chức năng:** không trừ kho lần hai (kịch bản 43).
-- **Biểu đồ hoạt động:**
+##### GD-03. Gửi yêu cầu hủy đơn đặt món
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a{Bản ghi đang DANG_GIU?}
-  a -- DA_TRA hoặc DA_DUNG --> z((Kết thúc))
-  a -- không có hoặc THAT_BAI --> w[Ghi cảnh báo LENH_KHONG_KHOP] --> z
-  a -- có --> b[Chuyển DA_DUNG]
-  b --> c[Từng dòng: reserved → consumed] --> z
-```
-
-#### 1.3. Quản lý tồn kho - use case
-
-##### 1.3.1. Xem tồn kho - giao dịch
-
-- **Tên Usecase:** Xem tồn kho
-- **Mô tả Usecase:** Chức năng cho phép nhân viên kho xem bốn đại lượng của từng nguyên liệu (`available`, `reserved`, `consumed`, `wasted`) và cờ kiểm kho.
-- **Tác nhân chính:** Nhân viên kho. **Tác nhân phụ:** không có.
-- **Điều kiện bắt đầu:** Inventory Service đang chạy. **Điều kiện kết thúc:** không có.
-- **Trình tự các sự kiện:** 1. Nhân viên mở màn hình Kho. 2. Màn hình gọi `GET /stock`. 3. Hệ thống trả danh sách nguyên liệu theo mã.
-- **Các yêu cầu phi chức năng:** không.
-- **Biểu đồ hoạt động:**
-
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[Mở màn hình Kho] --> b[GET /stock] --> c[Hiển thị tồn kho và cờ kiểm kho] --> z((Kết thúc))
-```
-
-##### 1.3.2. Nhập kho - giao dịch
-
-- **Tên Usecase:** Nhập kho
-- **Mô tả Usecase:** Chức năng cho phép nhân viên kho cộng thêm số lượng vào tồn kho khả dụng của một nguyên liệu.
-- **Tác nhân chính:** Nhân viên kho. **Tác nhân phụ:** không có.
-- **Điều kiện bắt đầu:** nguyên liệu đã có trong `stock`. **Điều kiện kết thúc:** `available` tăng đúng số lượng nhập; cờ kiểm kho không đổi.
-- **Trình tự các sự kiện:** 1. Nhân viên chọn nguyên liệu, nhập số lượng. 2. Màn hình gọi `POST /stock/receipts`. 3. Hệ thống kiểm tra số lượng dương (sai: 422), nguyên liệu tồn tại (không: 404). 4. Cộng `available`, commit, trả dòng tồn kho mới.
-- **Các yêu cầu phi chức năng:** không.
-- **Biểu đồ hoạt động:**
-
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[Nhập nguyên liệu và số lượng] --> b{Số lượng > 0?}
-  b -- không --> e1[Báo lỗi 422] --> z((Kết thúc))
-  b -- có --> c{Nguyên liệu tồn tại?}
-  c -- không --> e2[Báo lỗi 404] --> z
-  c -- có --> d[available += số lượng] --> f[Trả tồn kho mới] --> z
-```
-
-##### 1.3.3. Xác nhận kiểm kho xong - giao dịch
-
-- **Tên Usecase:** Xác nhận kiểm kho xong
-- **Mô tả Usecase:** Chức năng cho phép nhân viên kho gỡ cờ kiểm kho của một nguyên liệu sau khi kiểm, và tùy chọn nhập lượng tồn thực tế đếm được.
-- **Tác nhân chính:** Nhân viên kho. **Tác nhân phụ:** Kitchen Service (nhận tin gỡ cờ).
-- **Điều kiện bắt đầu:** nguyên liệu bị bật cờ sau khi Bếp báo hỏng. **Điều kiện kết thúc:** `needs_check` tắt; nếu có `counted_on_hand` thì `available = counted_on_hand − reserved`; Bếp được báo để gỡ cảnh báo trên phiếu; đơn mới dùng nguyên liệu này lại được giữ.
-- **Trình tự các sự kiện:** 1. Nhân viên chọn nguyên liệu, nhập lượng đếm được (nếu có). 2. Màn hình gọi `POST /ingredients/{id}/clear-check`. 3. Hệ thống khóa dòng `stock`; lượng đếm nhỏ hơn lượng đang giữ thì từ chối (409). 4. Gỡ cờ; nếu cờ đang bật thì lấy version mới và ghi `IngredientCheckChanged` (gỡ cờ) vào outbox. 5. Commit, trả tồn kho mới.
-- **Các yêu cầu phi chức năng:** tin gỡ cờ mang version lớn hơn tin bật cờ, Bếp không bị đè bởi tin cũ (kịch bản 48).
-- **Biểu đồ hoạt động:**
-
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[Chọn nguyên liệu, nhập lượng đếm được nếu có] --> b{Nguyên liệu tồn tại?}
-  b -- không --> e1[Báo lỗi 404] --> z((Kết thúc))
-  b -- có --> c{Lượng đếm ≥ lượng đang giữ?}
-  c -- không --> e2[Báo lỗi 409, không đổi gì] --> z
-  c -- có --> d[Cập nhật available, tắt needs_check]
-  d --> f{Cờ trước đó đang bật?}
-  f -- có --> g[Outbox: IngredientCheckChanged gỡ cờ tới Bếp] --> h[Trả tồn kho mới]
-  f -- không --> h
-  h --> z
-```
-
-#### 1.4. Theo dõi cảnh báo kho - use case
-
-##### 1.4.1. Xem cảnh báo và độ trễ consumer - giao dịch
-
-- **Tên Usecase:** Xem cảnh báo và độ trễ consumer
-- **Mô tả Usecase:** Chức năng cho phép nhân viên kho và người vận hành xem các cảnh báo Luồng D của Kho và biết Kho có đọc tin kịp không. Hệ thống chỉ báo động, không tự sửa dữ liệu.
-- **Tác nhân chính:** Nhân viên kho, người vận hành. **Tác nhân phụ:** Kafka (đọc offset của nhóm consumer).
-- **Điều kiện bắt đầu:** không có. **Điều kiện kết thúc:** không có.
+- **Tên Usecase:** Gửi yêu cầu hủy đơn đặt món
+- **Mô tả Usecase:** Chức năng cho phép Thu ngân hoặc Khách hàng Online yêu cầu hủy một đơn chưa kết thúc; đơn chưa từng được thử gửi sẽ hủy ngay tại điểm bán, còn đơn đã thử gửi ra mạng phải chuyển tới Bếp trung tâm quyết định.
+- **Tác nhân chính:** Thu ngân tại quầy, Khách hàng Online
+- **Tác nhân phụ:** Kitchen Service (trọng tài quyết định khi gói tạo đơn đã rời điểm bán)
+- **Điều kiện bắt đầu (Pre-Condition):** Đơn hàng tồn tại trên kênh và chưa nằm ở trạng thái kết thúc (Hoàn tất, Đã hủy hoặc Thất bại).
+- **Điều kiện kết thúc (Post-Condition):** Đơn chuyển sang Đã hủy ngay tại điểm bán nếu chưa thử gửi; ngược lại, đơn được bật cờ Đang yêu cầu hủy kèm thông điệp yêu cầu hủy xếp sau mục tạo đơn trong hàng chờ gửi.
 - **Trình tự các sự kiện:**
-  1. `GET /alerts` (lọc được theo `kind`): trả tối đa 100 cảnh báo mới nhất của bảng `alerts`: `CAN_KIEM_TRA` (tin hỏng đã chuyển `dlq`, hoặc đơn cần kiểm tra) và `LENH_KHONG_KHOP` (lệnh hoàn kho hoặc báo đã dùng không khớp bản ghi nào; tồn kho không đổi).
-  2. `GET /monitor`: với mỗi topic Kho đọc, hệ thống so offset đã commit của nhóm consumer với offset cuối của partition, trả số tin chưa đọc, thời điểm ghi và tuổi của tin chưa đọc cũ nhất, và đánh dấu `slow` khi tuổi đó quá 5 phút (mục 10 của đặc tả). Không hỏi được Kafka thì `kafka_reachable` là false.
-- **Các yêu cầu phi chức năng:** đọc offset không tham gia nhóm consumer, nên không làm nhóm chia lại partition; kết quả giữ 3 giây để màn hình hỏi mỗi 2 giây không dồn lên Kafka.
-- **Biểu đồ hoạt động:**
+  1. Người dùng chọn một trong ba lý do hủy phía khách hàng (Khách đổi ý, Đợi quá lâu, Nhập nhầm đơn) và gửi lệnh hủy; hệ thống từ chối nếu lý do không hợp lệ.
+  2. Hệ thống khóa độc quyền bản ghi đơn hàng tại kênh; nếu không tìm thấy đơn thì báo lỗi không tồn tại, nếu đơn đã kết thúc thì báo xung đột trạng thái, còn nếu đơn đang ở trạng thái chờ hủy thì xác nhận giữ nguyên yêu cầu trước đó.
+  3. Hệ thống thực hiện thao tác rút mục chờ gửi tạo đơn với điều kiện mục đó chưa từng được thử gửi; nếu rút thành công, đơn chuyển ngay sang Đã hủy tại chỗ.
+  4. Nếu không rút được (tức gói tạo đơn đã từng thử gửi hoặc đã gửi thành công ra mạng), hệ thống ghi một yêu cầu hủy nối sau mục tạo đơn trong hàng chờ gửi và chuyển cờ đơn sang Đang yêu cầu hủy, chờ Bếp trung tâm phản hồi.
+- **Các yêu cầu phi chức năng:** Phép rút mục chờ có điều kiện giải quyết triệt để xung đột khi người dùng bấm hủy trùng thời điểm luồng nền bắt đầu gửi đơn, bảo đảm đúng một bên thực hiện thành công và đơn đã hủy tại chỗ không bao giờ xuất hiện ở Bếp.
+- **Biểu đồ hoạt động:** Hai nhánh hủy cục bộ tại điểm bán và chuyển Bếp phân xử được mô tả trên Hình 2.5.
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a{API}
-  a -- GET /alerts --> b[Đọc bảng alerts, lọc theo kind, mới nhất trước] --> z((Kết thúc))
-  a -- GET /monitor --> c{Hỏi được Kafka?}
-  c -- không --> d[kafka_reachable = false] --> z
-  c -- có --> e[Tin chưa đọc và tuổi tin cũ nhất theo topic] --> f{Quá 5 phút?}
-  f -- có --> g[slow = true] --> z
-  f -- không --> z
-```
+![Hình 2.5. Biểu đồ hoạt động GD-03: Yêu cầu hủy đơn đặt món](images/hinh-2-5-hd-yeu-cau-huy.png)
 
-#### 1.5. Công bố tình trạng món - use case
+#### 3.1.3. Theo dõi đơn và giám sát kênh
 
-##### 1.5.1. Tính và công bố tình trạng món - giao dịch
+##### GD-04. Theo dõi danh sách đơn, tiến độ gửi và cảnh báo kênh
 
-- **Tên Usecase:** Tính và công bố tình trạng món
-- **Mô tả Usecase:** Chức năng cho phép Kho tính lại trạng thái của các món sau mỗi lần tồn kho thay đổi và báo cho các chi nhánh khi một món đổi trạng thái (Luồng C, BR10). Trạng thái chỉ là gợi ý; Kho vẫn quyết định cuối cùng từng đơn.
-- **Tác nhân chính:** Inventory Service (tự động). **Tác nhân phụ:** các chi nhánh (nhận tin).
-- **Điều kiện bắt đầu:** một giao dịch vừa đổi tồn kho: giữ nguyên liệu, hoàn kho, hao hụt, nhập kho, gỡ cờ kiểm kho. **Điều kiện kết thúc:** `dish_status` khớp với tồn kho; món nào đổi trạng thái thì có `DishStatusChanged` trong outbox.
+- **Tên Usecase:** Theo dõi danh sách đơn, tiến độ gửi và cảnh báo kênh
+- **Mô tả Usecase:** Chức năng cho phép Thu ngân hoặc Khách hàng Online quan sát danh sách đơn theo trạng thái gửi mới nhất, đồng thời dịch vụ kênh tiếp nhận phản hồi từ Kho và Bếp mà không làm lùi trạng thái khi thông điệp đến lệch thứ tự.
+- **Tác nhân chính:** Thu ngân tại quầy, Khách hàng Online
+- **Tác nhân phụ:** Inventory Service, Kitchen Service (phát sự kiện cập nhật trạng thái về đúng kênh gốc)
+- **Điều kiện bắt đầu (Pre-Condition):** Dịch vụ kênh đang hoạt động và lắng nghe luồng phản hồi trạng thái dành riêng cho kênh đó.
+- **Điều kiện kết thúc (Post-Condition):** Màn hình hiển thị danh sách đơn kèm trạng thái gửi và cảnh báo kênh; các thông điệp hợp lệ được ghi nhận chống trùng và cập nhật trạng thái đơn theo quy tắc tăng dần.
 - **Trình tự các sự kiện:**
-  1. Khóa các dòng `dish_status` của những món dùng nguyên liệu vừa đổi, theo `dish_id` tăng dần, rồi mới đọc tồn kho (đọc trước khi khóa thì hai giao dịch đổi hai nguyên liệu của cùng một món có thể không thấy thay đổi của nhau).
-  2. Tính theo mục 3.4 của đặc tả: Còn khi mọi nguyên liệu đủ cho một phần và không nguyên liệu nào bị cờ; Hết khi ngược lại; Ẩn khi món không có công thức.
-  3. Món nào đổi trạng thái thì lấy version mới `(epoch, seq)` từ `menu_version` (khóa sau cùng), ghi lại và gửi `DishStatusChanged` lên `menu-events`. Món không đổi trạng thái thì không gửi gì.
-  4. Song song, mỗi instance Kho gửi `Heartbeat {epoch, seq}` mỗi 60 giây.
-- **Các yêu cầu phi chức năng:** version tiếp tục tăng sau khi Kho khởi động lại (kịch bản 18); thứ tự khóa đơn → `stock` → `dish_status` → `menu_version` ở mọi giao dịch, không deadlock; hai thay đổi đồng thời cho hai nguyên liệu của cùng một món luôn cho trạng thái đúng (test tranh chấp 100 lần).
-- **Biểu đồ hoạt động:**
+  1. Giao diện tra cứu định kỳ danh sách đơn cùng trạng thái truyền tin (Chưa gửi, Đang gửi, Đã gửi), đồng thời kiểm tra kết nối cụm truyền tin, các đơn chờ kho quá ngưỡng 10 phút, đơn sắp quá hạn 4 giờ và các cảnh báo lỗi tại kênh.
+  2. Khi nhận sự kiện phản hồi từ Kho hoặc Bếp, hệ thống kiểm tra mã sự kiện đã xử lý để loại bỏ bản tin trùng lặp.
+  3. Với kết quả tiến độ chính (Đã giữ kho thuộc hạng 1; Thất bại, Đã hủy, Hoàn tất thuộc hạng 2), hệ thống chỉ ghi nhận khi thứ hạng mới cao hơn thứ hạng hiện tại của đơn, đồng thời xóa cờ chờ hủy khi đơn đã kết thúc.
+  4. Với phản hồi phân xử hủy khi Bếp chưa thấy đơn, đơn được gắn ghi chú "Bếp sẽ không nấu" nếu vẫn chưa kết thúc; ngược lại nếu Bếp báo đã nấu, hệ thống gỡ cờ chờ hủy và hiện thông báo "Không hủy được: bếp đã bắt đầu nấu".
+  5. Bản tin hỏng cấu trúc sau năm lần thử được đưa sang hàng chờ lỗi kèm ghi nhận cảnh báo kiểm tra cho vận hành.
+- **Các yêu cầu phi chức năng:** Quy tắc cập nhật theo thứ hạng tăng dần bảo đảm dù thông báo Đã hủy đến trước thông báo Đã giữ kho do trễ mạng, kết quả cuối cùng của đơn hàng vẫn giữ đúng là Đã hủy.
+- **Biểu đồ hoạt động:** Quy trình tiếp nhận, chống trùng và cập nhật trạng thái đơn theo thứ hạng thể hiện trên Hình 2.6.
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[Giao dịch đổi tồn kho] --> b[Khóa dish_status của các món liên quan] --> c[Đọc tồn kho, tính trạng thái]
-  c --> d{Trạng thái đổi?}
-  d -- không --> z((Kết thúc))
-  d -- có --> e[Lấy version mới từ menu_version] --> f[Ghi dish_status, gửi DishStatusChanged] --> z
-```
+![Hình 2.6. Biểu đồ hoạt động GD-04: Theo dõi đơn và áp dụng trạng thái theo thứ hạng](images/hinh-2-6-hd-theo-doi-don.png)
 
-##### 1.5.2. Cung cấp snapshot và tăng epoch - giao dịch
+### 3.2. Module 2: Quản lý kho và giữ nguyên liệu trung tâm (Inventory)
 
-- **Tên Usecase:** Cung cấp snapshot và tăng epoch
-- **Mô tả Usecase:** Chức năng cho phép chi nhánh lấy toàn bộ trạng thái món, và cho phép người vận hành mở một "thế hệ" dữ liệu mới sau khi khôi phục Kho từ bản sao lưu.
-- **Tác nhân chính:** chi nhánh (`GET /menu/snapshot`), người vận hành (`POST /admin/epoch/bump`). **Tác nhân phụ:** Kitchen Service (nhận lại cờ kiểm kho).
-- **Điều kiện bắt đầu:** không có. **Điều kiện kết thúc:** snapshot không đổi dữ liệu; tăng epoch thì mọi dòng `dish_status` mang epoch mới.
+Kho trung tâm triển khai hai tiến trình xử lý song song cùng đọc luồng đơn hàng mới từ tất cả các kênh, giúp tăng thông lượng phục vụ đồng thời kiểm chứng khả năng khóa tuần tự trên kho nguyên liệu dùng chung khi có xung đột giữa đơn tại quầy và đơn trực tuyến.
+
+#### 3.2.1. Xử lý nguyên liệu cho đơn đa nguồn
+
+##### GD-05. Tiếp nhận đơn mới, kiểm tra và giữ nguyên liệu
+
+- **Tên Usecase:** Tiếp nhận đơn mới, kiểm tra và giữ nguyên liệu
+- **Mô tả Usecase:** Chức năng cho phép dịch vụ Kho tiếp nhận sự kiện đơn hàng mới từ mọi kênh bán hàng, kiểm tra đầy đủ điều kiện hợp lệ và giữ trọn vẹn nguyên liệu cho cả đơn hoặc từ chối toàn bộ đơn.
+- **Tác nhân chính:** Inventory Service (tiến trình xử lý sự kiện tự động)
+- **Tác nhân phụ:** Kitchen Service, kênh đã tạo đơn (nhận kết quả giữ kho hoặc thất bại)
+- **Điều kiện bắt đầu (Pre-Condition):** Kênh phát sinh đơn đã gửi thông điệp tạo đơn mới lên hệ thống truyền tin.
+- **Điều kiện kết thúc (Post-Condition):** Mỗi mã đơn chỉ có tối đa một hồ sơ giữ kho (Đang giữ hoặc Thất bại); các dòng giữ chi tiết và thông điệp kết quả được lưu nguyên tử để phát sang Bếp và kênh gốc.
 - **Trình tự các sự kiện:**
-  1. Snapshot: trả `epoch` hiện tại và trạng thái, version của mọi món, kể cả món Ẩn, trong một câu lệnh.
-  2. Tăng epoch: một giao dịch khóa mọi dòng `dish_status`, tăng `epoch` và `seq`, tính và ghi lại mọi món với version mới (kể cả món không đổi), gửi lại `IngredientCheckChanged` cho mọi nguyên liệu để Bếp có cờ của thế hệ mới; không gửi `DishStatusChanged`, vì chi nhánh thấy epoch mới trong heartbeat kế tiếp và tự lấy snapshot.
-- **Các yêu cầu phi chức năng:** kịch bản 20 (món còn mang epoch cũ chuyển Ẩn ở chi nhánh).
-- **Biểu đồ hoạt động:**
+  1. Tiến trình nhận sự kiện kiểm tra mã thông điệp chống trùng; nếu đã xử lý trước đó thì bỏ qua ngay.
+  2. Nếu mã đơn hàng đã có hồ sơ giữ kho từ trước (trường hợp kênh gửi lại sự kiện khác mã thông điệp), dịch vụ phát trả lại kết quả cũ về kênh gốc và kết thúc mà không trừ thêm tồn kho.
+  3. Dịch vụ kiểm tra tính hợp lệ của dữ liệu món ăn (Dữ liệu đơn không hợp lệ), ngưỡng quá hạn tạo đơn 4 giờ (Đơn quá hạn), mốc tạo đơn không vượt quá 5 phút ở tương lai (Thời gian tạo không hợp lệ) và mọi món trong đơn đều đã khai báo định lượng (Món chưa có công thức).
+  4. Dịch vụ khóa tuần tự các bản ghi tồn kho nguyên liệu cần dùng theo thứ tự mã nguyên liệu tăng dần; nếu có nguyên liệu đang bị gắn cờ kiểm kho (Chờ kiểm kho) hoặc không đủ lượng khả dụng (Không đủ nguyên liệu), đơn bị từ chối toàn phần.
+  5. Khi đủ nguyên liệu cho tất cả món trong đơn, hệ thống trừ lượng Khả dụng, cộng sang lượng Đang giữ, lưu chi tiết từng nguyên liệu giữ cho đơn ở trạng thái Đang giữ, tính lại trạng thái các món liên quan và ghi thông điệp giữ thành công gửi tới Bếp cùng kênh gốc. Ngược lại, hệ thống ghi nhận Thất bại và báo về hai phía.
+- **Các yêu cầu phi chức năng:** Quy ước khóa nguyên liệu theo thứ tự mã tăng dần loại bỏ hoàn toàn tình trạng kẹt khóa chéo (deadlock) và bảo đảm tồn khả dụng không bao giờ âm khi hai tiến trình Kho xử lý đồng thời các đơn tranh chấp cùng nguyên liệu.
+- **Biểu đồ hoạt động:** Trình tự kiểm tra điều kiện, khóa nguyên liệu và chốt kết quả giữ kho được trình bày trên Hình 2.7.
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a{API}
-  a -- GET /menu/snapshot --> b[Đọc epoch và mọi dòng dish_status] --> z((Kết thúc))
-  a -- POST /admin/epoch/bump --> c[Khóa mọi dish_status] --> d[Tăng epoch, seq] --> e[Tính và ghi lại mọi món] --> f[Gửi lại cờ kiểm kho cho Bếp] --> z
-```
+![Hình 2.7. Biểu đồ hoạt động GD-05: Kiểm tra và giữ nguyên liệu tại Kho trung tâm](images/hinh-2-7-hd-giu-nguyen-lieu.png)
 
-### 2. Bếp - module
+##### GD-06. Hoàn trả nguyên liệu, ghi hao hụt và chốt đã dùng
 
-#### 2.1. Xử lý phiếu bếp - use case
-
-##### 2.1.1. Xem danh sách phiếu - giao dịch
-
-- **Tên Usecase:** Xem danh sách phiếu
-- **Mô tả Usecase:** Chức năng cho phép nhân viên bếp xem các phiếu Chờ nấu và Đang nấu, kèm cảnh báo đỏ trên phiếu Chờ nấu có nguyên liệu đang chờ kiểm kho.
-- **Tác nhân chính:** Nhân viên bếp. **Tác nhân phụ:** không có.
-- **Điều kiện bắt đầu:** Kitchen Service đang chạy. **Điều kiện kết thúc:** không có.
-- **Trình tự các sự kiện:** 1. Nhân viên mở màn hình Bếp. 2. Màn hình gọi `GET /tickets`. 3. Hệ thống trả các phiếu `CHO_NAU`, `DANG_NAU` theo giờ tạo đơn; với phiếu `CHO_NAU`, `warnings` là các nguyên liệu trong `reserved` đang có cờ trong `flagged_ingredients`.
-- **Các yêu cầu phi chức năng:** cảnh báo chỉ là cảnh báo, không tự hủy phiếu (Luồng A).
-- **Biểu đồ hoạt động:**
-
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[Mở màn hình Bếp] --> b[GET /tickets] --> c[Ghép reserved với flagged_ingredients] --> d[Hiển thị phiếu và cảnh báo] --> z((Kết thúc))
-```
-
-##### 2.1.2. Bắt đầu nấu - giao dịch
-
-- **Tên Usecase:** Bắt đầu nấu
-- **Mô tả Usecase:** Chức năng cho phép nhân viên bếp chuyển một phiếu từ Chờ nấu sang Đang nấu.
-- **Tác nhân chính:** Nhân viên bếp. **Tác nhân phụ:** Inventory Service (nhận báo đã dùng).
-- **Điều kiện bắt đầu:** phiếu đang `CHO_NAU`. **Điều kiện kết thúc:** phiếu `DANG_NAU`; tin `StockConsumed` nằm trong outbox của Bếp.
-- **Trình tự các sự kiện:** 1. Nhân viên bấm Bắt đầu nấu. 2. Màn hình gọi `POST /tickets/{order_id}/start`. 3. Hệ thống khóa dòng `kitchen_orders`; không có phiếu thì 404, không còn `CHO_NAU` thì 409 kèm trạng thái hiện tại. 4. Chuyển `DANG_NAU` có điều kiện, ghi `StockConsumed` vào outbox, commit.
-- **Các yêu cầu phi chức năng:** bấm đồng thời với Từ chối thì đúng một thao tác thắng (kịch bản 52).
-- **Biểu đồ hoạt động:**
-
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[Bấm Bắt đầu nấu] --> b[Khóa dòng kitchen_orders] --> c{Phiếu đang CHO_NAU?}
-  c -- không có phiếu --> e1[404] --> z((Kết thúc))
-  c -- trạng thái khác --> e2[409 kèm trạng thái hiện tại] --> z
-  c -- có --> d[Chuyển DANG_NAU] --> f[Outbox: StockConsumed tới Kho] --> z
-```
-
-##### 2.1.3. Từ chối phiếu - giao dịch
-
-- **Tên Usecase:** Từ chối phiếu
-- **Mô tả Usecase:** Chức năng cho phép nhân viên bếp từ chối một phiếu Chờ nấu với lý do cố định; với lý do nguyên liệu hỏng thì phải chọn nguyên liệu hỏng trong phiếu.
-- **Tác nhân chính:** Nhân viên bếp. **Tác nhân phụ:** Inventory Service (nhận lệnh hoàn kho), chi nhánh gốc (nhận Đã hủy).
-- **Điều kiện bắt đầu:** phiếu đang `CHO_NAU`. **Điều kiện kết thúc:** phiếu `DA_HUY` (`cancelled_by = KITCHEN`); `OrderCancelled` và `ReleaseRequested` nằm trong outbox trong cùng giao dịch.
-- **Trình tự các sự kiện:** 1. Nhân viên chọn lý do (`EQUIPMENT_FAILURE`, `SHORT_STAFFED`, `SPOILED_INGREDIENT`) và nguyên liệu hỏng nếu có. 2. Màn hình gọi `POST /tickets/{order_id}/reject`. 3. Hệ thống kiểm tra lý do và nguyên liệu (sai: 400), khóa phiếu (không có: 404; không còn `CHO_NAU`: 409). 4. Chuyển `DA_HUY`, ghi `OrderCancelled` tới chi nhánh gốc và `ReleaseRequested` tới Kho, commit.
-- **Các yêu cầu phi chức năng:** phiếu đang nấu không từ chối được và Kho không nhận lệnh hoàn (kịch bản 50); Kho đang tắt thì chi nhánh vẫn thấy Đã hủy ngay (kịch bản 4).
-- **Biểu đồ hoạt động:**
-
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[Chọn lý do, nguyên liệu hỏng nếu có] --> b{Lý do và nguyên liệu hợp lệ?}
-  b -- không --> e1[400] --> z((Kết thúc))
-  b -- có --> c[Khóa dòng kitchen_orders] --> d{Phiếu đang CHO_NAU?}
-  d -- không --> e2[404 hoặc 409] --> z
-  d -- có --> f[Chuyển DA_HUY] --> g[Outbox: OrderCancelled tới chi nhánh, ReleaseRequested tới Kho] --> z
-```
-
-##### 2.1.4. Hoàn tất - giao dịch
-
-- **Tên Usecase:** Hoàn tất
-- **Mô tả Usecase:** Chức năng cho phép nhân viên bếp chuyển một phiếu Đang nấu sang Hoàn tất.
-- **Tác nhân chính:** Nhân viên bếp. **Tác nhân phụ:** chi nhánh gốc (nhận Hoàn tất).
-- **Điều kiện bắt đầu:** phiếu đang `DANG_NAU`. **Điều kiện kết thúc:** phiếu `HOAN_TAT`; `OrderCompleted` nằm trong outbox.
-- **Trình tự các sự kiện:** 1. Nhân viên bấm Hoàn tất. 2. Màn hình gọi `POST /tickets/{order_id}/complete`. 3. Hệ thống khóa phiếu (không có: 404; không còn `DANG_NAU`: 409). 4. Chuyển `HOAN_TAT`, ghi `OrderCompleted` tới chi nhánh gốc, commit.
-- **Các yêu cầu phi chức năng:** không.
-- **Biểu đồ hoạt động:**
-
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[Bấm Hoàn tất] --> b[Khóa dòng kitchen_orders] --> c{Phiếu đang DANG_NAU?}
-  c -- không --> e[404 hoặc 409] --> z((Kết thúc))
-  c -- có --> d[Chuyển HOAN_TAT] --> f[Outbox: OrderCompleted tới chi nhánh] --> z
-```
-
-#### 2.2. Nhận đơn và yêu cầu hủy - use case
-
-##### 2.2.1. Nhận đơn đã giữ hoặc thất bại từ Kho - giao dịch
-
-- **Tên Usecase:** Nhận đơn đã giữ hoặc thất bại từ Kho
-- **Mô tả Usecase:** Chức năng cho phép Kitchen Service tạo phiếu Chờ nấu cho đơn Kho đã giữ nguyên liệu, và ghi nhận kết quả Thất bại.
-- **Tác nhân chính:** Kitchen Service (tự động, tin trên `kitchen-orders`). **Tác nhân phụ:** Inventory Service.
-- **Điều kiện bắt đầu:** Kho đã ghi `OrderReserved` hoặc `OrderFailed` vào outbox. **Điều kiện kết thúc:** đơn có đúng một dòng trong `kitchen_orders`.
+- **Tên Usecase:** Hoàn trả nguyên liệu, ghi hao hụt và chốt đã dùng
+- **Mô tả Usecase:** Chức năng cho phép Kho thực thi lệnh nguyên liệu gửi từ Bếp trung tâm để chốt tiêu thụ khi bắt đầu nấu, hoàn trả lượng đang giữ khi hủy phiếu hoặc ghi nhận hao hụt kèm bật cờ kiểm kho nếu Bếp báo nguyên liệu hỏng.
+- **Tác nhân chính:** Inventory Service (tiến trình xử lý lệnh tự động)
+- **Tác nhân phụ:** Kitchen Service (gửi lệnh nguyên liệu và nhận thông báo cờ kiểm kho)
+- **Điều kiện bắt đầu (Pre-Condition):** Bếp trung tâm đã chuyển một phiếu sang Đang nấu, Đã hủy hoặc Từ chối và phát lệnh nguyên liệu tương ứng.
+- **Điều kiện kết thúc (Post-Condition):** Hồ sơ giữ kho chuyển từ Đang giữ sang Đã dùng hoặc Đã trả; từng dòng nguyên liệu giữ được đóng đúng theo trạng thái tiêu thụ, hoàn trả hoặc hao hụt.
 - **Trình tự các sự kiện:**
-  1. Chèn dòng giữ chỗ `CHUA_CO` nếu chưa có, khóa dòng (`SELECT ... FOR UPDATE`).
-  2. `OrderReserved`: chưa có bản ghi thì tạo phiếu `CHO_NAU` với `reserved`; bản ghi `HUY_CHO_DON` có chi nhánh gốc trong danh sách yêu cầu hủy thì chuyển `DA_HUY` và gửi lệnh hoàn kho; không có thì bỏ các yêu cầu đó, tạo phiếu và ghi cảnh báo `HUY_SAI_CHI_NHANH`.
-  3. `OrderFailed`: chưa có bản ghi hoặc `HUY_CHO_DON` thì ghi `THAT_BAI`.
-  4. Đơn đã ở trạng thái kết thúc: trả lại kết quả cũ cho chi nhánh gốc, không gửi lệnh hoàn kho lần hai.
-- **Các yêu cầu phi chức năng:** mỗi đơn chỉ một bản ghi (BR8); không bỏ qua tin Thất bại (điều cấm 11).
-- **Biểu đồ hoạt động:**
+  1. Tiến trình nhận lệnh kiểm tra mã chống trùng và thực hiện cập nhật có điều kiện chuyển hồ sơ giữ kho từ Đang giữ sang trạng thái đích (Đã dùng hoặc Đã trả).
+  2. Nếu không có bản ghi nào thay đổi: trường hợp hồ sơ đã đóng hợp lệ trước đó thì bỏ qua an toàn; trường hợp đơn chưa từng giữ hoặc trước đó thất bại thì ghi cảnh báo Lệnh không khớp và giữ nguyên số lượng tồn kho.
+  3. Đối với lệnh chốt tiêu thụ khi Bếp bắt đầu nấu, toàn bộ lượng nguyên liệu của đơn chuyển từ Đang giữ sang Đã dùng.
+  4. Đối với lệnh hoàn kho, nếu Bếp báo lý do Nguyên liệu hỏng kèm danh sách nguyên liệu cụ thể, các nguyên liệu hỏng chuyển từ Đang giữ sang Hao hụt, đồng thời bật cờ Cần kiểm kho và phát thông báo sang Bếp; những nguyên liệu còn lại được cộng trả về Khả dụng đúng bằng số lượng đã giữ lúc đầu mà không phụ thuộc việc thay đổi công thức về sau.
+- **Các yêu cầu phi chức năng:** Mỗi lệnh chốt hoặc hoàn nguyên liệu chỉ được áp dụng lên số liệu tồn kho đúng một lần duy nhất dù thông điệp có bị truyền lặp trên mạng.
+- **Biểu đồ hoạt động:** Cơ chế kiểm tra điều kiện chuyển trạng thái và phân nhánh xử lý lệnh Kho thể hiện trên Hình 2.8.
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[Chèn CHUA_CO nếu chưa có, khóa dòng] --> b{Loại tin}
-  b -- OrderReserved --> c{Trạng thái hiện tại}
-  c -- CHUA_CO --> c1[Tạo phiếu CHO_NAU] --> z((Kết thúc))
-  c -- HUY_CHO_DON, chi nhánh gốc có yêu cầu hủy --> c2[DA_HUY, outbox: ReleaseRequested, OrderCancelled] --> z
-  c -- HUY_CHO_DON, không có --> c3[Bỏ yêu cầu hủy, tạo CHO_NAU, cảnh báo HUY_SAI_CHI_NHANH] --> z
-  c -- CHO_NAU hoặc DANG_NAU --> z
-  c -- trạng thái kết thúc --> r[Trả lại kết quả cũ] --> z
-  b -- OrderFailed --> d{Trạng thái hiện tại}
-  d -- CHUA_CO hoặc HUY_CHO_DON --> d1[Ghi THAT_BAI] --> z
-  d -- trạng thái kết thúc --> r
-  d -- CHO_NAU hoặc DANG_NAU --> z
-```
+![Hình 2.8. Biểu đồ hoạt động GD-06: Hoàn trả, ghi nhận hao hụt và đã dùng nguyên liệu](images/hinh-2-8-hd-hoan-hao-hut.png)
 
-##### 2.2.2. Quyết định yêu cầu hủy - giao dịch
+#### 3.2.2. Quản lý tồn kho
 
-- **Tên Usecase:** Quyết định yêu cầu hủy
-- **Mô tả Usecase:** Chức năng cho phép Kitchen Service quyết định một yêu cầu hủy đơn do chi nhánh gửi; Bếp là bên duy nhất quyết định hủy một đơn đã gửi đi (BR7).
-- **Tác nhân chính:** Kitchen Service (tự động, tin `CancelRequested` trên `cancel-events.<branch>`). **Tác nhân phụ:** chi nhánh gửi yêu cầu, chi nhánh gốc, Inventory Service (nhận lệnh hoàn kho).
-- **Điều kiện bắt đầu (Pre-Condition):** thu ngân hoặc khách hàng đã yêu cầu hủy một đơn mà tin tạo đơn đã được thử gửi (BR9).
-- **Điều kiện kết thúc (Post-Condition):** đơn có đúng một dòng trong `kitchen_orders`; câu trả lời cho chi nhánh nằm trong outbox của Bếp.
+##### GD-07. Tra cứu tồn kho, cảnh báo kiểm kho và độ trễ đọc tin
+
+- **Tên Usecase:** Tra cứu tồn kho, cảnh báo kiểm kho và độ trễ đọc tin
+- **Mô tả Usecase:** Chức năng cho phép Nhân viên Kho và Quản lý vận hành theo dõi bốn chỉ số tồn kho của từng nguyên liệu, xem danh sách cảnh báo bất thường và giám sát độ trễ xử lý tin của cụm Kho.
+- **Tác nhân chính:** Nhân viên Kho, Quản lý vận hành
+- **Tác nhân phụ:** Apache Kafka (đọc thông tin vị trí đọc tin của cụm Kho)
+- **Điều kiện bắt đầu (Pre-Condition):** Dịch vụ Kho trung tâm đang hoạt động.
+- **Điều kiện kết thúc (Post-Condition):** Trả về dữ liệu chỉ đọc phục vụ hiển thị, không làm biến đổi tồn kho hay trạng thái đơn.
 - **Trình tự các sự kiện:**
-  1. Lấy chi nhánh gửi từ tên topic; chèn dòng `CHUA_CO` nếu chưa có, khóa dòng.
-  2. Đã biết chi nhánh gốc mà yêu cầu đến từ chi nhánh khác: bỏ qua, không trả lời, ghi cảnh báo `HUY_SAI_CHI_NHANH`.
-  3. Chưa có đơn (`CHUA_CO`): tạo bản ghi Chờ hủy `HUY_CHO_DON`, ghi chi nhánh và lý do, trả cam kết `CancelPending` ("bếp sẽ không nấu") cho chi nhánh hỏi. Không bao giờ trả Đã hủy cho đơn chưa tới.
-  4. Đang Chờ hủy: thêm chi nhánh mới vào danh sách; yêu cầu lặp lại được trả `CancelPending` lần nữa, lý do đầu tiên được giữ.
-  5. Chờ nấu (`CHO_NAU`): chuyển `DA_HUY` (khách hủy), ghi `ReleaseRequested` tới Kho và `OrderCancelled` tới chi nhánh gốc.
-  6. Đang nấu hoặc Hoàn tất: giữ nguyên, trả `CancelRejected` ("Không hủy được: bếp đã bắt đầu nấu").
-  7. Đã hủy hoặc Thất bại: trả lại kết quả cũ; không bao giờ gửi lệnh hoàn kho lần hai.
-- **Các yêu cầu phi chức năng:** hủy và Bắt đầu nấu cùng lúc thì đúng một thao tác thắng (kịch bản 3); hai instance nhận đơn và yêu cầu hủy cùng lúc chỉ tạo một bản ghi (kịch bản 28); Bếp tắt rồi bật lại xử lý đủ mọi tin còn trong Kafka, không mất, không trùng (kịch bản 25).
-- **Biểu đồ hoạt động:**
+  1. Màn hình Kho truy xuất danh sách nguyên liệu kèm bốn chỉ số Khả dụng, Đang giữ, Đã dùng, Hao hụt và cờ Cần kiểm kho (ưu tiên các nguyên liệu đang có cờ kiểm kho lên đầu danh sách).
+  2. Ở góc nhìn giám sát, hệ thống lấy tối đa 100 cảnh báo mới nhất (Cần kiểm tra, Lệnh không khớp) đồng thời đối chiếu số lượng bản tin chờ đọc tại cụm truyền tin, đánh dấu cảnh báo chậm nếu có bản tin tồn đọng lâu hơn 5 phút.
+- **Các yêu cầu phi chức năng:** Việc đo độ trễ sử dụng truy vấn siêu dữ liệu tách biệt hoàn toàn với phiên xử lý đơn nên không gây xáo trộn phân chia tải của cụm Kho; kết quả đo được giữ đệm ngắn hạn (3 giây) để tránh dồn tải khi giao diện làm mới tự động.
+- **Biểu đồ hoạt động:** Ba nhánh tra cứu tồn kho, cảnh báo và độ trễ xử lý được trình bày trên Hình 2.9.
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[Lấy chi nhánh gửi từ topic; chèn CHUA_CO nếu chưa có; khóa dòng]
-  a --> b{Đã biết chi nhánh gốc và khác chi nhánh gửi?}
-  b -- có --> w[Bỏ qua, ghi cảnh báo HUY_SAI_CHI_NHANH] --> z((Kết thúc))
-  b -- không --> c{Trạng thái hiện tại}
-  c -- CHUA_CO --> c1[Tạo HUY_CHO_DON, ghi chi nhánh và lý do] --> p[Outbox: CancelPending tới chi nhánh hỏi] --> z
-  c -- HUY_CHO_DON --> c2[Thêm chi nhánh nếu chưa có] --> p
-  c -- CHO_NAU --> c3[Chuyển DA_HUY] --> r[Outbox: ReleaseRequested tới Kho, OrderCancelled tới chi nhánh gốc] --> z
-  c -- DANG_NAU hoặc HOAN_TAT --> c4[Outbox: CancelRejected tới chi nhánh gốc] --> z
-  c -- DA_HUY hoặc THAT_BAI --> c5[Trả lại kết quả cũ] --> z
-```
+![Hình 2.9. Biểu đồ hoạt động GD-07: Xem tồn kho, cảnh báo và độ trễ consumer Kho](images/hinh-2-9-hd-xem-ton-kho.png)
 
-##### 2.2.3. Nhận cờ kiểm kho - giao dịch
+##### GD-08. Nhập bổ sung tồn kho nguyên liệu
 
-- **Tên Usecase:** Nhận cờ kiểm kho
-- **Mô tả Usecase:** Chức năng cho phép Kitchen Service ghi nhận nguyên liệu bị bật hoặc gỡ cờ kiểm kho để hiển thị cảnh báo trên phiếu.
-- **Tác nhân chính:** Kitchen Service (tự động, tin `IngredientCheckChanged` trên `menu-events`). **Tác nhân phụ:** Inventory Service.
-- **Điều kiện bắt đầu:** Kho bật hoặc gỡ cờ một nguyên liệu. **Điều kiện kết thúc:** `flagged_ingredients` giữ trạng thái có version lớn nhất đã nhận.
-- **Trình tự các sự kiện:** 1. Đọc `ingredient_id`, `needs_check`, `epoch`, `seq`. 2. Ghi đè dòng của nguyên liệu chỉ khi (`epoch`, `seq`) mới lớn hơn. 3. Commit; danh sách phiếu lần sau hiển thị cảnh báo theo cờ mới.
-- **Các yêu cầu phi chức năng:** tin đến muộn với version nhỏ hơn không đè tin mới hơn.
-- **Biểu đồ hoạt động:**
-
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[Đọc ingredient_id, needs_check, epoch, seq] --> b{Version mới lớn hơn version đang giữ?}
-  b -- có --> c[Ghi đè flagged_ingredients] --> z((Kết thúc))
-  b -- không --> z
-```
-
-#### 2.3. Theo dõi cảnh báo bếp - use case
-
-##### 2.3.1. Xem cảnh báo và độ trễ consumer - giao dịch
-
-- **Tên Usecase:** Xem cảnh báo và độ trễ consumer
-- **Mô tả Usecase:** Chức năng cho phép nhân viên bếp và người vận hành xem các cảnh báo Luồng D của Bếp và biết Bếp có đọc tin kịp không.
-- **Tác nhân chính:** Nhân viên bếp, người vận hành. **Tác nhân phụ:** Kafka.
-- **Điều kiện bắt đầu:** không có. **Điều kiện kết thúc:** không có.
+- **Tên Usecase:** Nhập bổ sung tồn kho nguyên liệu
+- **Mô tả Usecase:** Chức năng cho phép Nhân viên Kho bổ sung lượng tồn kho khả dụng cho một nguyên liệu và kích hoạt đánh giá lại trạng thái còn/hết của các món liên quan.
+- **Tác nhân chính:** Nhân viên Kho
+- **Tác nhân phụ:** Các kênh bán hàng (nhận cập nhật nếu có món chuyển lại sang Còn hàng)
+- **Điều kiện bắt đầu (Pre-Condition):** Nguyên liệu cần nhập đã tồn tại trong danh mục tồn kho.
+- **Điều kiện kết thúc (Post-Condition):** Lượng Khả dụng tăng đúng bằng số lượng nhập vào; cờ kiểm kho hiện có giữ nguyên trạng thái.
 - **Trình tự các sự kiện:**
-  1. `GET /alerts` (lọc được theo `kind`): tối đa 100 cảnh báo mới nhất: `CAN_KIEM_TRA` (tin hỏng, đơn cần kiểm tra) và `HUY_SAI_CHI_NHANH` (yêu cầu hủy đến từ một chi nhánh không phải chi nhánh gốc của đơn; Bếp bỏ qua yêu cầu đó).
-  2. `GET /monitor`: như giao dịch 1.4.1, cho các topic Bếp đọc (`kitchen-orders`, `cancel-events.*`, `menu-events`).
-- **Các yêu cầu phi chức năng:** như giao dịch 1.4.1; yêu cầu hủy sai chi nhánh bị bỏ qua, phiếu của chi nhánh gốc vẫn vào Chờ nấu, và có cảnh báo (kịch bản 34).
-- **Biểu đồ hoạt động:** như giao dịch 1.4.1, với các loại cảnh báo của Bếp.
+  1. Nhân viên Kho chọn nguyên liệu cần nhập, điền số lượng bổ sung và xác nhận nhập kho.
+  2. Hệ thống kiểm tra số lượng nhập là số dương có tối đa ba chữ số thập phân và kiểm tra mã nguyên liệu có tồn tại; nếu sai định dạng hoặc không tồn tại thì từ chối yêu cầu.
+  3. Dịch vụ khóa dòng nguyên liệu, cộng lượng nhập vào cột Khả dụng, tính lại trạng thái các món sử dụng nguyên liệu này và trả về thông tin tồn kho sau cập nhật.
+- **Các yêu cầu phi chức năng:** Thao tác cộng tồn kho và tính lại trạng thái món diễn ra trong cùng một giao dịch theo đúng thứ tự khóa tránh deadlock.
+- **Biểu đồ hoạt động:** Quy trình kiểm tra đầu vào và cập nhật bổ sung tồn kho thể hiện trên Hình 2.10.
 
-### 3. Đặt món tại chi nhánh - module
+![Hình 2.10. Biểu đồ hoạt động GD-08: Nhập kho nguyên liệu](images/hinh-2-10-hd-nhap-kho.png)
 
-POS01, POS02 và Online chạy cùng một mã nguồn (Local Order Service, Online Order Service), phân biệt bằng `BRANCH_ID`. Chi nhánh chỉ tự quyết định trạng thái trong một trường hợp: hủy một đơn mà tin tạo đơn chưa từng được thử gửi (BR9).
+##### GD-09. Xác nhận kiểm kho xong và đối chiếu tồn thực tế
 
-#### 3.1. Đặt đơn - use case
-
-##### 3.1.1. Xem danh mục món - giao dịch
-
-- **Tên Usecase:** Xem danh mục món
-- **Mô tả Usecase:** Chức năng cho phép thu ngân hoặc khách hàng online xem danh mục món để chọn khi đặt đơn.
-- **Tác nhân chính:** Thu ngân, khách hàng online. **Tác nhân phụ:** không có.
-- **Điều kiện bắt đầu:** dịch vụ chi nhánh đã khởi động; mỗi lần khởi động nạp (thêm hoặc cập nhật) danh mục từ `backend/seed/menu.json` vào bảng `dishes`. **Điều kiện kết thúc:** không có.
-- **Trình tự các sự kiện:** 1. Mở màn hình đặt món. 2. Màn hình gọi `GET /dishes`. 3. Hệ thống trả các món trong `dishes` của chính chi nhánh.
-- **Các yêu cầu phi chức năng:** vẫn trả lời khi chi nhánh mất kết nối Kafka (kịch bản 10), vì chỉ đọc CSDL của chi nhánh.
-- **Biểu đồ hoạt động:**
-
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[Mở màn hình đặt món] --> b[GET /dishes] --> c[Đọc bảng dishes của chi nhánh] --> d[Hiển thị danh mục] --> z((Kết thúc))
-```
-
-##### 3.1.2. Tạo đơn - giao dịch
-
-- **Tên Usecase:** Tạo đơn
-- **Mô tả Usecase:** Chức năng cho phép thu ngân hoặc khách hàng online tạo một đơn mới; đơn được lưu ở trạng thái Chờ kho và xếp vào hàng chờ gửi, kể cả khi mất mạng.
-- **Tác nhân chính:** Thu ngân, khách hàng online. **Tác nhân phụ:** không có (Kho nhận đơn sau, qua Kafka).
-- **Điều kiện bắt đầu:** đã chọn ít nhất một món. **Điều kiện kết thúc:** đơn `CHO_KHO` trong `orders` và mục `TAO_DON` chưa thử gửi trong `outbox_events`, ghi trong cùng một giao dịch.
+- **Tên Usecase:** Xác nhận kiểm kho xong và đối chiếu tồn thực tế
+- **Mô tả Usecase:** Chức năng cho phép Nhân viên Kho xác nhận hoàn tất kiểm đếm thực tế một nguyên liệu đang bị gắn cờ, cập nhật lại lượng khả dụng và gửi thông báo để Bếp gỡ cảnh báo trên các phiếu chờ.
+- **Tác nhân chính:** Nhân viên Kho
+- **Tác nhân phụ:** Kitchen Service (nhận sự kiện gỡ cờ kiểm kho), các kênh bán hàng (nhận trạng thái món cập nhật)
+- **Điều kiện bắt đầu (Pre-Condition):** Nguyên liệu tồn tại trong danh mục kho (thường đang gắn cờ Cần kiểm kho sau khi Bếp báo hỏng).
+- **Điều kiện kết thúc (Post-Condition):** Cờ Cần kiểm kho được tắt; nếu có nhập số đếm thực tế, lượng Khả dụng mới bằng số lượng thực đếm trừ đi phần Đang giữ; sự kiện gỡ cờ mang phiên bản tăng đơn điệu được ghi nhận để phát sang Bếp.
 - **Trình tự các sự kiện:**
-  1. Màn hình gọi `POST /orders` với `items[{dish_id, quantity}]`.
-  2. Hệ thống kiểm tra dữ liệu: không có món, số lượng không phải số nguyên dương, món không có trong `dishes` thì trả 400 và không lưu gì (BR9).
-  3. Sinh `order_id`, ghi giờ tạo, chép tên món vào `items`.
-  4. Ghi đơn `CHO_KHO` và mục `TAO_DON` (tin `OrderCreated` tới `order-events.<branch>`), commit, trả 201.
-- **Các yêu cầu phi chức năng:** không chờ Kho; kết quả Đã giữ hoặc Thất bại đến sau qua `status-events.<branch>`. Màn hình hiện "Chưa gửi, bếp chưa nhận" khi mục chưa được thử gửi (BR5).
-- **Biểu đồ hoạt động:**
+  1. Nhân viên Kho chọn nguyên liệu đang gắn cờ, nhập tùy chọn tổng lượng tồn đếm được thực tế và xác nhận hoàn tất kiểm kho.
+  2. Dịch vụ kiểm tra nguyên liệu tồn tại, khóa bản ghi nguyên liệu và đối chiếu nếu lượng thực đếm nhỏ hơn phần Đang giữ thì từ chối thao tác vì xung đột, yêu cầu xử lý xong các phiếu đang giữ nguyên liệu trước.
+  3. Nếu đạt điều kiện, hệ thống cập nhật lượng Khả dụng mới (nếu có số đếm), tắt cờ Cần kiểm kho, tăng bộ đếm phiên bản để ghi nhận sự kiện gỡ cờ tới Bếp và tính lại trạng thái các món liên quan.
+- **Các yêu cầu phi chức năng:** Số phiên bản đính kèm thông điệp gỡ cờ luôn lớn hơn thông điệp bật cờ trước đó, bảo đảm thông điệp trễ mạng không thể làm Bếp hiển thị sai cờ cảnh báo.
+- **Biểu đồ hoạt động:** Luồng đối chiếu lượng giữ hiện hữu và gỡ cờ kiểm kho được mô tả trên Hình 2.11.
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[POST /orders] --> b{Dữ liệu hợp lệ?}
-  b -- không --> e[400, không lưu gì] --> z((Kết thúc))
-  b -- có --> c[Sinh order_id, ghi giờ tạo] --> d[Ghi orders CHO_KHO và outbox_events TAO_DON trong một giao dịch] --> f[201] --> z
-```
+![Hình 2.11. Biểu đồ hoạt động GD-09: Xác nhận kiểm kho xong](images/hinh-2-11-hd-kiem-kho.png)
 
-#### 3.2. Hủy đơn - use case
+#### 3.2.3. Đồng bộ trạng thái thực đơn
 
-##### 3.2.1. Yêu cầu hủy đơn - giao dịch
+##### GD-10. Tính lại, công bố trạng thái món và cấp ảnh chụp thực đơn
 
-- **Tên Usecase:** Yêu cầu hủy đơn
-- **Mô tả Usecase:** Chức năng cho phép thu ngân hoặc khách hàng online yêu cầu hủy một đơn với lý do cố định. Đơn chưa từng được thử gửi thì chi nhánh hủy ngay; đơn đã thử gửi thì yêu cầu được gửi cho Bếp quyết định.
-- **Tác nhân chính:** Thu ngân, khách hàng online. **Tác nhân phụ:** Kitchen Service (quyết định khi đơn đã thử gửi).
-- **Điều kiện bắt đầu:** đơn chưa ở trạng thái kết thúc. **Điều kiện kết thúc:** đơn `DA_HUY` (hủy tại chỗ) hoặc cờ `DANG_YEU_CAU` cùng mục `HUY` trong hàng chờ gửi.
+- **Tên Usecase:** Tính lại, công bố trạng thái món và cấp ảnh chụp thực đơn
+- **Mô tả Usecase:** Chức năng cho phép Kho tự động tính lại trạng thái Còn hàng / Hết hàng / Tạm ẩn của các món ăn sau mỗi biến động tồn kho, phát thông báo kèm số phiên bản tăng dần, đồng thời cung cấp ảnh chụp thực đơn toàn phần và hỗ trợ nâng thế hệ phiên bản khi phục hồi dữ liệu.
+- **Tác nhân chính:** Inventory Service, các Kênh bán hàng
+- **Tác nhân phụ:** Kitchen Service (nhận lại trạng thái cờ kiểm kho khi nâng thế hệ)
+- **Điều kiện bắt đầu (Pre-Condition):** Có giao dịch làm thay đổi tồn kho/cờ kiểm kho, hoặc một điểm bán vừa khởi động lại cần đồng bộ toàn phần.
+- **Điều kiện kết thúc (Post-Condition):** Trạng thái các món tại Kho khớp với tồn kho; món có thay đổi phát sự kiện cập nhật mang phiên bản mới; sau khi nâng thế hệ, mọi món mang số thế hệ mới nhất.
 - **Trình tự các sự kiện:**
-  1. Chọn lý do (`CHANGED_MIND`, `WAITED_TOO_LONG`, `WRONG_ORDER_ENTERED`); màn hình gọi `POST /orders/{id}/cancel`. Lý do khác: 400.
-  2. Khóa dòng `orders` (`SELECT ... FOR UPDATE`). Không có đơn: 404. Đơn đã kết thúc: 409. Đã có yêu cầu đang chờ: 202, không thêm mục `HUY` thứ hai.
-  3. Xóa mục `TAO_DON` của đơn với điều kiện `attempted = FALSE`. Xóa được: đơn chưa từng vào Kafka, chuyển `DA_HUY` với lý do đã chọn, trả 200.
-  4. Không xóa được (đã thử gửi, kể cả khi lần gửi đó báo lỗi): ghi mục `HUY` (tin `CancelRequested` tới `cancel-events.<branch>`) xếp sau mục tạo đơn, bật cờ `DANG_YEU_CAU` kèm giờ yêu cầu, trả 202. Trạng thái chính chưa đổi.
-- **Các yêu cầu phi chức năng:** bấm hủy đúng lúc bộ gửi nhặt mục tạo đơn thì đúng một bên thắng (kịch bản 37); hủy khi mất mạng mà đơn chưa thử gửi thì đơn chắc chắn không được nấu (kịch bản 10); đơn đã thử gửi thì yêu cầu hủy không phải cam kết (kịch bản 36).
-- **Biểu đồ hoạt động:**
+  1. Trong cùng giao dịch làm đổi tồn kho, dịch vụ khóa danh sách trạng thái món liên quan theo thứ tự mã món tăng dần để đánh giá điều kiện phục vụ.
+  2. Món đạt trạng thái Còn hàng khi mọi nguyên liệu trong công thức đều đủ cho ít nhất một suất và không bị gắn cờ kiểm kho; chuyển Hết hàng nếu thiếu nguyên liệu hoặc đang kiểm kho; chuyển Tạm ẩn khi chưa khai báo công thức.
+  3. Nếu trạng thái món thay đổi so với trước, dịch vụ lấy số phiên bản tăng đơn điệu mới, cập nhật bảng trạng thái món và đẩy thông điệp cập nhật tới các kênh; định kỳ mỗi 60 giây, Kho cũng phát tín hiệu nhịp để các kênh xác nhận kết nối.
+  4. Khi điểm bán yêu cầu đồng bộ toàn phần, Kho cung cấp ảnh chụp toàn bộ trạng thái món kèm phiên bản hiện hành; khi quản trị viên kích hoạt nâng thế hệ phiên bản mới, Kho đánh số thế hệ tiếp theo, tính lại toàn bộ thực đơn và gửi đồng bộ lại danh sách cờ kiểm kho cho Bếp.
+- **Các yêu cầu phi chức năng:** Thứ tự khóa cố định (đơn hàng → nguyên liệu → trạng thái món → bộ đếm phiên bản) loại bỏ xung đột khóa giữa nhiều giao dịch chạy song song; các kênh bán hàng chỉ ghi đè bộ đệm khi nhận được phiên bản mới hơn bản đang giữ.
+- **Biểu đồ hoạt động:** Hai nhánh cập nhật gia tăng và đồng bộ toàn phần/nâng thế hệ thể hiện trên Hình 2.12.
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[Chọn lý do, POST /orders/id/cancel] --> b{Lý do thuộc nhóm khách hủy?}
-  b -- không --> e0[400] --> z((Kết thúc))
-  b -- có --> c[Khóa dòng orders] --> d{Trạng thái và cờ}
-  d -- không có đơn --> e1[404] --> z
-  d -- đã kết thúc --> e2[409] --> z
-  d -- đang có yêu cầu --> e3[202, không thêm mục] --> z
-  d -- còn lại --> f{Xóa được TAO_DON chưa thử gửi?}
-  f -- có --> g[DA_HUY tại chỗ, 200] --> z
-  f -- không --> h[Ghi mục HUY sau TAO_DON, bật cờ DANG_YEU_CAU, 202] --> z
-```
+![Hình 2.12. Biểu đồ hoạt động GD-10: Tính, công bố trạng thái món ăn và snapshot](images/hinh-2-12-hd-cong-bo-menu.png)
 
-#### 3.3. Theo dõi đơn - use case
+### 3.3. Module 3: Điều phối chế biến tại Bếp trung tâm (Kitchen)
 
-##### 3.3.1. Xem danh sách đơn và trạng thái - giao dịch
+Dịch vụ Bếp trung tâm hợp nhất toàn bộ đơn hàng đã giữ nguyên liệu thành công từ cả kênh tại quầy và kênh trực tuyến thành một hàng đợi phiếu chế biến thống nhất, đồng thời đóng vai trò trọng tài duy nhất phân xử mọi lệnh hủy phát sinh sau khi đơn đã rời điểm bán.
 
-- **Tên Usecase:** Xem danh sách đơn và trạng thái
-- **Mô tả Usecase:** Chức năng cho phép thu ngân hoặc khách hàng online xem các đơn của chi nhánh với trạng thái, cờ yêu cầu hủy, thông báo của Bếp và tình trạng gửi.
-- **Tác nhân chính:** Thu ngân, khách hàng online. **Tác nhân phụ:** không có.
-- **Điều kiện bắt đầu:** không có. **Điều kiện kết thúc:** không có.
-- **Trình tự các sự kiện:** 1. Màn hình gọi `GET /orders` hoặc `GET /orders/{id}`. 2. Hệ thống trả đơn kèm `send_state` của mục tạo đơn và `cancel_send_state` của mục hủy gần nhất: `CHUA_GUI` (chưa gửi, bếp chưa nhận), `DANG_GUI` (đang gửi, chưa biết bếp đã nhận chưa), `DA_GUI` (Kafka đã xác nhận).
-- **Các yêu cầu phi chức năng:** Kafka xác nhận không có nghĩa Kho đã nhận đơn (BR9); trạng thái chỉ đổi khi có tin trạng thái.
-- **Biểu đồ hoạt động:**
+#### 3.3.1. Tiếp nhận đơn và phân xử hủy
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[GET /orders] --> b[Đọc orders và mục gửi của từng đơn] --> c[Hiển thị trạng thái, cờ hủy, tình trạng gửi] --> z((Kết thúc))
-```
+##### GD-11. Hợp nhất đơn từ Kho, lập phiếu bếp và phân xử yêu cầu hủy
 
-#### 3.4. Giám sát chi nhánh - use case
-
-##### 3.4.1. Xem kết nối, số tin chờ gửi, cảnh báo - giao dịch
-
-- **Tên Usecase:** Xem kết nối, số tin chờ gửi, cảnh báo
-- **Mô tả Usecase:** Chức năng cho phép thu ngân xem các mục Luồng D của chi nhánh. Hệ thống chỉ cảnh báo, không tự hủy đơn vì chờ lâu (Q6).
-- **Tác nhân chính:** Thu ngân. **Tác nhân phụ:** không có.
-- **Điều kiện bắt đầu:** không có. **Điều kiện kết thúc:** không có.
-- **Trình tự các sự kiện:** 1. Màn hình gọi `GET /monitor`. 2. Hệ thống trả: kết quả lần thăm dò Kafka gần nhất; số mục chưa được Kafka xác nhận; đơn Chờ kho quá N = 10 phút (kèm nút Yêu cầu hủy trên màn hình); đơn còn trong hàng chờ gửi khi còn dưới 1 giờ nữa là quá X = 4 giờ; đơn có cờ yêu cầu hủy kèm thời gian đã chờ; các tin trạng thái không đọc được hoặc loại lạ (bảng `alerts`, loại `CAN_KIEM_TRA`).
-- **Các yêu cầu phi chức năng:** kịch bản 53 (Kho tắt, đơn chờ quá N phút) và 54 (mất mạng, đơn sắp quá hạn).
-- **Biểu đồ hoạt động:**
-
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[GET /monitor] --> b[Kết quả thăm dò Kafka gần nhất]
-  b --> c[Đếm mục chưa gửi xong] --> d[Đơn CHO_KHO quá N phút] --> e[Đơn trong hàng chờ sắp quá X giờ] --> f[Đơn có cờ yêu cầu hủy] --> g[Cảnh báo tin trạng thái hỏng] --> z((Kết thúc))
-```
-
-#### 3.5. Đồng bộ đơn với Kho và Bếp - use case
-
-##### 3.5.1. Gửi hàng chờ lên Kafka - giao dịch
-
-- **Tên Usecase:** Gửi hàng chờ lên Kafka
-- **Mô tả Usecase:** Chức năng cho phép dịch vụ chi nhánh gửi các mục trong hàng chờ (tạo đơn, yêu cầu hủy) lên Kafka, giữ thứ tự theo từng đơn.
-- **Tác nhân chính:** Local Order Service (tự động, luồng chạy nền). **Tác nhân phụ:** Kafka.
-- **Điều kiện bắt đầu:** hàng chờ có mục chưa được xác nhận. **Điều kiện kết thúc:** mục được Kafka xác nhận có `sent_at`; mục chưa được xác nhận vẫn nằm trong hàng chờ.
+- **Tên Usecase:** Hợp nhất đơn từ Kho, lập phiếu bếp và phân xử yêu cầu hủy
+- **Mô tả Usecase:** Chức năng cho phép Bếp trung tâm tiếp nhận kết quả giữ kho để lập phiếu nấu, đồng thời xử lý nhất quán mọi tình huống lệnh hủy từ điểm bán đến trước, đến sau hoặc đến cùng lúc với thông tin đơn hàng.
+- **Tác nhân chính:** Kitchen Service (tiến trình xử lý sự kiện tự động)
+- **Tác nhân phụ:** Inventory Service, các kênh bán hàng gốc
+- **Điều kiện bắt đầu (Pre-Condition):** Có sự kiện kết quả giữ kho gửi tới Bếp hoặc yêu cầu hủy gửi từ một điểm bán.
+- **Điều kiện kết thúc (Post-Condition):** Mỗi đơn hàng có duy nhất một hồ sơ phiếu tại Bếp; các thông điệp hoàn kho và phản hồi kết quả về đúng kênh tạo đơn được ghi nguyên tử vào hàng chờ gửi.
 - **Trình tự các sự kiện:**
-  1. Lấy mục chưa gửi có `id` nhỏ nhất của mỗi đơn, nên mục hủy không bao giờ đi trước mục tạo đơn của cùng đơn, còn các đơn khác không bị chặn.
-  2. Có mục chưa có cờ: thăm dò kết nối Kafka (lấy metadata của cụm, chờ tối đa 2 giây). Thăm dò thất bại: không đặt cờ, không gửi; đơn vẫn hủy tại chỗ được.
-  3. Thăm dò vừa thành công: đặt `attempted = TRUE` có điều kiện `sent_at IS NULL` và commit trước khi gửi. Không còn dòng: mục đã bị hủy tại chỗ, bỏ qua.
-  4. Gửi với `acks=all`; mục được xác nhận thì ghi `sent_at`. Mục lỗi giữ cờ và được gửi lại với thời gian chờ tăng dần, không bao giờ bị bỏ.
-- **Các yêu cầu phi chức năng:** mạng chập chờn lâu không làm mất mục nào, và khi có mạng lại thì gửi đúng thứ tự theo đơn (kịch bản 12); broker leader chết khi đang gửi thì không mất mục đã được xác nhận (kịch bản 31).
-- **Biểu đồ hoạt động:**
+  1. Tiến trình nhận tin kiểm tra mã sự kiện chống trùng, tạo sẵn bản ghi giữ chỗ nếu chưa từng thấy mã đơn rồi khóa độc quyền hồ sơ phiếu tại Bếp.
+  2. Khi nhận kết quả giữ kho thành công: nếu đơn đang ở trạng thái Chưa có, Bếp lập phiếu Chờ nấu kèm phần nguyên liệu đã giữ; nếu trước đó đã ghi nhận yêu cầu hủy từ đúng kênh tạo đơn (Hủy chờ đơn), Bếp chốt thẳng Đã hủy, phát lệnh hoàn kho sang Kho và báo Đã hủy về kênh gốc; nếu phiếu đã kết thúc từ trước thì chỉ phản hồi lại kết quả cũ.
+  3. Khi nhận kết quả từ chối do hết hàng, Bếp cập nhật hồ sơ sang Thất bại và đóng các ghi chú hủy đang chờ (nếu có).
+  4. Khi nhận yêu cầu hủy từ điểm bán, hệ thống xác thực tên kênh gửi dựa trên luồng sự kiện tiếp nhận (không tin vào thông tin tự khai bên trong thông điệp); nếu không khớp với kênh đã tạo đơn, hệ thống bỏ qua lệnh hủy và ghi nhận Cảnh báo hủy sai kênh.
+  5. Với yêu cầu hủy đúng kênh: nếu Bếp Chưa có thông tin đơn, hệ thống đánh dấu Hủy chờ đơn và phản hồi "Bếp sẽ không nấu" (tuyệt đối không tự chốt đã hủy khi chưa thấy đơn); nếu phiếu đang Chờ nấu, Bếp chuyển ngay sang Đã hủy kèm lệnh hoàn kho; nếu phiếu đang Đang nấu hoặc Hoàn tất, Bếp phản hồi Từ chối hủy; nếu đã chốt trước đó thì giữ nguyên kết quả và không phát lệnh hoàn kho lần hai.
+- **Các yêu cầu phi chức năng:** Khóa độc quyền trên hồ sơ phiếu tại Bếp bảo đảm các sự kiện đến đồng thời hoặc đảo thứ tự giữa Kho và điểm bán luôn dẫn tới một kết cục nhất quán tuyệt đối ở cả ba phía.
+- **Biểu đồ hoạt động:** Quy trình phân nhánh tiếp nhận đơn và phân xử yêu cầu hủy tại Bếp thể hiện trên Hình 2.13.
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[Lấy mục chưa gửi nhỏ nhất của mỗi đơn] --> b{Có mục chưa có cờ?}
-  b -- có --> c{Thăm dò Kafka thành công?}
-  c -- không --> h[Giữ nguyên, chờ rồi thử lại] --> z((Kết thúc))
-  c -- có --> d[Đặt attempted = TRUE, commit] --> e[Gửi lên Kafka]
-  b -- không --> e
-  e --> f{Kafka xác nhận?}
-  f -- có --> g[Ghi sent_at] --> z
-  f -- không --> h
-```
+![Hình 2.13. Biểu đồ hoạt động GD-11: Tiếp nhận đơn hợp nhất và phân xử yêu cầu hủy tại Bếp](images/hinh-2-13-hd-phan-xu-bep.png)
 
-##### 3.5.2. Áp dụng trạng thái đơn nhận về theo thứ hạng - giao dịch
+#### 3.3.2. Xử lý phiếu chế biến
 
-- **Tên Usecase:** Áp dụng trạng thái đơn nhận về theo thứ hạng
-- **Mô tả Usecase:** Chức năng cho phép dịch vụ chi nhánh cập nhật đơn theo tin trạng thái của Kho và Bếp trên `status-events.<branch>`, không bao giờ lùi trạng thái (BR3).
-- **Tác nhân chính:** Local Order Service (tự động, consumer). **Tác nhân phụ:** Inventory Service, Kitchen Service.
-- **Điều kiện bắt đầu:** có tin trên topic trạng thái của chi nhánh. **Điều kiện kết thúc:** tin được ghi vào `processed_events` cùng giao dịch với thay đổi (nếu có).
+##### GD-12. Theo dõi danh sách phiếu chế biến và cảnh báo bếp
+
+- **Tên Usecase:** Theo dõi danh sách phiếu chế biến và cảnh báo bếp
+- **Mô tả Usecase:** Chức năng cho phép Nhân viên Bếp quan sát hai cột hàng đợi Chờ nấu và Đang nấu hợp nhất từ mọi nguồn bán hàng, kèm cảnh báo các phiếu có nguyên liệu đang cần kiểm kho và cảnh báo vận hành tại Bếp.
+- **Tác nhân chính:** Nhân viên Bếp
+- **Tác nhân phụ:** Inventory Service (cập nhật cờ kiểm kho theo phiên bản), Apache Kafka
+- **Điều kiện bắt đầu (Pre-Condition):** Dịch vụ Bếp trung tâm đang hoạt động.
+- **Điều kiện kết thúc (Post-Condition):** Màn hình Bếp hiển thị đầy đủ phiếu theo thứ tự thời gian kèm cờ cảnh báo chính xác, không làm thay đổi dữ liệu đơn hàng.
 - **Trình tự các sự kiện:**
-  1. `OrderReserved` (hạng 1), `OrderFailed`, `OrderCancelled`, `OrderCompleted` (hạng 2): cập nhật chỉ khi hạng mới lớn hơn hạng hiện tại; trạng thái kết thúc tắt cờ yêu cầu hủy.
-  2. `CancelPending`: bật dòng "bếp sẽ không nấu" (`BEP_KHONG_NAU`) chỉ khi đơn chưa kết thúc và cờ đang `DANG_YEU_CAU`.
-  3. `CancelRejected`: tắt cờ và ghi thông báo "Không hủy được: bếp đã bắt đầu nấu", ở mọi hạng.
-  4. Tin không đọc được: thử 5 lần rồi chuyển `dlq` và ghi cảnh báo `CAN_KIEM_TRA`; tin loại lạ: ghi cảnh báo và bỏ qua (mục 9 của đặc tả).
-- **Các yêu cầu phi chức năng:** Đã hủy đến trước Đã giữ thì giữ Đã hủy (kịch bản 7); Thất bại tắt cờ, và `CancelPending` đến sau bị bỏ qua (kịch bản 8); tin trùng không gây tác dụng lần hai (BR4).
-- **Biểu đồ hoạt động:**
+  1. Giao diện Bếp tải đồng thời hai danh sách phiếu Chờ nấu và Đang nấu hợp nhất từ các quầy POS và kênh Online, kèm bộ đếm tổng số phiếu mỗi trạng thái.
+  2. Hệ thống đối chiếu danh sách nguyên liệu giữ trên từng phiếu Chờ nấu với bảng nguyên liệu đang bị gắn cờ tại Bếp để gắn nhãn cảnh báo đỏ giúp đầu bếp kiểm tra thực tế.
+  3. Song song đó, khu vực giám sát hiển thị các cảnh báo Hủy sai kênh, Bản tin cần kiểm tra và độ trễ xử lý sự kiện của Bếp.
+- **Các yêu cầu phi chức năng:** Cảnh báo kiểm kho chỉ nhằm nhắc nhân viên Bếp xác minh chất lượng nguyên liệu thực tế trước khi nấu mà không tự động hủy đơn của khách hàng.
+- **Biểu đồ hoạt động:** Quy trình hợp nhất phiếu chế biến và gắn cảnh báo kiểm kho được minh họa trên Hình 2.14.
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a{Loại tin}
-  a -- OrderReserved, OrderFailed, OrderCancelled, OrderCompleted --> b{Hạng mới lớn hơn hạng hiện tại?}
-  b -- có --> b1[Cập nhật trạng thái; hạng 2 thì tắt cờ] --> z((Kết thúc))
-  b -- không --> z
-  a -- CancelPending --> c{Chưa kết thúc và cờ DANG_YEU_CAU?}
-  c -- có --> c1[Cờ BEP_KHONG_NAU] --> z
-  c -- không --> z
-  a -- CancelRejected --> d[Tắt cờ, ghi thông báo bếp đã nấu] --> z
-  a -- không đọc được hoặc loại lạ --> e[Cảnh báo CAN_KIEM_TRA; không đọc được thì vào dlq] --> z
-```
+![Hình 2.14. Biểu đồ hoạt động GD-12: Xem danh sách phiếu chế biến và cảnh báo bếp](images/hinh-2-14-hd-xem-phieu-bep.png)
 
-#### 3.6. Nhân bản đơn về trung tâm - use case
+##### GD-13. Bắt đầu chế biến phiếu bếp
 
-##### 3.6.1. Ghi nhịp nhân bản - giao dịch
-
-- **Tên Usecase:** Ghi nhịp nhân bản
-- **Mô tả Usecase:** Chức năng cho phép dịch vụ chi nhánh đánh dấu thời điểm mà dữ liệu đơn đã được nhân bản về Central Order Replica, để báo cáo quản lý có mốc "dữ liệu tính đến" của từng chi nhánh.
-- **Tác nhân chính:** Local Order Service (tự động, luồng chạy nền). **Tác nhân phụ:** PostgreSQL logical replication.
-- **Điều kiện bắt đầu:** dịch vụ chi nhánh đang chạy. **Điều kiện kết thúc:** dòng duy nhất của chi nhánh trong `replication_heartbeat` mang thời điểm mới.
+- **Tên Usecase:** Bắt đầu chế biến phiếu bếp
+- **Mô tả Usecase:** Chức năng cho phép Nhân viên Bếp xác nhận bắt đầu nấu một phiếu đang chờ, đánh dấu ranh giới không còn hủy được đơn và báo Kho chốt tiêu thụ nguyên liệu.
+- **Tác nhân chính:** Nhân viên Bếp
+- **Tác nhân phụ:** Inventory Service (tiếp nhận lệnh chốt tiêu thụ nguyên liệu)
+- **Điều kiện bắt đầu (Pre-Condition):** Phiếu chế biến tồn tại và đang ở trạng thái Chờ nấu.
+- **Điều kiện kết thúc (Post-Condition):** Phiếu chuyển sang Đang nấu; lệnh chốt tiêu thụ nguyên liệu nằm trong hàng chờ gửi sang Kho; từ thời điểm này mọi yêu cầu hủy đều bị từ chối.
 - **Trình tự các sự kiện:**
-  1. Mỗi 5 giây, một giao dịch ghi `INSERT ... ON CONFLICT (branch_id) DO UPDATE SET beat_at = now()` theo đồng hồ của CSDL chi nhánh.
-  2. Logical replication đưa `orders` và `replication_heartbeat` về `central-db` theo đúng thứ tự commit của chi nhánh.
-  3. CSDL chi nhánh không trả lời: ghi log, thử lại ở nhịp sau; trong lúc đó mốc ở trung tâm đứng yên.
-- **Các yêu cầu phi chức năng:** cắt nhân bản từ một chi nhánh thì chỉ mốc của chi nhánh đó đứng yên; nối lại thì số liệu khớp CSDL chi nhánh (kịch bản 55).
-- **Biểu đồ hoạt động:**
+  1. Nhân viên Bếp chọn phiếu cần chế biến và bấm Bắt đầu nấu.
+  2. Hệ thống khóa độc quyền hồ sơ phiếu tại Bếp; nếu không tìm thấy hoặc phiếu đã bị hủy hay chuyển trạng thái trước đó (ví dụ điểm bán vừa hủy trùng lúc), dịch vụ từ chối thao tác kèm trạng thái mới nhất của phiếu.
+  3. Khi phiếu hợp lệ ở trạng thái Chờ nấu, hệ thống cập nhật sang Đang nấu và ghi đồng thời lệnh chốt đã tiêu thụ nguyên liệu vào hàng chờ gửi sang Kho trong cùng giao dịch.
+- **Các yêu cầu phi chức năng:** Thao tác khóa bản ghi phiếu bảo đảm khi nhân viên Bếp bấm nấu trùng thời điểm có yêu cầu hủy từ quầy hoặc trực tuyến, chỉ một quyết định thắng cuộc và tất cả dịch vụ nhìn thấy cùng một trạng thái.
+- **Biểu đồ hoạt động:** Luồng khóa bản ghi phiếu và phát lệnh tiêu thụ nguyên liệu thể hiện trên Hình 2.15.
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[Chờ 5 giây] --> b{Ghi được replication_heartbeat?}
-  b -- có --> c[beat_at = now của CSDL chi nhánh] --> d[Nhân bản về central-db cùng orders] --> a
-  b -- không --> e[Ghi log] --> a
-```
+![Hình 2.15. Biểu đồ hoạt động GD-13: Bắt đầu nấu phiếu chế biến](images/hinh-2-15-hd-bat-dau-nau.png)
 
-#### 3.7. Xem tình trạng món - use case
+##### GD-14. Từ chối phiếu chế biến và báo nguyên liệu hỏng
 
-##### 3.7.1. Xem menu kèm trạng thái - giao dịch
-
-- **Tên Usecase:** Xem menu kèm trạng thái
-- **Mô tả Usecase:** Chức năng cho phép thu ngân, khách online thấy món nào còn, món nào hết khi tạo đơn (Luồng C).
-- **Tác nhân chính:** Thu ngân, khách hàng online. **Tác nhân phụ:** không có.
-- **Điều kiện bắt đầu:** không có. **Điều kiện kết thúc:** không có; giao dịch không đổi dữ liệu.
+- **Tên Usecase:** Từ chối phiếu chế biến và báo nguyên liệu hỏng
+- **Mô tả Usecase:** Chức năng cho phép Nhân viên Bếp từ chối một phiếu đang chờ nấu với lý do cố định; riêng trường hợp nguyên liệu hỏng bắt buộc chỉ định rõ nguyên liệu nào để Kho ghi hao hụt và bật cờ kiểm kho.
+- **Tác nhân chính:** Nhân viên Bếp
+- **Tác nhân phụ:** Inventory Service (nhận lệnh hoàn kho hoặc ghi hao hụt), kênh gốc tạo đơn (nhận trạng thái Đã hủy)
+- **Điều kiện bắt đầu (Pre-Condition):** Phiếu chế biến đang ở trạng thái Chờ nấu.
+- **Điều kiện kết thúc (Post-Condition):** Phiếu chuyển sang Đã hủy (do Bếp hủy); thông báo hủy về kênh gốc và lệnh hoàn kho/hao hụt tới Kho cùng được ghi vào hàng chờ gửi.
 - **Trình tự các sự kiện:**
-  1. Màn hình gọi `GET /menu`: danh mục món của chi nhánh kèm trạng thái trong `menu_cache`, và cờ `stale` khi không nghe được gì từ Kho quá N = 5 phút.
-  2. Dữ liệu mới: món Hết bị khóa, không chọn được. Dữ liệu cũ hoặc chi nhánh mất mạng: món Hết hiện "Có thể đã hết" và vẫn đặt được, kèm một dòng chung "Tình trạng món có thể đã thay đổi". Món Ẩn không hiện.
-  3. `POST /orders` không kiểm tra `menu_cache`: Kho vẫn là nơi duy nhất từ chối đơn vì nguyên liệu.
-- **Các yêu cầu phi chức năng:** heartbeat đều đặn thì không hiện "Có thể đã hết" dù Kho không đổi tồn kho 10 phút (kịch bản 21).
-- **Biểu đồ hoạt động:**
+  1. Nhân viên Bếp chọn lý do từ chối (Hỏng thiết bị, Thiếu nhân lực hoặc Nguyên liệu hỏng kèm danh sách nguyên liệu bị hỏng trên phiếu) và xác nhận từ chối.
+  2. Hệ thống kiểm tra lý do hợp lệ và xác minh các nguyên liệu báo hỏng phải thuộc phần nguyên liệu đã giữ cho phiếu; nếu sai thì từ chối yêu cầu.
+  3. Hệ thống khóa bản ghi phiếu tại Bếp, kiểm tra lại điều kiện đang Chờ nấu (từ chối nếu đã chuyển sang Đang nấu hoặc đã hủy), chuyển trạng thái sang Đã hủy và ghi đồng thời thông báo hủy về kênh gốc cùng lệnh hoàn kho tới Kho trong cùng giao dịch.
+- **Các yêu cầu phi chức năng:** Kể cả khi dịch vụ Kho tạm thời ngưng hoạt động, điểm bán vẫn nhận ngay kết quả Đã hủy trực tiếp từ Bếp để báo khách, còn lệnh hoàn kho nằm an toàn trong hàng đợi chờ Kho xử lý khi phục hồi.
+- **Biểu đồ hoạt động:** Quy trình kiểm tra nguyên liệu báo hỏng và đồng bộ hai phía thể hiện trên Hình 2.16.
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[GET /menu] --> b{Dữ liệu mới và có mạng?}
-  b -- có --> c[Món Hết: khóa] --> z((Kết thúc))
-  b -- không --> d[Món Hết: Có thể đã hết, vẫn đặt được; hiện dòng chung] --> z
-```
+![Hình 2.16. Biểu đồ hoạt động GD-14: Từ chối phiếu chế biến](images/hinh-2-16-hd-tu-choi-phieu.png)
 
-##### 3.7.2. Đồng bộ bộ đệm menu - giao dịch
+##### GD-15. Xác nhận hoàn tất chế biến món
 
-- **Tên Usecase:** Đồng bộ bộ đệm menu
-- **Mô tả Usecase:** Chức năng cho phép chi nhánh giữ `menu_cache` theo kịp Kho mà không bao giờ để tin cũ ghi đè tin mới (BR10).
-- **Tác nhân chính:** Local Order Service (tự động: consumer và luồng nền đồng bộ menu). **Tác nhân phụ:** Inventory Service.
-- **Điều kiện bắt đầu:** có tin trên `menu-events`, hoặc chi nhánh vừa khởi động, vừa có mạng lại, hoặc nghe thấy epoch mới. **Điều kiện kết thúc:** `menu_cache` đã gộp theo version.
+- **Tên Usecase:** Xác nhận hoàn tất chế biến món
+- **Mô tả Usecase:** Chức năng cho phép Nhân viên Bếp xác nhận đã nấu xong một phiếu đang chế biến để chuyển thông báo hoàn thành về điểm bán hoặc khách hàng trực tuyến.
+- **Tác nhân chính:** Nhân viên Bếp
+- **Tác nhân phụ:** Kênh gốc tạo đơn (nhận sự kiện hoàn tất đơn)
+- **Điều kiện bắt đầu (Pre-Condition):** Phiếu tồn tại và đang ở trạng thái Đang nấu.
+- **Điều kiện kết thúc (Post-Condition):** Phiếu chuyển sang Hoàn tất; thông báo hoàn tất được ghi vào hàng chờ gửi về đúng kênh tạo đơn.
 - **Trình tự các sự kiện:**
-  1. `DishStatusChanged`: ghi đè món chỉ khi `(epoch, seq)` của tin lớn hơn bản đang giữ; cập nhật lần cuối nghe được từ Kho.
-  2. `Heartbeat`: cập nhật lần cuối nghe được; nếu epoch lớn hơn epoch đang giữ thì ghi nhận cần lấy snapshot.
-  3. Luồng nền lấy snapshot của Kho khi chưa từng có, khi vừa có mạng lại, hoặc khi có epoch mới; gộp từng món theo cùng quy tắc version, không xóa bộ đệm để nạp lại. Snapshot có epoch mới thì món còn mang epoch cũ chuyển Ẩn.
-- **Các yêu cầu phi chức năng:** nhận Hết (v6) rồi snapshot Còn (v5) thì giữ Hết (kịch bản 19); Kho khôi phục và tăng epoch thì món theo snapshot mới, món không có trong snapshot chuyển Ẩn (kịch bản 20).
-- **Biểu đồ hoạt động:**
+  1. Nhân viên Bếp chọn phiếu đã nấu xong và bấm Hoàn tất.
+  2. Hệ thống khóa độc quyền bản ghi phiếu tại Bếp; nếu không tìm thấy hoặc phiếu không ở trạng thái Đang nấu, dịch vụ từ chối thao tác do xung đột trạng thái.
+  3. Dịch vụ cập nhật trạng thái phiếu sang Hoàn tất và ghi sự kiện hoàn tất đơn vào hàng chờ gửi về kênh tạo đơn trong cùng một giao dịch.
+- **Các yêu cầu phi chức năng:** Bước hoàn tất không cần phát thêm thông điệp tới Kho vì lượng nguyên liệu của đơn đã được chốt tiêu thụ ở bước Bắt đầu nấu.
+- **Biểu đồ hoạt động:** Quy trình khóa bản ghi và phát sự kiện hoàn tất chế biến được minh họa trên Hình 2.17.
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a{Nguồn}
-  a -- DishStatusChanged --> b{Version mới hơn?}
-  b -- có --> c[Ghi đè món] --> z((Kết thúc))
-  b -- không --> z
-  a -- Heartbeat --> d[Ghi lần cuối nghe được; epoch mới thì cần snapshot] --> z
-  a -- Khởi động, có mạng lại, epoch mới --> e[Lấy snapshot của Kho] --> f[Gộp theo version; epoch mới thì món epoch cũ chuyển Ẩn] --> z
-```
+![Hình 2.17. Biểu đồ hoạt động GD-15: Hoàn tất chế biến món](images/hinh-2-17-hd-hoan-tat-phieu.png)
 
-### 4. Báo cáo quản lý - module
+### 3.4. Module 4: Tổng hợp đơn hàng trung tâm và giám sát toàn chuỗi (Query)
 
-#### 4.1. Xem báo cáo tổng hợp - use case
+#### 3.4.1. Xem báo cáo hợp nhất
 
-##### 4.1.1. Xem báo cáo tổng hợp - giao dịch
+##### GD-16. Tổng hợp và xem báo cáo đơn hàng toàn chuỗi gần thời gian thực
 
-- **Tên Usecase:** Xem báo cáo tổng hợp
-- **Mô tả Usecase:** Chức năng cho phép quản lý xem số liệu toàn chuỗi; số liệu có thể chậm hơn dữ liệu ở chi nhánh, nên mỗi chi nhánh có mốc "dữ liệu tính đến" (mục 8 của đặc tả).
-- **Tác nhân chính:** Quản lý. **Tác nhân phụ:** Central Order Replica.
-- **Điều kiện bắt đầu:** không có. **Điều kiện kết thúc:** không có; giao dịch không đổi dữ liệu.
+- **Tên Usecase:** Tổng hợp và xem báo cáo đơn hàng toàn chuỗi gần thời gian thực
+- **Mô tả Usecase:** Chức năng cho phép Quản lý chuỗi xem bảng thống kê số lượng đơn theo trạng thái và lý do đóng của từng kênh (POS01, POS02, ONLINE) kèm mốc thời gian "Dữ liệu tính đến" phản ánh độ trễ đồng bộ từng nguồn.
+- **Tác nhân chính:** Quản lý chuỗi
+- **Tác nhân phụ:** Central Order Replica (bản sao tổng hợp nhận nhân bản từ các nguồn)
+- **Điều kiện bắt đầu (Pre-Condition):** Đường truyền nhân bản dữ liệu từ các điểm bán và kênh trực tuyến về trung tâm đã được thiết lập; dịch vụ truy vấn báo cáo đang hoạt động.
+- **Điều kiện kết thúc (Post-Condition):** Trả về số liệu thống kê nhất quán giữa số lượng đơn và mốc cập nhật từng kênh, không làm thay đổi dữ liệu gốc.
 - **Trình tự các sự kiện:**
-  1. Màn hình gọi `GET /reports/summary` của Order Query Service.
-  2. Hệ thống mở một giao dịch `REPEATABLE READ, READ ONLY` trên `central-db` (không bao giờ đọc CSDL chi nhánh).
-  3. Đọc `replication_heartbeat`: mốc "dữ liệu tính đến" và tuổi của nó cho từng chi nhánh.
-  4. Đếm `orders` theo chi nhánh, trạng thái và `close_reason`.
-  5. Trả mọi chi nhánh được cấu hình (`BRANCHES`), kể cả chi nhánh chưa có dữ liệu (mốc null, số 0): số đơn theo năm trạng thái, tổng, và số đơn Đã hủy, Thất bại theo lý do.
-- **Các yêu cầu phi chức năng:** đọc trong một snapshot nên mốc không bao giờ mới hơn số liệu đi kèm; yêu cầu hủy đang chờ ở Bếp không được tính; khi nhân bản từ một chi nhánh bị cắt, báo cáo vẫn xem được (kịch bản 55).
-- **Biểu đồ hoạt động:**
+  1. Ở tiến trình nền, mỗi dịch vụ kênh ghi nhận mốc nhịp đồng bộ định kỳ mỗi 5 giây vào cơ sở dữ liệu riêng; cơ chế nhân bản bất đồng bộ đẩy đồng thời các đơn hàng mới và mốc nhịp đồng bộ về bản sao trung tâm Central Order Replica theo đúng thứ tự xác nhận giao dịch.
+  2. Khi Quản lý mở màn hình báo cáo, giao diện gửi yêu cầu tải số liệu tổng hợp tới dịch vụ truy vấn trung tâm.
+  3. Dịch vụ mở một giao dịch đọc nhất quán trên cùng một lát cắt thời gian tại Central Order Replica, đọc đồng thời mốc nhịp đồng bộ mới nhất của từng kênh (tính tuổi độ trễ dữ liệu) và tổng hợp số lượng đơn theo từng kênh, năm trạng thái chính cùng chi tiết lý do hủy/thất bại.
+  4. Kênh đã khai báo nhưng chưa có nhịp nhân bản trả về mốc chưa đồng bộ với số lượng bằng 0; toàn bộ bảng thống kê được hiển thị lên màn hình Quản lý kèm nhãn "Dữ liệu tính đến" riêng cho từng nguồn.
+- **Các yêu cầu phi chức năng:** Đọc cả bảng nhịp đồng bộ và bảng đơn hàng trong cùng một lát cắt thời gian bảo đảm mốc "Dữ liệu tính đến" không bao giờ chạy trước tập đơn thực tế trong cùng báo cáo; khi một kênh đứt nhân bản, các kênh còn lại vẫn cập nhật bình thường trong khi độ trễ kênh gặp sự cố hiển thị rõ cho quản lý nhận biết.
+- **Biểu đồ hoạt động:** Mối liên kết giữa luồng nhân bản dữ liệu nền và truy vấn báo cáo nhất quán thể hiện trên Hình 2.18.
 
-```mermaid
-flowchart TD
-  s((Bắt đầu)) --> a[GET /reports/summary] --> b[Mở snapshot chỉ đọc trên central-db]
-  b --> c[Đọc replication_heartbeat: mốc dữ liệu tính đến] --> d[Đếm orders theo chi nhánh, trạng thái, lý do]
-  d --> e[Thêm chi nhánh được cấu hình chưa có dữ liệu] --> f[Trả báo cáo] --> z((Kết thúc))
-```
+![Hình 2.18. Biểu đồ hoạt động GD-16: Tổng hợp và xem báo cáo đơn hàng gần thời gian thực](images/hinh-2-18-hd-bao-cao-tong-hop.png)
 
-## III. THIẾT KẾ CƠ SỞ DỮ LIỆU
+## IV. THIẾT KẾ CƠ SỞ DỮ LIỆU
 
-### 1. CÁC CƠ SỞ DỮ LIỆU CỦA HỆ THỐNG
+### 4.1. Các cơ sở dữ liệu của hệ thống
 
-Tất cả dùng PostgreSQL 16.14; mỗi dịch vụ chỉ truy cập CSDL của mình.
+Áp dụng mô hình phân tách dữ liệu theo dịch vụ (Database-per-Service), mỗi dịch vụ quản lý một cơ sở dữ liệu PostgreSQL 16 riêng biệt như liệt kê trong Bảng 2.4. Hai quầy bán hàng và kênh đặt món trực tuyến dùng chung một cấu trúc lược đồ Branch DB nhưng tách thành ba cơ sở dữ liệu độc lập có bật kênh nhân bản logic để đẩy dữ liệu về bản sao trung tâm.
 
-| TT | Cơ sở dữ liệu | Ghi chú |
-|---|---|---|
-| 1 | Inventory DB (`inventory-db`, database `inventory`) | Của Inventory Service, dùng chung cho cả chuỗi; hai instance cùng ghi |
-| 2 | Kitchen DB (`kitchen-db`, database `kitchen`) | Của Kitchen Service |
-| 3 | Branch DB của POS01 (`pos01-db`, database `branch`) | Của Local Order Service POS01; bật logical WAL để nhân bản |
-| 4 | Branch DB của POS02 (`pos02-db`) | Cùng cấu trúc với mục 3 |
-| 5 | Branch DB của kênh Online (`online-db`) | Cùng cấu trúc với mục 3 |
-| 6 | Central Order Replica (`central-db`, database `central`) | Bản sao `orders` và `replication_heartbeat` của mọi chi nhánh, chỉ đọc cho Order Query Service |
+*Bảng 2.4. Danh mục các cơ sở dữ liệu trong hệ thống*
 
-### 2. THIẾT KẾ CHI TIẾT CƠ SỞ DỮ LIỆU
-
-#### Sơ đồ CSDL tổng quát
-
-```mermaid
-flowchart LR
-  subgraph B["Branch DB × 3 (POS01, POS02, ONLINE)"]
-    o["orders"] --- ob["outbox_events (hàng chờ gửi)"]
-    d["dishes"]
-    mc["menu_cache, menu_cache_meta"]
-    rh["replication_heartbeat"]
-    pb["alerts, processed_events"]
-  end
-  subgraph I["Inventory DB"]
-    st["stock"] --- re["recipes"]
-    io["inventory_orders"] --- ir["inventory_reservations"]
-    st --- ir
-    ds["dish_status, menu_version"]
-    ia["alerts, processed_events, outbox_events"]
-  end
-  subgraph K["Kitchen DB"]
-    ko["kitchen_orders"]
-    fi["flagged_ingredients"]
-    ka["alerts, processed_events, outbox_events"]
-  end
-  subgraph C["Central Order Replica"]
-    co["orders (mọi chi nhánh)"]
-    ch["replication_heartbeat"]
-  end
-  o -.->|logical replication| co
-  rh -.->|logical replication| ch
-  ob ==>|Kafka: OrderCreated| io
-  ia ==>|Kafka: OrderReserved, OrderFailed, IngredientCheckChanged| ko
-  ka ==>|Kafka: StockConsumed, ReleaseRequested| io
-  ia ==>|Kafka: OrderReserved, OrderFailed| o
-  ka ==>|Kafka: CancelPending, CancelRejected, OrderCancelled, OrderCompleted| o
-  ob ==>|Kafka: CancelRequested| ko
-```
-
-Giữa các CSDL không có khóa ngoại: mỗi đơn mang cùng một `order_id` (UUID do chi nhánh sinh) ở cả ba nơi, và dữ liệu đi giữa chúng qua Kafka (nét đôi) hoặc qua logical replication (nét đứt).
-
-#### 2.1. Các bảng trong cơ sở dữ liệu
-
-| STT | CSDL | Tên bảng | Mô tả |
+| TT | Cơ sở dữ liệu | Lược đồ / Định danh DB | Vai trò lưu trữ |
 |---|---|---|---|
-| 1 | Inventory DB | `stock` | Mỗi nguyên liệu một dòng: tên, đơn vị, bốn đại lượng `available`, `reserved`, `consumed`, `wasted` và cờ `needs_check` |
-| 2 | Inventory DB | `recipes` | Công thức: lượng mỗi nguyên liệu cho một suất của món |
-| 3 | Inventory DB | `inventory_orders` | Mỗi đơn đúng một bản ghi kết quả (BR12): `DANG_GIU`, `THAT_BAI`, `DA_TRA`, `DA_DUNG`, chi nhánh gốc, lý do |
-| 4 | Inventory DB | `inventory_reservations` | Lượng giữ của từng nguyên liệu cho từng đơn, ghi lúc giữ, và kết quả của dòng (`DA_HOAN`, `DA_DUNG`, `HAO_HUT`) |
-| 5 | Inventory DB | `dish_status` | Trạng thái món (Còn, Hết, Ẩn) kèm version |
-| 6 | Inventory DB | `menu_version` | Một dòng duy nhất: bộ đếm version (`epoch`, `seq`) bền vững |
-| 7 | Inventory DB | `alerts` | Cảnh báo cho người xem: `CAN_KIEM_TRA`, `LENH_KHONG_KHOP` |
-| 8 | Inventory DB | `processed_events` | `event_id` đã xử lý, chống xử lý trùng |
-| 9 | Inventory DB | `outbox_events` | Tin chờ gửi lên Kafka, ghi trong cùng giao dịch với thay đổi trạng thái |
-| 10 | Kitchen DB | `kitchen_orders` | Mỗi đơn đúng một bản ghi (BR8): phiếu, bản ghi Chờ hủy hoặc kết quả Thất bại; chi nhánh gốc, các chi nhánh đã yêu cầu hủy, nguyên liệu đã giữ |
-| 11 | Kitchen DB | `flagged_ingredients` | Cờ kiểm kho nhận từ Kho, kèm version |
-| 12 | Kitchen DB | `alerts` | Cảnh báo: `CAN_KIEM_TRA`, `HUY_SAI_CHI_NHANH` |
-| 13 | Kitchen DB | `processed_events` | Như mục 8 |
-| 14 | Kitchen DB | `outbox_events` | Như mục 9 |
-| 15 | Branch DB | `orders` | Đơn của chi nhánh: trạng thái theo thứ hạng, cờ "Đang yêu cầu hủy", lý do |
-| 16 | Branch DB | `outbox_events` | Hàng chờ gửi của chi nhánh, có cờ "đã thử gửi" (BR9) |
-| 17 | Branch DB | `dishes` | Danh mục món nạp từ file seed, phục vụ màn hình đặt món khi mất mạng |
-| 18 | Branch DB | `menu_cache` | Trạng thái món nhận từ Kho, gộp theo version |
-| 19 | Branch DB | `menu_cache_meta` | Một dòng: `epoch` đang giữ, `epoch` lớn nhất đã nghe thấy và lần cuối nghe được từ Kho |
-| 20 | Branch DB | `replication_heartbeat` | Nhịp nhân bản của chi nhánh, cho mốc "dữ liệu tính đến" |
-| 21 | Branch DB | `processed_events` | Như mục 8 |
-| 22 | Branch DB | `alerts` | Cảnh báo `CAN_KIEM_TRA`: tin trạng thái không đọc được (đã chuyển `dlq`) hoặc loại lạ (bỏ qua); hiện trên `GET /monitor` |
-| 23 | Central Order Replica | `orders` | Bản sao `orders` của mọi chi nhánh |
-| 24 | Central Order Replica | `replication_heartbeat` | Bản sao nhịp nhân bản của mọi chi nhánh |
+| 1 | Inventory DB | `inventory` (Kho trung tâm) | Cơ sở dữ liệu nguyên liệu và công thức dùng chung toàn chuỗi; hai tiến trình Inventory Service cùng truy cập và điều phối tranh chấp bằng khóa dòng. |
+| 2 | Kitchen DB | `kitchen` (Bếp trung tâm) | Lưu phiếu chế biến hợp nhất từ mọi nguồn, hàng chờ hủy sớm và cờ kiểm kho nhận từ Kho trung tâm. |
+| 3 | Branch DB (POS01) | `branch` (Kênh POS01) | Lưu đơn hàng, hàng chờ gửi và bộ đệm thực đơn của quầy POS01; kích hoạt luồng nhân bản về trung tâm. |
+| 4 | Branch DB (POS02) | `branch` (Kênh POS02) | Cùng cấu trúc lược đồ với POS01, phục vụ độc lập cho quầy POS02. |
+| 5 | Branch DB (ONLINE) | `branch` (Kênh ONLINE) | Cùng cấu trúc lược đồ với điểm bán tại quầy, phục vụ riêng cho tiến trình đặt hàng trực tuyến. |
+| 6 | Central Order Replica | `central` (Tổng hợp) | Bản sao tập trung hợp nhất đơn hàng và nhịp đồng bộ từ cả ba nguồn POS01, POS02, ONLINE, cấp quyền chỉ đọc cho dịch vụ truy vấn báo cáo. |
 
-#### 2.2. Thiết kế chi tiết các bảng
+### 4.2. Thiết kế chi tiết cơ sở dữ liệu
 
-Sơ đồ quan hệ và bảng chi tiết của từng CSDL dưới đây được sinh từ các CSDL đang chạy (`backend/scripts/report_schema.py`), nên luôn khớp với migration.
+Kiến trúc lưu trữ không sử dụng khóa ngoại vật lý liên cơ sở dữ liệu mà liên thông nghiệp vụ thông qua định danh duy nhất toàn cục `order_id` (`UUID`) do kênh phát sinh tạo ra. Các thay đổi trạng thái giữa nhóm nguồn phát sinh đơn, Kho và Bếp truyền qua cụm truyền tin bằng cặp bảng hàng chờ gửi `outbox_events` và chống trùng `processed_events`, còn luồng dữ liệu báo cáo hợp nhất đi qua nhân bản bất đồng bộ từ ba cơ sở dữ liệu nguồn về Central Order Replica. Toàn bộ liên kết thực thể liên dịch vụ được minh họa trên Hình 2.19.
+
+![Hình 2.19. Sơ đồ cơ sở dữ liệu tổng quát và luồng đồng bộ liên dịch vụ](images/hinh-2-19-csdl-tong-quat.png)
+
+#### 4.2.1. Các bảng trong cơ sở dữ liệu
+
+Tổng cộng 24 bảng dữ liệu trên bốn lược đồ cơ sở dữ liệu của hệ thống được liệt kê đầy đủ kèm vai trò trong Bảng 2.5.
+
+*Bảng 2.5. Danh mục 24 bảng dữ liệu trên bốn lược đồ cơ sở dữ liệu*
+
+| STT | Cơ sở dữ liệu | Tên bảng | Mô tả vai trò |
+|---|---|---|---|
+| 1 | Inventory DB | `stock` | Lưu từng nguyên liệu với đơn vị tính, bốn đại lượng tồn (`available`, `reserved`, `consumed`, `wasted`) và cờ kiểm kho `needs_check`. |
+| 2 | Inventory DB | `recipes` | Lưu định lượng nguyên liệu cần giữ cho một phần của từng món ăn. |
+| 3 | Inventory DB | `inventory_orders` | Lưu kết quả giữ kho duy nhất cho mỗi đơn hàng (đang giữ, thất bại, đã trả, đã dùng) cùng kênh gốc và lý do. |
+| 4 | Inventory DB | `inventory_reservations` | Ghi chi tiết số lượng đã giữ của từng nguyên liệu cho từng đơn và kết quả đóng dòng (đã hoàn, đã dùng, hao hụt). |
+| 5 | Inventory DB | `dish_status` | Lưu trạng thái phục vụ hiện hành của từng món (còn, hết, ẩn) kèm bộ đếm phiên bản `(epoch, seq)`. |
+| 6 | Inventory DB | `menu_version` | Bảng một dòng duy nhất đóng vai trò bộ đếm phiên bản `(epoch, seq)` bền vững trong cơ sở dữ liệu. |
+| 7 | Inventory DB | `alerts` | Ghi nhận các cảnh báo vận hành tại Kho (cần kiểm tra bản tin hoặc lệnh không khớp). |
+| 8 | Inventory DB | `processed_events` | Lưu danh sách mã sự kiện `event_id` đã xử lý nhằm bảo đảm chống xử lý lặp thông điệp. |
+| 9 | Inventory DB | `outbox_events` | Hàng chờ sự kiện ghi trong cùng giao dịch nghiệp vụ để chuyển phát sang cụm truyền tin. |
+| 10 | Kitchen DB | `kitchen_orders` | Lưu hồ sơ duy nhất của mỗi đơn tại Bếp qua các trạng thái từ chưa có đơn, hủy chờ đơn, chờ nấu, đang nấu tới hoàn tất/hủy/thất bại. |
+| 11 | Kitchen DB | `flagged_ingredients` | Lưu danh sách nguyên liệu đang bị gắn cờ kiểm kho kèm phiên bản `(epoch, seq)` nhận từ Kho. |
+| 12 | Kitchen DB | `alerts` | Lưu các cảnh báo tại Bếp (lỗi định dạng bản tin và hủy sai kênh tạo đơn). |
+| 13 | Kitchen DB | `processed_events` | Bảng chống xử lý trùng mã sự kiện cho tiến trình nhận tin của Bếp. |
+| 14 | Kitchen DB | `outbox_events` | Hàng chờ sự kiện gửi lệnh nguyên liệu tới Kho và thông báo kết quả về kênh gốc. |
+| 15 | Branch DB | `orders` | Lưu đơn hàng tại từng kênh với trạng thái tăng dần theo `status_rank`, cờ yêu cầu hủy và thông báo phản hồi hủy. |
+| 16 | Branch DB | `outbox_events` | Hàng chờ gửi có cờ `attempted` phân biệt đơn chưa từng thử gửi và đơn đã gửi ra mạng. |
+| 17 | Branch DB | `dishes` | Danh mục món ăn cục bộ của điểm bán, giúp tiếp nhận đơn ngay cả khi mất kết nối mạng trung tâm. |
+| 18 | Branch DB | `menu_cache` | Bộ đệm trạng thái món nhận từ Kho, hợp nhất đơn điệu theo phiên bản `(epoch, seq)`. |
+| 19 | Branch DB | `menu_cache_meta` | Bảng một dòng lưu thế hệ `epoch` đang giữ, `newest_epoch` và mốc liên lạc `last_heard_at` với Kho. |
+| 20 | Branch DB | `replication_heartbeat` | Ghi nhận nhịp thời gian mỗi 5 giây tại nguồn để xác định mốc dữ liệu của báo cáo hợp nhất. |
+| 21 | Branch DB | `processed_events` | Bảng chống xử lý trùng thông điệp trạng thái nhận từ Kho và Bếp. |
+| 22 | Branch DB | `alerts` | Ghi nhận cảnh báo bản tin trạng thái hỏng định dạng hoặc sai loại. |
+| 23 | Central Order Replica | `orders` | Bản sao tập trung hợp nhất mọi đơn hàng nhân bản từ hai quầy POS và kênh Online. |
+| 24 | Central Order Replica | `replication_heartbeat` | Bản sao mốc thời gian đồng bộ mới nhất của từng kênh phục vụ màn hình Quản lý. |
+
+#### 4.2.2. Thiết kế chi tiết các bảng
+
+Sơ đồ thực thể – quan hệ chi tiết của từng cơ sở dữ liệu (Hình 2.20 đến Hình 2.23) cùng đặc tả từng trường dữ liệu của 24 bảng (Bảng 2.6 đến Bảng 2.29) dưới đây được tổng hợp đồng bộ từ bốn lược đồ cơ sở dữ liệu PostgreSQL 16 đang vận hành của hệ thống.
 
 <!-- include: generated/csdl.md -->
+
+<!--PAGEBREAK-->

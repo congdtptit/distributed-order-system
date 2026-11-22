@@ -2,471 +2,278 @@
 
 ##### Inventory DB
 
-Nguồn: CSDL `inventory-db` đang chạy.
+Lược đồ thực thể và các ràng buộc bảng của `inventory-db` thể hiện trên Hình 2.20.
 
-```mermaid
-erDiagram
-    stock ||--o{ inventory_reservations : "ingredient_id"
-    inventory_orders ||--o{ inventory_reservations : "order_id"
-    stock ||--o{ recipes : "ingredient_id"
-    alerts {
-        bigint id PK
-        text kind
-        uuid order_id
-        uuid event_id
-        text source_topic
-        int source_partition
-        bigint source_offset
-        jsonb detail
-        timestamptz created_at
-    }
-    dish_status {
-        text dish_id PK
-        text status
-        int epoch
-        bigint seq
-    }
-    inventory_orders {
-        uuid order_id PK
-        text origin_branch
-        text status
-        text reason
-        timestamptz order_created_at
-        timestamptz updated_at
-    }
-    inventory_reservations {
-        uuid order_id PK
-        text ingredient_id PK
-        numeric quantity
-        text outcome
-    }
-    menu_version {
-        boolean id PK
-        int epoch
-        bigint seq
-    }
-    outbox_events {
-        bigint id PK
-        uuid event_id
-        text topic
-        text msg_key
-        jsonb payload
-        timestamptz created_at
-        timestamptz sent_at
-    }
-    processed_events {
-        uuid event_id PK
-        timestamptz processed_at
-    }
-    recipes {
-        text dish_id PK
-        text ingredient_id PK
-        numeric quantity
-    }
-    stock {
-        text ingredient_id PK
-        text unit
-        numeric available
-        numeric reserved
-        numeric consumed
-        numeric wasted
-        boolean needs_check
-        text name
-    }
-```
+![Hình 2.20. Sơ đồ thực thể - quan hệ của cơ sở dữ liệu Inventory DB](images/er-inventory-db.png)
 
-###### Bảng `alerts`
+*Bảng 2.6. Cấu trúc bảng `alerts` (Inventory DB)*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| id | BIGINT |  | PRI |  | auto_increment |
-| kind | TEXT |  | UNI |  | CHECK ((kind = ANY (ARRAY['CAN_KIEM_TRA'::text, 'LENH_KHONG_KHOP'::text, 'HUY_SAI_CHI_NHANH'::text]))) |
+| id | BIGINT | NO | PRI |  | auto_increment |
+| kind | TEXT | NO | UNI |  | CHECK (kind IN ('CAN_KIEM_TRA', 'LENH_KHONG_KHOP', 'HUY_SAI_CHI_NHANH')) |
 | order_id | UUID | YES |  |  |  |
 | event_id | UUID | YES |  |  |  |
-| source_topic | TEXT |  | UNI |  |  |
-| source_partition | INT |  | UNI |  |  |
-| source_offset | BIGINT |  | UNI |  |  |
-| detail | JSONB |  |  | '{}'::jsonb |  |
-| created_at | TIMESTAMPTZ |  |  | now() |  |
+| source_topic | TEXT | NO | UNI |  |  |
+| source_partition | INT | NO | UNI |  |  |
+| source_offset | BIGINT | NO | UNI |  |  |
+| detail | JSONB | NO |  | '{}' |  |
+| created_at | TIMESTAMPTZ | NO |  | now() |  |
 
-###### Bảng `dish_status`
-
-| Field | Type | Null | Key | Default | Extra |
-|---|---|---|---|---|---|
-| dish_id | TEXT |  | PRI |  |  |
-| status | TEXT |  |  |  | CHECK ((status = ANY (ARRAY['CON'::text, 'HET'::text, 'AN'::text]))) |
-| epoch | INT |  |  |  |  |
-| seq | BIGINT |  |  |  |  |
-
-###### Bảng `inventory_orders`
+*Bảng 2.7. Cấu trúc bảng `dish_status` (Inventory DB)*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| order_id | UUID |  | PRI |  |  |
-| origin_branch | TEXT |  |  |  |  |
-| status | TEXT |  |  |  | CHECK ((status = ANY (ARRAY['DANG_GIU'::text, 'THAT_BAI'::text, 'DA_TRA'::text, 'DA_DUNG'::text]))) |
+| dish_id | TEXT | NO | PRI |  |  |
+| status | TEXT | NO |  |  | CHECK (status IN ('CON', 'HET', 'AN')) |
+| epoch | INT | NO |  |  |  |
+| seq | BIGINT | NO |  |  |  |
+
+*Bảng 2.8. Cấu trúc bảng `inventory_orders` (Inventory DB)*
+
+| Field | Type | Null | Key | Default | Extra |
+|---|---|---|---|---|---|
+| order_id | UUID | NO | PRI |  |  |
+| origin_branch | TEXT | NO |  |  |  |
+| status | TEXT | NO |  |  | CHECK (status IN ('DANG_GIU', 'THAT_BAI', 'DA_TRA', 'DA_DUNG')) |
 | reason | TEXT | YES |  |  |  |
 | order_created_at | TIMESTAMPTZ | YES |  |  |  |
-| updated_at | TIMESTAMPTZ |  |  | now() |  |
+| updated_at | TIMESTAMPTZ | NO |  | now() |  |
 
-###### Bảng `inventory_reservations`
-
-| Field | Type | Null | Key | Default | Extra |
-|---|---|---|---|---|---|
-| order_id | UUID |  | PRI, FK → inventory_orders.order_id |  |  |
-| ingredient_id | TEXT |  | PRI, FK → stock.ingredient_id |  |  |
-| quantity | NUMERIC(12,3) |  |  |  | CHECK ((quantity > (0)::numeric)) |
-| outcome | TEXT | YES |  |  | CHECK ((outcome = ANY (ARRAY['DA_HOAN'::text, 'DA_DUNG'::text, 'HAO_HUT'::text]))) |
-
-###### Bảng `menu_version`
+*Bảng 2.9. Cấu trúc bảng `inventory_reservations` (Inventory DB)*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| id | BOOLEAN |  | PRI | true | CHECK (id) |
-| epoch | INT |  |  |  |  |
-| seq | BIGINT |  |  |  |  |
+| order_id | UUID | NO | PRI, FK → inventory_orders.order_id |  |  |
+| ingredient_id | TEXT | NO | PRI, FK → stock.ingredient_id |  |  |
+| quantity | NUMERIC(12,3) | NO |  |  | CHECK (quantity > 0) |
+| outcome | TEXT | YES |  |  | CHECK (outcome IN ('DA_HOAN', 'DA_DUNG', 'HAO_HUT')) |
 
-###### Bảng `outbox_events`
+*Bảng 2.10. Cấu trúc bảng `menu_version` (Inventory DB)*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| id | BIGINT |  | PRI |  | auto_increment |
-| event_id | UUID |  | UNI |  |  |
-| topic | TEXT |  |  |  |  |
-| msg_key | TEXT |  |  |  |  |
-| payload | JSONB |  |  |  |  |
-| created_at | TIMESTAMPTZ |  |  | now() |  |
+| id | BOOLEAN | NO | PRI | true | CHECK (id) |
+| epoch | INT | NO |  |  |  |
+| seq | BIGINT | NO |  |  |  |
+
+*Bảng 2.11. Cấu trúc bảng `outbox_events` (Inventory DB)*
+
+| Field | Type | Null | Key | Default | Extra |
+|---|---|---|---|---|---|
+| id | BIGINT | NO | PRI |  | auto_increment |
+| event_id | UUID | NO | UNI |  |  |
+| topic | TEXT | NO |  |  |  |
+| msg_key | TEXT | NO |  |  |  |
+| payload | JSONB | NO |  |  |  |
+| created_at | TIMESTAMPTZ | NO |  | now() |  |
 | sent_at | TIMESTAMPTZ | YES |  |  |  |
 
-###### Bảng `processed_events`
+*Bảng 2.12. Cấu trúc bảng `processed_events` (Inventory DB)*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| event_id | UUID |  | PRI |  |  |
-| processed_at | TIMESTAMPTZ |  |  | now() |  |
+| event_id | UUID | NO | PRI |  |  |
+| processed_at | TIMESTAMPTZ | NO |  | now() |  |
 
-###### Bảng `recipes`
-
-| Field | Type | Null | Key | Default | Extra |
-|---|---|---|---|---|---|
-| dish_id | TEXT |  | PRI |  |  |
-| ingredient_id | TEXT |  | PRI, FK → stock.ingredient_id |  |  |
-| quantity | NUMERIC(12,3) |  |  |  | CHECK ((quantity > (0)::numeric)) |
-
-###### Bảng `stock`
+*Bảng 2.13. Cấu trúc bảng `recipes` (Inventory DB)*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| ingredient_id | TEXT |  | PRI |  |  |
-| unit | TEXT |  |  |  |  |
-| available | NUMERIC(12,3) |  |  |  | CHECK ((available >= (0)::numeric)) |
-| reserved | NUMERIC(12,3) |  |  | 0 | CHECK ((reserved >= (0)::numeric)) |
-| consumed | NUMERIC(12,3) |  |  | 0 |  |
-| wasted | NUMERIC(12,3) |  |  | 0 |  |
-| needs_check | BOOLEAN |  |  | false |  |
-| name | TEXT |  |  | ''::text |  |
+| dish_id | TEXT | NO | PRI |  |  |
+| ingredient_id | TEXT | NO | PRI, FK → stock.ingredient_id |  |  |
+| quantity | NUMERIC(12,3) | NO |  |  | CHECK (quantity > 0) |
+
+*Bảng 2.14. Cấu trúc bảng `stock` (Inventory DB)*
+
+| Field | Type | Null | Key | Default | Extra |
+|---|---|---|---|---|---|
+| ingredient_id | TEXT | NO | PRI |  |  |
+| unit | TEXT | NO |  |  |  |
+| available | NUMERIC(12,3) | NO |  |  | CHECK (available >= 0) |
+| reserved | NUMERIC(12,3) | NO |  | 0 | CHECK (reserved >= 0) |
+| consumed | NUMERIC(12,3) | NO |  | 0 |  |
+| wasted | NUMERIC(12,3) | NO |  | 0 |  |
+| needs_check | BOOLEAN | NO |  | false |  |
+| name | TEXT | NO |  | '' |  |
 
 ##### Kitchen DB
 
-Nguồn: CSDL `kitchen-db` đang chạy.
+Lược đồ thực thể và các ràng buộc bảng của `kitchen-db` thể hiện trên Hình 2.21.
 
-```mermaid
-erDiagram
-    alerts {
-        bigint id PK
-        text kind
-        uuid order_id
-        uuid event_id
-        text source_topic
-        int source_partition
-        bigint source_offset
-        jsonb detail
-        timestamptz created_at
-    }
-    flagged_ingredients {
-        text ingredient_id PK
-        boolean needs_check
-        int epoch
-        bigint seq
-    }
-    kitchen_orders {
-        uuid order_id PK
-        text status
-        text origin_branch
-        text_array cancel_branches
-        jsonb cancel_reasons
-        text cancelled_by
-        text close_reason
-        jsonb items
-        jsonb reserved
-        jsonb spoiled
-        timestamptz order_created_at
-        timestamptz updated_at
-    }
-    outbox_events {
-        bigint id PK
-        uuid event_id
-        text topic
-        text msg_key
-        jsonb payload
-        timestamptz created_at
-        timestamptz sent_at
-    }
-    processed_events {
-        uuid event_id PK
-        timestamptz processed_at
-    }
-```
+![Hình 2.21. Sơ đồ thực thể - quan hệ của cơ sở dữ liệu Kitchen DB](images/er-kitchen-db.png)
 
-###### Bảng `alerts`
+*Bảng 2.15. Cấu trúc bảng `alerts` (Kitchen DB)*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| id | BIGINT |  | PRI |  | auto_increment |
-| kind | TEXT |  | UNI |  | CHECK ((kind = ANY (ARRAY['CAN_KIEM_TRA'::text, 'LENH_KHONG_KHOP'::text, 'HUY_SAI_CHI_NHANH'::text]))) |
+| id | BIGINT | NO | PRI |  | auto_increment |
+| kind | TEXT | NO | UNI |  | CHECK (kind IN ('CAN_KIEM_TRA', 'LENH_KHONG_KHOP', 'HUY_SAI_CHI_NHANH')) |
 | order_id | UUID | YES |  |  |  |
 | event_id | UUID | YES |  |  |  |
-| source_topic | TEXT |  | UNI |  |  |
-| source_partition | INT |  | UNI |  |  |
-| source_offset | BIGINT |  | UNI |  |  |
-| detail | JSONB |  |  | '{}'::jsonb |  |
-| created_at | TIMESTAMPTZ |  |  | now() |  |
+| source_topic | TEXT | NO | UNI |  |  |
+| source_partition | INT | NO | UNI |  |  |
+| source_offset | BIGINT | NO | UNI |  |  |
+| detail | JSONB | NO |  | '{}' |  |
+| created_at | TIMESTAMPTZ | NO |  | now() |  |
 
-###### Bảng `flagged_ingredients`
-
-| Field | Type | Null | Key | Default | Extra |
-|---|---|---|---|---|---|
-| ingredient_id | TEXT |  | PRI |  |  |
-| needs_check | BOOLEAN |  |  |  |  |
-| epoch | INT |  |  |  |  |
-| seq | BIGINT |  |  |  |  |
-
-###### Bảng `kitchen_orders`
+*Bảng 2.16. Cấu trúc bảng `flagged_ingredients` (Kitchen DB)*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| order_id | UUID |  | PRI |  |  |
-| status | TEXT |  |  |  | CHECK ((status = ANY (ARRAY['CHUA_CO'::text, 'HUY_CHO_DON'::text, 'CHO_NAU'::text, 'DANG_NAU'::text, 'HOAN_TAT'::text, 'DA_HUY'::text, 'THAT_BAI'::text]))) |
+| ingredient_id | TEXT | NO | PRI |  |  |
+| needs_check | BOOLEAN | NO |  |  |  |
+| epoch | INT | NO |  |  |  |
+| seq | BIGINT | NO |  |  |  |
+
+*Bảng 2.17. Cấu trúc bảng `kitchen_orders` (Kitchen DB)*
+
+| Field | Type | Null | Key | Default | Extra |
+|---|---|---|---|---|---|
+| order_id | UUID | NO | PRI |  |  |
+| status | TEXT | NO |  |  | CHECK (status IN ('CHUA_CO', 'HUY_CHO_DON', 'CHO_NAU', 'DANG_NAU', 'HOAN_TAT', 'DA_HUY', 'THAT_BAI')) |
 | origin_branch | TEXT | YES |  |  |  |
-| cancel_branches | TEXT[] |  |  | '{}'::text[] |  |
-| cancel_reasons | JSONB |  |  | '{}'::jsonb |  |
-| cancelled_by | TEXT | YES |  |  | CHECK ((cancelled_by = ANY (ARRAY['CUSTOMER'::text, 'KITCHEN'::text]))) |
+| cancel_branches | TEXT[] | NO |  | '{}'[] |  |
+| cancel_reasons | JSONB | NO |  | '{}' |  |
+| cancelled_by | TEXT | YES |  |  | CHECK (cancelled_by IN ('CUSTOMER', 'KITCHEN')) |
 | close_reason | TEXT | YES |  |  |  |
 | items | JSONB | YES |  |  |  |
 | reserved | JSONB | YES |  |  |  |
 | spoiled | JSONB | YES |  |  |  |
 | order_created_at | TIMESTAMPTZ | YES |  |  |  |
-| updated_at | TIMESTAMPTZ |  |  | now() |  |
+| updated_at | TIMESTAMPTZ | NO |  | now() |  |
 
-###### Bảng `outbox_events`
+*Bảng 2.18. Cấu trúc bảng `outbox_events` (Kitchen DB)*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| id | BIGINT |  | PRI |  | auto_increment |
-| event_id | UUID |  | UNI |  |  |
-| topic | TEXT |  |  |  |  |
-| msg_key | TEXT |  |  |  |  |
-| payload | JSONB |  |  |  |  |
-| created_at | TIMESTAMPTZ |  |  | now() |  |
+| id | BIGINT | NO | PRI |  | auto_increment |
+| event_id | UUID | NO | UNI |  |  |
+| topic | TEXT | NO |  |  |  |
+| msg_key | TEXT | NO |  |  |  |
+| payload | JSONB | NO |  |  |  |
+| created_at | TIMESTAMPTZ | NO |  | now() |  |
 | sent_at | TIMESTAMPTZ | YES |  |  |  |
 
-###### Bảng `processed_events`
+*Bảng 2.19. Cấu trúc bảng `processed_events` (Kitchen DB)*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| event_id | UUID |  | PRI |  |  |
-| processed_at | TIMESTAMPTZ |  |  | now() |  |
+| event_id | UUID | NO | PRI |  |  |
+| processed_at | TIMESTAMPTZ | NO |  | now() |  |
 
 ##### Branch DB (POS01, POS02, ONLINE)
 
-Nguồn: CSDL `pos01-db` đang chạy.
+Lược đồ thực thể và các ràng buộc bảng của `pos01-db` thể hiện trên Hình 2.22.
 
-```mermaid
-erDiagram
-    orders ||--o{ outbox_events : "order_id"
-    alerts {
-        bigint id PK
-        text kind
-        uuid order_id
-        uuid event_id
-        text source_topic
-        int source_partition
-        bigint source_offset
-        jsonb detail
-        timestamptz created_at
-    }
-    dishes {
-        text dish_id PK
-        text name
-    }
-    menu_cache {
-        text dish_id PK
-        text status
-        int epoch
-        bigint seq
-    }
-    menu_cache_meta {
-        boolean id PK
-        int epoch
-        timestamptz last_heard_at
-        int newest_epoch
-    }
-    orders {
-        uuid order_id PK
-        text branch_id
-        text status
-        smallint status_rank
-        text close_reason
-        text cancel_flag
-        timestamptz cancel_requested_at
-        text cancel_message
-        jsonb items
-        timestamptz created_at
-    }
-    outbox_events {
-        bigint id PK
-        uuid event_id
-        uuid order_id FK
-        text kind
-        text topic
-        jsonb payload
-        boolean attempted
-        timestamptz sent_at
-    }
-    processed_events {
-        uuid event_id PK
-        timestamptz processed_at
-    }
-    replication_heartbeat {
-        text branch_id PK
-        timestamptz beat_at
-    }
-```
+![Hình 2.22. Sơ đồ thực thể - quan hệ của cơ sở dữ liệu Branch DB](images/er-branch-db.png)
 
-###### Bảng `alerts`
+*Bảng 2.20. Cấu trúc bảng `alerts` (Branch DB (POS01, POS02, ONLINE))*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| id | BIGINT |  | PRI |  | auto_increment |
-| kind | TEXT |  | UNI |  | CHECK ((kind = 'CAN_KIEM_TRA'::text)) |
+| id | BIGINT | NO | PRI |  | auto_increment |
+| kind | TEXT | NO | UNI |  | CHECK ((kind = 'CAN_KIEM_TRA')) |
 | order_id | UUID | YES |  |  |  |
 | event_id | UUID | YES |  |  |  |
-| source_topic | TEXT |  | UNI |  |  |
-| source_partition | INT |  | UNI |  |  |
-| source_offset | BIGINT |  | UNI |  |  |
-| detail | JSONB |  |  | '{}'::jsonb |  |
-| created_at | TIMESTAMPTZ |  |  | now() |  |
+| source_topic | TEXT | NO | UNI |  |  |
+| source_partition | INT | NO | UNI |  |  |
+| source_offset | BIGINT | NO | UNI |  |  |
+| detail | JSONB | NO |  | '{}' |  |
+| created_at | TIMESTAMPTZ | NO |  | now() |  |
 
-###### Bảng `dishes`
-
-| Field | Type | Null | Key | Default | Extra |
-|---|---|---|---|---|---|
-| dish_id | TEXT |  | PRI |  |  |
-| name | TEXT |  |  |  |  |
-
-###### Bảng `menu_cache`
+*Bảng 2.21. Cấu trúc bảng `dishes` (Branch DB (POS01, POS02, ONLINE))*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| dish_id | TEXT |  | PRI |  |  |
-| status | TEXT |  |  |  | CHECK ((status = ANY (ARRAY['CON'::text, 'HET'::text, 'AN'::text]))) |
-| epoch | INT |  |  |  |  |
-| seq | BIGINT |  |  |  |  |
+| dish_id | TEXT | NO | PRI |  |  |
+| name | TEXT | NO |  |  |  |
 
-###### Bảng `menu_cache_meta`
+*Bảng 2.22. Cấu trúc bảng `menu_cache` (Branch DB (POS01, POS02, ONLINE))*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| id | BOOLEAN |  | PRI | true | CHECK (id) |
-| epoch | INT |  |  |  |  |
+| dish_id | TEXT | NO | PRI |  |  |
+| status | TEXT | NO |  |  | CHECK (status IN ('CON', 'HET', 'AN')) |
+| epoch | INT | NO |  |  |  |
+| seq | BIGINT | NO |  |  |  |
+
+*Bảng 2.23. Cấu trúc bảng `menu_cache_meta` (Branch DB (POS01, POS02, ONLINE))*
+
+| Field | Type | Null | Key | Default | Extra |
+|---|---|---|---|---|---|
+| id | BOOLEAN | NO | PRI | true | CHECK (id) |
+| epoch | INT | NO |  |  |  |
 | last_heard_at | TIMESTAMPTZ | YES |  |  |  |
-| newest_epoch | INT |  |  | 0 |  |
+| newest_epoch | INT | NO |  | 0 |  |
 
-###### Bảng `orders`
+*Bảng 2.24. Cấu trúc bảng `orders` (Branch DB (POS01, POS02, ONLINE))*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| order_id | UUID |  | PRI |  |  |
-| branch_id | TEXT |  |  |  |  |
-| status | TEXT |  |  |  | CHECK ((status = ANY (ARRAY['CHO_KHO'::text, 'DA_GIU'::text, 'HOAN_TAT'::text, 'DA_HUY'::text, 'THAT_BAI'::text]))) |
-| status_rank | SMALLINT |  |  | 0 |  |
+| order_id | UUID | NO | PRI |  |  |
+| branch_id | TEXT | NO |  |  |  |
+| status | TEXT | NO |  |  | CHECK (status IN ('CHO_KHO', 'DA_GIU', 'HOAN_TAT', 'DA_HUY', 'THAT_BAI')) |
+| status_rank | SMALLINT | NO |  | 0 |  |
 | close_reason | TEXT | YES |  |  |  |
-| cancel_flag | TEXT |  |  | 'KHONG'::text | CHECK ((cancel_flag = ANY (ARRAY['KHONG'::text, 'DANG_YEU_CAU'::text, 'BEP_KHONG_NAU'::text]))) |
+| cancel_flag | TEXT | NO |  | 'KHONG' | CHECK (cancel_flag IN ('KHONG', 'DANG_YEU_CAU', 'BEP_KHONG_NAU')) |
 | cancel_requested_at | TIMESTAMPTZ | YES |  |  |  |
 | cancel_message | TEXT | YES |  |  |  |
-| items | JSONB |  |  |  |  |
-| created_at | TIMESTAMPTZ |  |  |  |  |
+| items | JSONB | NO |  |  |  |
+| created_at | TIMESTAMPTZ | NO |  |  |  |
 
-###### Bảng `outbox_events`
+*Bảng 2.25. Cấu trúc bảng `outbox_events` (Branch DB (POS01, POS02, ONLINE))*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| id | BIGINT |  | PRI |  | auto_increment |
-| event_id | UUID |  | UNI |  |  |
-| order_id | UUID |  | FK → orders.order_id |  |  |
-| kind | TEXT |  |  |  | CHECK ((kind = ANY (ARRAY['TAO_DON'::text, 'HUY'::text]))) |
-| topic | TEXT |  |  |  |  |
-| payload | JSONB |  |  |  |  |
-| attempted | BOOLEAN |  |  | false |  |
+| id | BIGINT | NO | PRI |  | auto_increment |
+| event_id | UUID | NO | UNI |  |  |
+| order_id | UUID | NO | FK → orders.order_id |  |  |
+| kind | TEXT | NO |  |  | CHECK (kind IN ('TAO_DON', 'HUY')) |
+| topic | TEXT | NO |  |  |  |
+| payload | JSONB | NO |  |  |  |
+| attempted | BOOLEAN | NO |  | false |  |
 | sent_at | TIMESTAMPTZ | YES |  |  |  |
 
-###### Bảng `processed_events`
+*Bảng 2.26. Cấu trúc bảng `processed_events` (Branch DB (POS01, POS02, ONLINE))*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| event_id | UUID |  | PRI |  |  |
-| processed_at | TIMESTAMPTZ |  |  | now() |  |
+| event_id | UUID | NO | PRI |  |  |
+| processed_at | TIMESTAMPTZ | NO |  | now() |  |
 
-###### Bảng `replication_heartbeat`
+*Bảng 2.27. Cấu trúc bảng `replication_heartbeat` (Branch DB (POS01, POS02, ONLINE))*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| branch_id | TEXT |  | PRI |  |  |
-| beat_at | TIMESTAMPTZ |  |  |  |  |
+| branch_id | TEXT | NO | PRI |  |  |
+| beat_at | TIMESTAMPTZ | NO |  |  |  |
 
 ##### Central Order Replica
 
-Nguồn: CSDL `central-db` đang chạy.
+Lược đồ thực thể và các ràng buộc bảng của `central-db` thể hiện trên Hình 2.23.
 
-```mermaid
-erDiagram
-    orders {
-        uuid order_id PK
-        text branch_id
-        text status
-        smallint status_rank
-        text close_reason
-        text cancel_flag
-        timestamptz cancel_requested_at
-        text cancel_message
-        jsonb items
-        timestamptz created_at
-    }
-    replication_heartbeat {
-        text branch_id PK
-        timestamptz beat_at
-    }
-```
+![Hình 2.23. Sơ đồ thực thể - quan hệ của cơ sở dữ liệu Central Order Replica](images/er-central-db.png)
 
-###### Bảng `orders`
+*Bảng 2.28. Cấu trúc bảng `orders` (Central Order Replica)*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| order_id | UUID |  | PRI |  |  |
-| branch_id | TEXT |  |  |  |  |
-| status | TEXT |  |  |  | CHECK ((status = ANY (ARRAY['CHO_KHO'::text, 'DA_GIU'::text, 'HOAN_TAT'::text, 'DA_HUY'::text, 'THAT_BAI'::text]))) |
-| status_rank | SMALLINT |  |  | 0 |  |
+| order_id | UUID | NO | PRI |  |  |
+| branch_id | TEXT | NO |  |  |  |
+| status | TEXT | NO |  |  | CHECK (status IN ('CHO_KHO', 'DA_GIU', 'HOAN_TAT', 'DA_HUY', 'THAT_BAI')) |
+| status_rank | SMALLINT | NO |  | 0 |  |
 | close_reason | TEXT | YES |  |  |  |
-| cancel_flag | TEXT |  |  | 'KHONG'::text | CHECK ((cancel_flag = ANY (ARRAY['KHONG'::text, 'DANG_YEU_CAU'::text, 'BEP_KHONG_NAU'::text]))) |
+| cancel_flag | TEXT | NO |  | 'KHONG' | CHECK (cancel_flag IN ('KHONG', 'DANG_YEU_CAU', 'BEP_KHONG_NAU')) |
 | cancel_requested_at | TIMESTAMPTZ | YES |  |  |  |
 | cancel_message | TEXT | YES |  |  |  |
-| items | JSONB |  |  |  |  |
-| created_at | TIMESTAMPTZ |  |  |  |  |
+| items | JSONB | NO |  |  |  |
+| created_at | TIMESTAMPTZ | NO |  |  |  |
 
-###### Bảng `replication_heartbeat`
+*Bảng 2.29. Cấu trúc bảng `replication_heartbeat` (Central Order Replica)*
 
 | Field | Type | Null | Key | Default | Extra |
 |---|---|---|---|---|---|
-| branch_id | TEXT |  | PRI |  |  |
-| beat_at | TIMESTAMPTZ |  |  |  |  |
+| branch_id | TEXT | NO | PRI |  |  |
+| beat_at | TIMESTAMPTZ | NO |  |  |  |
 
