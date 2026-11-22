@@ -55,7 +55,7 @@ State: **covered** (the material exists and only needs reformatting into the tem
 
 | Template item | Where the material is | State | What is left, and when |
 |---|---|---|---|
-| Part I: the unit, the market, the conclusion | Nothing yet. Section 1 of the specification gives the purpose and scope | Missing | Writing and research, not code: the restaurant chain's situation, POS and order-management products in Vietnam and abroad, and why they do not fit the offline and cancellation rules (BR5–BR9). @Naul to decide who writes it; Claude can draft it on request |
+| Part I: the unit, the market, the conclusion | `report/01-khao-sat.md`: a draft by Claude (22 Nov 2026), from section 1 of the specification and the public documentation of seven F&B products (KiotViet, Sapo FnB, MISA CukCuk, iPOS, Toast, Square, Lightspeed), with its sources listed | Partly | @Naul reviews it and removes the reviewer's note |
 | HLD model (**required**) | `report/02-phan-tich-thiet-ke.md`, from the component table in 01 and section 2 of 03 | Covered | The drawing's layout can be tidied in step 8 |
 | Function list | `report/02-phan-tich-thiet-ke.md`, every transaction of phases 1 and 2 | Covered | Kept in line as the APIs are built |
 | Functional design per transaction | `report/02-phan-tich-thiet-ke.md`: cards and activity diagrams for the 24 transactions of phase 1 | Covered | Dish status in phase 2 |
@@ -77,5 +77,5 @@ State: **covered** (the material exists and only needs reformatting into the tem
 
 - **Every step** updates its parts of `report/` when it is done (section "How the report is made").
 - **Step 7** added the performance test: `perf/plan.jmx`, run by `bin/perf` in a container on `api-net` against the full cluster, with its result files and `docker stats` kept in `perf/results/` and summarised in `report/generated/hieu-nang.md`.
-- **Step 8, report material,** under way on 22 Nov 2026: the screenshots are in, the HLD was redrawn without crossing arrows (its source is `report/diagrams/hld.mmd`), and `report/build.sh` draws each diagram on its own and keeps tall ones on one page. Left: the page layout of the template (`reference.docx`, which needs the template file), the final read-through, and Part I and the cover, which are @Naul's unless Claude is asked to draft them.
+- **Step 8, report material,** under way on 22 Nov 2026: the screenshots are in, the HLD was redrawn without crossing arrows (its source is `report/diagrams/hld.mmd`), and `report/build.sh` draws each diagram on its own and keeps tall ones on one page. Left: the page layout of the template (`reference.docx`, which needs the template file), the final read-through, @Naul's review of the Part I draft, and the cover.
 - Section 4 of document 03 lists both, and section 7 of 03 counts them in the progress estimate.

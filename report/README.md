@@ -43,7 +43,7 @@ Script vẽ các sơ đồ trong `diagrams/` vào `images/`, ghép các file the
 | Mục | Trạng thái |
 |---|---|
 | Bìa | Khung; chờ @Naul điền thông tin |
-| Phần I | Chưa viết; chờ quyết định ai viết |
+| Phần I | Bản nháp (Claude soạn, @Naul duyệt); có danh sách nguồn |
 | Mô hình HLD | Có |
 | Danh sách chức năng | Có đủ các chức năng của đợt 1 và đợt 2 |
 | Thiết kế chức năng | Có cho mọi giao dịch đợt 1: Kho, Bếp, chi nhánh và báo cáo quản lý (24 giao dịch); tình trạng món ở đợt 2 |
