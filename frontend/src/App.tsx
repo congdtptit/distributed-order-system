@@ -7,6 +7,7 @@ import { DemoScreen } from "./screens/demo/DemoScreen";
 import { InventoryScreen } from "./screens/inventory/InventoryScreen";
 import { KitchenScreen } from "./screens/kitchen/KitchenScreen";
 import { MonitorScreen } from "./screens/monitor/MonitorScreen";
+import { ReportsScreen } from "./screens/reports/ReportsScreen";
 
 /** The screens built so far; the others show a placeholder naming their step. */
 const BUILT: Record<string, () => React.JSX.Element> = {
@@ -14,6 +15,7 @@ const BUILT: Record<string, () => React.JSX.Element> = {
   kitchen: KitchenScreen,
   inventory: InventoryScreen,
   monitor: MonitorScreen,
+  reports: ReportsScreen,
   demo: DemoScreen,
 };
 

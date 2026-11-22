@@ -1,4 +1,148 @@
 {
+  "components": {
+    "schemas": {
+      "BranchSummary": {
+        "properties": {
+          "branch_id": {
+            "title": "Branch Id",
+            "type": "string"
+          },
+          "by_status": {
+            "$ref": "#/components/schemas/StatusCounts"
+          },
+          "data_age_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Age S"
+          },
+          "data_as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data As Of"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/ReasonCount"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "branch_id",
+          "data_as_of",
+          "data_age_s",
+          "total",
+          "by_status",
+          "reasons"
+        ],
+        "title": "BranchSummary",
+        "type": "object"
+      },
+      "ReasonCount": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "reason_code",
+          "count"
+        ],
+        "title": "ReasonCount",
+        "type": "object"
+      },
+      "StatusCounts": {
+        "properties": {
+          "CHO_KHO": {
+            "title": "Cho Kho",
+            "type": "integer"
+          },
+          "DA_GIU": {
+            "title": "Da Giu",
+            "type": "integer"
+          },
+          "DA_HUY": {
+            "title": "Da Huy",
+            "type": "integer"
+          },
+          "HOAN_TAT": {
+            "title": "Hoan Tat",
+            "type": "integer"
+          },
+          "THAT_BAI": {
+            "title": "That Bai",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "CHO_KHO",
+          "DA_GIU",
+          "HOAN_TAT",
+          "DA_HUY",
+          "THAT_BAI"
+        ],
+        "title": "StatusCounts",
+        "type": "object"
+      },
+      "Summary": {
+        "properties": {
+          "branches": {
+            "items": {
+              "$ref": "#/components/schemas/BranchSummary"
+            },
+            "title": "Branches",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "generated_at",
+          "branches"
+        ],
+        "title": "Summary",
+        "type": "object"
+      }
+    }
+  },
   "info": {
     "title": "Order Query",
     "version": "0.1.0"
@@ -25,6 +169,24 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/reports/summary": {
+      "get": {
+        "operationId": "get_summary_reports_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Summary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Summary"
       }
     }
   }

@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 
 // The screens call /api/<service>/...; the dev server forwards each prefix to its service
 // (section 2 of docs/03-implementation-plan.md, "The screens decide nothing"). The service
-// containers arrive in step 7; until then a target can be overridden with API_<NAME>.
+// containers run in compose; a target can be overridden with API_<NAME>.
 const services: Record<string, string> = {
   pos01: "http://pos01:8000",
   pos02: "http://pos02:8000",

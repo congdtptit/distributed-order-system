@@ -64,31 +64,32 @@ Các nguyên tắc chung: mỗi tin có `event_id` để chống trùng (`proces
 | 4 | | Giám sát chi nhánh | Xem kết nối, số tin chờ gửi, cảnh báo (`GET /monitor`) | Thu ngân |
 | 5 | | Đồng bộ đơn với Kho và Bếp | Gửi hàng chờ (outbox) lên Kafka | Local Order Service (tự động) |
 | | | | Áp dụng trạng thái đơn nhận về theo thứ hạng | |
-| 6 | | Xem tình trạng món (đợt 2) | Xem menu kèm trạng thái Còn, Hết, Ẩn (`GET /menu`) | Thu ngân, khách hàng online |
+| 6 | | Nhân bản đơn về trung tâm | Ghi nhịp `replication_heartbeat` mỗi 5 giây | Local Order Service (tự động) |
+| 7 | | Xem tình trạng món (đợt 2) | Xem menu kèm trạng thái Còn, Hết, Ẩn (`GET /menu`) | Thu ngân, khách hàng online |
 | | **Kho** (Inventory Service) | | | |
-| 7 | | Giữ nguyên liệu cho đơn | Nhận đơn mới, giữ nguyên liệu hoặc trả Thất bại (`OrderCreated`) | Inventory Service (tự động) |
-| 8 | | Xử lý lệnh của Bếp | Hoàn kho hoặc ghi hao hụt (`ReleaseRequested`) | Inventory Service (tự động) |
+| 8 | | Giữ nguyên liệu cho đơn | Nhận đơn mới, giữ nguyên liệu hoặc trả Thất bại (`OrderCreated`) | Inventory Service (tự động) |
+| 9 | | Xử lý lệnh của Bếp | Hoàn kho hoặc ghi hao hụt (`ReleaseRequested`) | Inventory Service (tự động) |
 | | | | Ghi nhận nguyên liệu đã dùng (`StockConsumed`) | |
-| 9 | | Quản lý tồn kho | Xem tồn kho (`GET /stock`) | Nhân viên kho |
+| 10 | | Quản lý tồn kho | Xem tồn kho (`GET /stock`) | Nhân viên kho |
 | | | | Nhập kho (`POST /stock/receipts`) | |
 | | | | Xác nhận kiểm kho xong (`POST /ingredients/{id}/clear-check`) | |
-| 10 | | Theo dõi cảnh báo kho | Xem cảnh báo (`GET /alerts`), xem độ trễ consumer (`GET /monitor`) | Nhân viên kho |
-| 11 | | Công bố tình trạng món (đợt 2) | Gửi `DishStatusChanged`, heartbeat; cung cấp snapshot (`GET /menu/snapshot`) | Inventory Service (tự động) |
+| 11 | | Theo dõi cảnh báo kho | Xem cảnh báo (`GET /alerts`), xem độ trễ consumer (`GET /monitor`) | Nhân viên kho |
+| 12 | | Công bố tình trạng món (đợt 2) | Gửi `DishStatusChanged`, heartbeat; cung cấp snapshot (`GET /menu/snapshot`) | Inventory Service (tự động) |
 | | **Bếp** (Kitchen Service) | | | |
-| 12 | | Xử lý phiếu bếp | Xem danh sách phiếu và cảnh báo (`GET /tickets`) | Nhân viên bếp |
+| 13 | | Xử lý phiếu bếp | Xem danh sách phiếu và cảnh báo (`GET /tickets`) | Nhân viên bếp |
 | | | | Bắt đầu nấu (`POST /tickets/{order_id}/start`) | |
 | | | | Từ chối phiếu (`POST /tickets/{order_id}/reject`) | |
 | | | | Hoàn tất (`POST /tickets/{order_id}/complete`) | |
-| 13 | | Nhận đơn và yêu cầu hủy | Nhận đơn đã giữ hoặc thất bại từ Kho (`OrderReserved`, `OrderFailed`) | Kitchen Service (tự động) |
+| 14 | | Nhận đơn và yêu cầu hủy | Nhận đơn đã giữ hoặc thất bại từ Kho (`OrderReserved`, `OrderFailed`) | Kitchen Service (tự động) |
 | | | | Quyết định yêu cầu hủy (`CancelRequested`) | |
 | | | | Nhận cờ kiểm kho (`IngredientCheckChanged`) | |
-| 14 | | Theo dõi cảnh báo bếp | Xem cảnh báo (`GET /alerts`), xem độ trễ consumer (`GET /monitor`) | Nhân viên bếp |
+| 15 | | Theo dõi cảnh báo bếp | Xem cảnh báo (`GET /alerts`), xem độ trễ consumer (`GET /monitor`) | Nhân viên bếp |
 | | **Báo cáo quản lý** (Order Query Service) | | | |
-| 15 | | Xem báo cáo tổng hợp | Xem số đơn theo trạng thái và lý do, mốc "dữ liệu tính đến" của từng chi nhánh (`GET /reports/summary`) | Quản lý |
+| 16 | | Xem báo cáo tổng hợp | Xem số đơn theo trạng thái và lý do, mốc "dữ liệu tính đến" của từng chi nhánh (`GET /reports/summary`) | Quản lý |
 
 ## II. THIẾT KẾ CHỨC NĂNG PHẦN MỀM
 
-Mục này có thẻ use case cho các giao dịch đã xây dựng: Kho, Bếp và chi nhánh. Các giao dịch còn lại được bổ sung khi bước tương ứng hoàn thành (cảnh báo của Kho, Bếp và báo cáo: bước 7; tình trạng món: đợt 2).
+Mục này có thẻ use case cho các giao dịch đã xây dựng: Kho, Bếp, chi nhánh và báo cáo quản lý. Các giao dịch về tình trạng món được bổ sung ở đợt 2.
 
 ### 1. Kho - module
 
@@ -248,6 +249,31 @@ flowchart TD
   h --> z
 ```
 
+#### 1.4. Theo dõi cảnh báo kho - use case
+
+##### 1.4.1. Xem cảnh báo và độ trễ consumer - giao dịch
+
+- **Tên Usecase:** Xem cảnh báo và độ trễ consumer
+- **Mô tả Usecase:** Chức năng cho phép nhân viên kho và người vận hành xem các cảnh báo Luồng D của Kho và biết Kho có đọc tin kịp không. Hệ thống chỉ báo động, không tự sửa dữ liệu.
+- **Tác nhân chính:** Nhân viên kho, người vận hành. **Tác nhân phụ:** Kafka (đọc offset của nhóm consumer).
+- **Điều kiện bắt đầu:** không có. **Điều kiện kết thúc:** không có.
+- **Trình tự các sự kiện:**
+  1. `GET /alerts` (lọc được theo `kind`): trả tối đa 100 cảnh báo mới nhất của bảng `alerts`: `CAN_KIEM_TRA` (tin hỏng đã chuyển `dlq`, hoặc đơn cần kiểm tra) và `LENH_KHONG_KHOP` (lệnh hoàn kho hoặc báo đã dùng không khớp bản ghi nào; tồn kho không đổi).
+  2. `GET /monitor`: với mỗi topic Kho đọc, hệ thống so offset đã commit của nhóm consumer với offset cuối của partition, trả số tin chưa đọc, thời điểm ghi và tuổi của tin chưa đọc cũ nhất, và đánh dấu `slow` khi tuổi đó quá 5 phút (mục 10 của đặc tả). Không hỏi được Kafka thì `kafka_reachable` là false.
+- **Các yêu cầu phi chức năng:** đọc offset không tham gia nhóm consumer, nên không làm nhóm chia lại partition; kết quả giữ 3 giây để màn hình hỏi mỗi 2 giây không dồn lên Kafka.
+- **Biểu đồ hoạt động:**
+
+```mermaid
+flowchart TD
+  s((Bắt đầu)) --> a{API}
+  a -- GET /alerts --> b[Đọc bảng alerts, lọc theo kind, mới nhất trước] --> z((Kết thúc))
+  a -- GET /monitor --> c{Hỏi được Kafka?}
+  c -- không --> d[kafka_reachable = false] --> z
+  c -- có --> e[Tin chưa đọc và tuổi tin cũ nhất theo topic] --> f{Quá 5 phút?}
+  f -- có --> g[slow = true] --> z
+  f -- không --> z
+```
+
 ### 2. Bếp - module
 
 #### 2.1. Xử lý phiếu bếp - use case
@@ -399,6 +425,20 @@ flowchart TD
   b -- có --> c[Ghi đè flagged_ingredients] --> z((Kết thúc))
   b -- không --> z
 ```
+
+#### 2.3. Theo dõi cảnh báo bếp - use case
+
+##### 2.3.1. Xem cảnh báo và độ trễ consumer - giao dịch
+
+- **Tên Usecase:** Xem cảnh báo và độ trễ consumer
+- **Mô tả Usecase:** Chức năng cho phép nhân viên bếp và người vận hành xem các cảnh báo Luồng D của Bếp và biết Bếp có đọc tin kịp không.
+- **Tác nhân chính:** Nhân viên bếp, người vận hành. **Tác nhân phụ:** Kafka.
+- **Điều kiện bắt đầu:** không có. **Điều kiện kết thúc:** không có.
+- **Trình tự các sự kiện:**
+  1. `GET /alerts` (lọc được theo `kind`): tối đa 100 cảnh báo mới nhất: `CAN_KIEM_TRA` (tin hỏng, đơn cần kiểm tra) và `HUY_SAI_CHI_NHANH` (yêu cầu hủy đến từ một chi nhánh không phải chi nhánh gốc của đơn; Bếp bỏ qua yêu cầu đó).
+  2. `GET /monitor`: như giao dịch 1.4.1, cho các topic Bếp đọc (`kitchen-orders`, `cancel-events.*`, `menu-events`).
+- **Các yêu cầu phi chức năng:** như giao dịch 1.4.1; yêu cầu hủy sai chi nhánh bị bỏ qua, phiếu của chi nhánh gốc vẫn vào Chờ nấu, và có cảnh báo (kịch bản 34).
+- **Biểu đồ hoạt động:** như giao dịch 1.4.1, với các loại cảnh báo của Bếp.
 
 ### 3. Đặt món tại chi nhánh - module
 
@@ -559,6 +599,54 @@ flowchart TD
   c -- không --> z
   a -- CancelRejected --> d[Tắt cờ, ghi thông báo bếp đã nấu] --> z
   a -- không đọc được hoặc loại lạ --> e[Cảnh báo CAN_KIEM_TRA; không đọc được thì vào dlq] --> z
+```
+
+#### 3.6. Nhân bản đơn về trung tâm - use case
+
+##### 3.6.1. Ghi nhịp nhân bản - giao dịch
+
+- **Tên Usecase:** Ghi nhịp nhân bản
+- **Mô tả Usecase:** Chức năng cho phép dịch vụ chi nhánh đánh dấu thời điểm mà dữ liệu đơn đã được nhân bản về Central Order Replica, để báo cáo quản lý có mốc "dữ liệu tính đến" của từng chi nhánh.
+- **Tác nhân chính:** Local Order Service (tự động, luồng chạy nền). **Tác nhân phụ:** PostgreSQL logical replication.
+- **Điều kiện bắt đầu:** dịch vụ chi nhánh đang chạy. **Điều kiện kết thúc:** dòng duy nhất của chi nhánh trong `replication_heartbeat` mang thời điểm mới.
+- **Trình tự các sự kiện:**
+  1. Mỗi 5 giây, một giao dịch ghi `INSERT ... ON CONFLICT (branch_id) DO UPDATE SET beat_at = now()` theo đồng hồ của CSDL chi nhánh.
+  2. Logical replication đưa `orders` và `replication_heartbeat` về `central-db` theo đúng thứ tự commit của chi nhánh.
+  3. CSDL chi nhánh không trả lời: ghi log, thử lại ở nhịp sau; trong lúc đó mốc ở trung tâm đứng yên.
+- **Các yêu cầu phi chức năng:** cắt nhân bản từ một chi nhánh thì chỉ mốc của chi nhánh đó đứng yên; nối lại thì số liệu khớp CSDL chi nhánh (kịch bản 55).
+- **Biểu đồ hoạt động:**
+
+```mermaid
+flowchart TD
+  s((Bắt đầu)) --> a[Chờ 5 giây] --> b{Ghi được replication_heartbeat?}
+  b -- có --> c[beat_at = now của CSDL chi nhánh] --> d[Nhân bản về central-db cùng orders] --> a
+  b -- không --> e[Ghi log] --> a
+```
+
+### 4. Báo cáo quản lý - module
+
+#### 4.1. Xem báo cáo tổng hợp - use case
+
+##### 4.1.1. Xem báo cáo tổng hợp - giao dịch
+
+- **Tên Usecase:** Xem báo cáo tổng hợp
+- **Mô tả Usecase:** Chức năng cho phép quản lý xem số liệu toàn chuỗi; số liệu có thể chậm hơn dữ liệu ở chi nhánh, nên mỗi chi nhánh có mốc "dữ liệu tính đến" (mục 8 của đặc tả).
+- **Tác nhân chính:** Quản lý. **Tác nhân phụ:** Central Order Replica.
+- **Điều kiện bắt đầu:** không có. **Điều kiện kết thúc:** không có; giao dịch không đổi dữ liệu.
+- **Trình tự các sự kiện:**
+  1. Màn hình gọi `GET /reports/summary` của Order Query Service.
+  2. Hệ thống mở một giao dịch `REPEATABLE READ, READ ONLY` trên `central-db` (không bao giờ đọc CSDL chi nhánh).
+  3. Đọc `replication_heartbeat`: mốc "dữ liệu tính đến" và tuổi của nó cho từng chi nhánh.
+  4. Đếm `orders` theo chi nhánh, trạng thái và `close_reason`.
+  5. Trả mọi chi nhánh được cấu hình (`BRANCHES`), kể cả chi nhánh chưa có dữ liệu (mốc null, số 0): số đơn theo năm trạng thái, tổng, và số đơn Đã hủy, Thất bại theo lý do.
+- **Các yêu cầu phi chức năng:** đọc trong một snapshot nên mốc không bao giờ mới hơn số liệu đi kèm; yêu cầu hủy đang chờ ở Bếp không được tính; khi nhân bản từ một chi nhánh bị cắt, báo cáo vẫn xem được (kịch bản 55).
+- **Biểu đồ hoạt động:**
+
+```mermaid
+flowchart TD
+  s((Bắt đầu)) --> a[GET /reports/summary] --> b[Mở snapshot chỉ đọc trên central-db]
+  b --> c[Đọc replication_heartbeat: mốc dữ liệu tính đến] --> d[Đếm orders theo chi nhánh, trạng thái, lý do]
+  d --> e[Thêm chi nhánh được cấu hình chưa có dữ liệu] --> f[Trả báo cáo] --> z((Kết thúc))
 ```
 
 ## III. THIẾT KẾ CƠ SỞ DỮ LIỆU

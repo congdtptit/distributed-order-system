@@ -54,4 +54,11 @@ Màn hình chỉ hiển thị điều các dịch vụ trả về và không t�
 
 Đường dẫn `/demo/POS01` (hoặc `POS02`, `ONLINE`); dùng khi trình diễn. Trang đặt màn Chi nhánh và màn Bếp cạnh nhau, dùng lại đúng hai màn đó và không có trạng thái riêng, để xem trực tiếp một tranh chấp (kịch bản 3) hay một yêu cầu hủy tới Bếp trước đơn (kịch bản 1). Phía trên là hướng dẫn các kịch bản demo của mục 12 đặc tả (1, 3, 4, 10, 36): các bước, lệnh `bin/chaos` để gây lỗi, và kết quả mong đợi. Kịch bản 10 và 36 đi thành cặp để cho thấy ranh giới của cam kết khi hủy lúc mất mạng.
 
-> TODO(bước 7): màn Quản lý.
+### 6. Màn hình Quản lý
+
+Đường dẫn `/reports`; người dùng là Quản lý. Màn hình chỉ đọc một API, `GET /reports/summary` của Order Query Service. Dịch vụ này đọc Central Order Replica, không bao giờ đọc CSDL của chi nhánh, nên số liệu có thể chậm hơn dữ liệu ở chi nhánh (mục 8 của đặc tả). Màn hình không có thao tác nào làm đổi dữ liệu.
+
+- **Đơn theo trạng thái:** mỗi chi nhánh một dòng với mốc "dữ liệu tính đến hh:mm:ss" kèm "cách đây bao lâu", số đơn ở từng trạng thái (Chờ Kho, Đã giữ, Hoàn tất, Đã hủy, Thất bại) và tổng; dòng cuối cộng cho toàn chuỗi. Chi nhánh chưa có dữ liệu nào sang tới trung tâm thì hiện "Chưa có dữ liệu".
+- **Mốc "dữ liệu tính đến"** là `beat_at` của bảng `replication_heartbeat` mà chi nhánh cập nhật mỗi 5 giây và đã sang tới trung tâm. Nhân bản áp dụng giao dịch của một chi nhánh theo đúng thứ tự commit, nên mọi thay đổi đơn mà chi nhánh commit trước mốc đó đều đã có trong số liệu. Khi nhân bản từ một chi nhánh bị cắt (kịch bản 55), mốc của chi nhánh đó đứng yên và "cách đây" tăng dần, trong khi các chi nhánh khác vẫn mới.
+- **Lý do hủy và thất bại:** mỗi chi nhánh một thẻ, liệt kê số đơn Đã hủy theo lý do (của khách hoặc của Bếp khi từ chối phiếu) và số đơn Thất bại theo lý do của Kho.
+- Màn hình ghi rõ chỉ trạng thái đơn ở chi nhánh được tính: yêu cầu hủy đang chờ ở Bếp không phải trạng thái kết thúc nên không được tính.
