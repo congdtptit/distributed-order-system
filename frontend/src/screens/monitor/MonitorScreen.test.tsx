@@ -45,13 +45,13 @@ describe("monitor screen", () => {
       ),
     );
     renderRoute("/monitor");
-    await screen.findByText("4 mục chờ gửi");
+    await screen.findByText(/4 mục chờ gửi/);
     for (const service of ["POS01", "POS02", "ONLINE", "Kho", "Bếp"]) {
       expect(rowOf(service).getByText("Đang trả lời")).toBeInTheDocument();
     }
     const pos01 = rowOf("POS01");
     expect(pos01.getByText("Mất kết nối Kafka")).toBeInTheDocument();
-    expect(pos01.getByText("1 đơn chờ Kho quá lâu")).toBeInTheDocument();
+    expect(pos01.getByText(/4 mục chờ gửi · 1 đơn chờ Kho quá lâu/)).toBeInTheDocument();
   });
 
   it("shows a service that does not answer as down and keeps the others", async () => {
