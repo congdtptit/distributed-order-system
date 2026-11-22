@@ -1,8 +1,17 @@
 # Detailed design – Kafka events, DB schemas and API
 
-Revision 13 · 22 Nov 2026 · @Naul · follows business specification v1.5
+Revision 14 · 22 Nov 2026 · @Naul · follows business specification v1.5
 
 This document turns business specification v1.5 (the lean edition) into three things to code against: the Kafka event catalogue, each service's DB schema, and the API. There is no existing codebase to align with: the base flow is built in this project as well, so the event names, table names, column names and API paths here are the ones to use.
+
+## Changes in revision 14
+
+| Section | Change | Reason |
+|---|---|---|
+| 2, 5 | The branch DB gets an `alerts` table (migration `003`), kind `CAN_KIEM_TRA` only, written for a status message moved to the dlq and for one of unknown type; `GET /monitor` lists them. Every service now writes its alerts to its own table | Section 9 of the specification asks the branch to "raise an alert", but the branch DB had nowhere to keep one; a log line is lost on restart, cannot reach the screen and cannot be checked by query. Chosen by @Naul on 22 Nov 2026 |
+| 5 | New rule "The branch in practice": the send states, the connectivity probe, the sender's backoff, one sender per branch, what `GET /monitor` lists, messages the branch cannot apply, the leftover cancel entry | Built in step 6 (22 Nov 2026); the spec review listed what the documents did not state |
+| 5 | Note: the rank condition of write (4) never decides on its own | The step 6 mutation check: every write that makes an order terminal turns the flag off, and write (2) refuses a terminal order, so a terminal order with the flag `DANG_YEU_CAU` cannot exist. The condition stays as a guard |
+| 6 | The branch API rows: `POST /orders` returns the order, invalid input is 400 (also for the cancel reason), the fields of `GET /monitor` | Built in step 6 |
 
 ## Changes in revision 13
 
@@ -186,7 +195,7 @@ Notes on the table:
   - *Unknown `event_type` or higher `schema_version`*: on the deciding side, moved to the dlq at once, without the 5 attempts.
   - *Interrupted processing*: if a message's steps stop part-way on a Kafka error (the dlq send, the offset commit), the consumer moves its read position back to that message; if the DB commit had happened, step 2 blocks the repeat. The attempt counter lives in memory, so a message that kills the process is retried after every restart and never reaches the dlq (known limit).
   - *Client settings* beyond section 13.1: consumer `auto.offset.reset=earliest`, `session.timeout.ms=10000` (a stopped instance's partitions move after 10 s), `topic.metadata.refresh.interval.ms=30000` (a new branch topic is seen within 30 s); producer `message.timeout.ms=30000` (after that a send counts as failed and the outbox row stays unsent).
-  - *Branch alerts*: the branch DB has no `alerts` table, so the display-only side writes its "raise an alert" as an error log line for now. Where branches keep these alerts is open (README, pending work).
+  - *Alerts*: every service writes its "raise an alert" as an `alerts` row in its own DB, plus an error log line. The branch's table (section 5, revision 14) has one kind, `CAN_KIEM_TRA`, written both for a message moved to the dlq and for an unknown type it ignores; `detail.error` tells them apart.
 
 The branch applies status messages as follows:
 
@@ -491,6 +500,40 @@ UPDATE orders SET cancel_flag = 'KHONG', cancel_message = :msg
 - The sender takes only the unsent row with the smallest `id` for each `order_id`. A cancel entry therefore never goes before the create-order entry of the same order, while other orders are not blocked (BR9).
 - `CancelPending` and `CancelRejected` do not touch `status`.
 - `menu_cache` is overwritten only when the message's `(epoch, seq)` is greater than that of the existing row; the snapshot is merged by the same rule, not deleted and reloaded (BR10).
+- The rank condition of write (4) never decides on its own: write (3) turns the flag off whenever an order becomes terminal, a local cancel closes an order whose flag is off, and write (2) refuses a terminal order, so no terminal order has the flag `DANG_YEU_CAU`. It stays as written, as a guard.
+
+Added in revision 14, as migration `003`:
+
+```sql
+-- Flow D: status messages this branch could not read (moved to the dlq) or did not recognise
+-- (ignored), section 9 of the specification. Same shape as the alerts table of section 3.
+CREATE TABLE alerts (
+  id               BIGSERIAL PRIMARY KEY,
+  kind             TEXT NOT NULL CHECK (kind IN ('CAN_KIEM_TRA')),
+  order_id         UUID,
+  event_id         UUID,
+  source_topic     TEXT NOT NULL,
+  source_partition INT NOT NULL,
+  source_offset    BIGINT NOT NULL,
+  detail           JSONB NOT NULL DEFAULT '{}',
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (kind, source_topic, source_partition, source_offset)
+);
+```
+
+The `alerts` table stays at the branch: it is not in the publication to the Central Order Replica.
+
+**The branch in practice** (built in step 6):
+
+- **Send states.** `GET /orders` gives each order the state of its create-order entry (`send_state`) and of its latest cancel entry (`cancel_send_state`): `CHUA_GUI` (no flag: "Not sent, kitchen has not received it"), `DANG_GUI` (flag, no acknowledgement: "Sending, unknown whether the kitchen has received it"), `DA_GUI` (acknowledged by Kafka, which says nothing about Inventory or the Kitchen). `send_state` is null once a local cancel discarded the entry; `cancel_send_state` is null if no cancel was queued. These carry the texts of BR5.
+- **The probe** is a cluster metadata request through the sender's own Kafka client, with a 2-second timeout; it succeeds if any broker answers. The sender probes before every round that has an entry without the flag, and at least every 5 seconds otherwise, so the connection status of `GET /monitor` stays current. While entries with the flag are failing, one round can take up to `message.timeout.ms` (30 s) plus 10 s, so the status can be that old; `checked_at` shows its age.
+- **Retries.** A round with a failed send, an entry held back by a failed probe, or any error waits 0.5 s, doubling up to 5 s, then goes again. A message the producer refuses outright (for example over the 1 MB limit) fails like any other send and stays queued with its flag: the quarantine queue is out of scope (section 15 of the specification); the other orders' entries are still sent.
+- **One sender per branch.** Only the sender sets `sent_at`, which is what keeps a cancel entry behind its create-order entry; a branch runs one instance (section 13.6 of the specification).
+- **A leftover cancel entry.** A cancel entry queued while the order was open is still sent if the order reaches a terminal status first. The Kitchen returns its stored result and the rank rule ignores it, so this is harmless.
+- **Messages the branch cannot apply.** A status message for an order the branch does not have is logged as a warning and recorded in `processed_events`; it raises no alert. A message whose topic names another branch counts as unreadable (5 attempts, the dlq, an alert). A `reason_code` that is not text is dropped; any other value is stored as received.
+- **`OrderCreated`** carries `created_at` (the branch's clock, UTC), `channel` (`ONLINE` for the Online branch, `POS` for the others) and `items[{dish_id, name, quantity}]` with the names from `dishes`.
+- **`cancel_message`** holds the fixed English text "Cannot cancel: the kitchen has started cooking"; the screens show it in Vietnamese.
+- **`GET /monitor`** lists, besides the connection status: `waiting_to_send`, the number of entries Kafka has not acknowledged (attempted ones included); `awaiting_inventory`, orders in `CHO_KHO` created more than N = 10 minutes ago, with the time waited and the cancel flag; `about_to_expire`, orders still in `CHO_KHO` whose create-order entry is unacknowledged and was created more than X − 1 hour ago, with `expires_at` (an order already past X stays listed: Inventory will fail it when it arrives); `cancel_requested`, orders with the flag on and the time waited; `message_alerts`, the number of `alerts` rows and the 20 latest.
 
 ### Replication to the Central Order Replica
 
@@ -522,12 +565,12 @@ Each service exposes only the APIs that a person or a screen needs; services do 
 
 | Service | API | What it does | Returns |
 |---|---|---|---|
-| Branch | `POST /orders` | Validates the data, generates `order_id`, stores the Awaiting Inventory order and the create-order entry in one transaction | 201 with `order_id`; 400 if the data is invalid: a missing field, a non-positive quantity, or a dish not in `dishes` (BR9) |
+| Branch | `POST /orders` | Validates the data, generates `order_id`, stores the Awaiting Inventory order and the create-order entry in one transaction | 201 with the order as `GET /orders/{id}` shows it; 400 if the data is invalid: no items, a missing field, a quantity that is not a positive whole number, or a dish not in `dishes` (BR9). Every invalid input at the branch is 400, not FastAPI's 422 |
 | Branch | `GET /dishes` | The dish catalogue from the branch's own `dishes` table; answers while the branch is offline | 200 |
-| Branch | `POST /orders/{id}/cancel` | Runs operation (2) in section 5 with `reason_code` | 200 `DA_HUY` for a local cancel; 202 `DANG_YEU_CAU` if it goes through the Kitchen or a cancel request is already pending; 409 if the order is already in a terminal status; 404 if the order does not exist |
-| Branch | `GET /orders`, `GET /orders/{id}` | Reads orders with the cancel flag and message | 200 |
+| Branch | `POST /orders/{id}/cancel` | Runs operation (2) in section 5 with `reason_code` | 200 `DA_HUY` for a local cancel; 202 `DANG_YEU_CAU` if it goes through the Kitchen or a cancel request is already pending; 409 if the order is already in a terminal status; 404 if the order does not exist; 400 if `reason_code` is not a customer cancel reason (checked first). The body is the order |
+| Branch | `GET /orders`, `GET /orders/{id}` | Reads orders with the cancel flag and message and the send states ("The branch in practice", section 5); the list holds the 200 most recent | 200; 404 for an unknown order |
 | Branch | `GET /menu` (phase 2) | Reads `menu_cache`, with a `stale` flag when nothing has been heard from Inventory for more than N minutes | 200 |
-| Branch | `GET /monitor` | Flow D: connection status, number of entries waiting to be sent, warnings | 200 |
+| Branch | `GET /monitor` | Flow D: connection status, number of entries waiting to be sent, orders in Awaiting Inventory longer than N minutes, orders about to pass X, orders with the cancel flag, message alerts ("The branch in practice", section 5) | 200 |
 | Kitchen | `GET /tickets` | Queued and Cooking tickets, with warnings for flagged ingredients | 200 |
 | Kitchen | `POST /tickets/{order_id}/start` | Queued → Cooking, emits `StockConsumed` | 200; 409 with the current status if the ticket is no longer Queued |
 | Kitchen | `POST /tickets/{order_id}/reject` | Queued → Cancelled with `reason_code`, `spoiled_ingredients[]`; emits `OrderCancelled` and `ReleaseRequested` | 200; 409 as above; 400 if the reason is Spoiled ingredient but no ingredient is given, or an ingredient does not belong to the ticket |

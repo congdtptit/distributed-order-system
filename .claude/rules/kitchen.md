@@ -36,4 +36,4 @@ The `paths` above follow the module names in section 2 of `docs/03-implementatio
 
 ## Scenarios of this module
 
-Steps 4 and 5 in section 7 of document 02: 1, 2, 3, 4, 6, 8, 23, 25, 27, 28, 33, 34, 35, 48, 50, 51, 52. Steps 4 and 5 pass since 22 Nov 2026 (6 and 48: the Kitchen part; 3, 8, 23, 33: up to the branch's topic, the branch side is step 6).
+Steps 4 and 5 in section 7 of document 02: 1, 2, 3, 4, 6, 8, 23, 25, 27, 28, 33, 34, 35, 48, 50, 51, 52. Steps 4 and 5 pass since 22 Nov 2026 (6 and 48: the Kitchen part). The branch side of 3, 8, 23 and 33 is in `backend/order-service/tests/test_cancel.py`, with the Kitchen's real handler.

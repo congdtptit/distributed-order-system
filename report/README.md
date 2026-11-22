@@ -45,11 +45,11 @@ Script ghép các file theo thứ tự, thay các dòng `<!-- include: … -->` 
 | Phần I | Chưa viết; chờ quyết định ai viết |
 | Mô hình HLD | Có |
 | Danh sách chức năng | Có đủ các chức năng của đợt 1 và đợt 2 |
-| Thiết kế chức năng | Có cho các giao dịch đã làm: Kho và Bếp (12 giao dịch, gồm quyết định yêu cầu hủy); chi nhánh ở bước 6 |
+| Thiết kế chức năng | Có cho các giao dịch đã làm: Kho, Bếp và chi nhánh (19 giao dịch); cảnh báo của Kho, Bếp và báo cáo ở bước 7 |
 | Thiết kế CSDL | Có: danh sách CSDL, sơ đồ tổng quát, danh sách bảng; sơ đồ ER và bảng chi tiết sinh từ CSDL đang chạy |
 | Công nghệ | Có |
 | Giao diện | Chờ bước 6b |
 | Kịch bản kiểm thử | Có; trạng thái sinh từ lần chạy test gần nhất |
-| Mô hình kiểm thử phân tán | Có; bổ sung kịch bản theo các bước 5–7 |
+| Mô hình kiểm thử phân tán | Có, gồm cắt mạng chi nhánh thật (kịch bản 10, 36); bổ sung kịch bản 55 và hai instance thật ở bước 7 |
 | Kiểm thử hiệu năng | Chờ bước 7 (JMeter) |
 | Môi trường, công cụ | Có; bổ sung JMeter ở bước 7 |

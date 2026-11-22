@@ -27,17 +27,19 @@ Thực hiện kiểm thử hệ thống đặt món phân tán đáp ứng các 
 
 ##### Mô hình kiểm thử tính phân tán
 
-Test tầng 3 chạy trong container `tools`, nối vào cùng các mạng Docker với các dịch vụ. Test tự gây lỗi qua Docker Engine API (dừng, kill, bật lại container), giống lệnh `bin/chaos` dùng khi demo bằng tay, rồi kiểm tra trạng thái trong CSDL và tin trên Kafka.
+Test tầng 3 chạy trong container `tools`, nối vào cùng các mạng Docker với các dịch vụ. Test tự gây lỗi qua Docker Engine API (dừng, kill, bật lại container; tách một container khỏi mạng `kafka-net`), giống lệnh `bin/chaos` dùng khi demo bằng tay, rồi kiểm tra trạng thái trong CSDL, tin trên Kafka và câu trả lời của API.
 
 ```mermaid
 flowchart LR
-  T["Container tools<br/>pytest tầng 3"] -->|Docker Engine API:<br/>stop, kill, start| D["Docker"]
+  T["Container tools<br/>pytest tầng 3"] -->|Docker Engine API:<br/>stop, kill, start,<br/>network disconnect| D["Docker"]
   D -.-> K1["kafka1"] & K2["kafka2"] & K3["kafka3"]
   D -.-> I1["inventory-1"] & I2["inventory-2"]
+  D -.->|tách khỏi kafka-net| P1["pos01"]
   T -->|gửi tin, đọc topic| K1
   T -->|HTTP| KS["kitchen"]
+  T -->|HTTP: tạo đơn, hủy, giám sát| P1
   T -->|SQL: đọc trạng thái| DB[("inventory-db, kitchen-db,<br/>CSDL test")]
-  I1 & I2 & KS --- K1
+  I1 & I2 & KS & P1 --- K1
 ```
 
 | Kịch bản | Lỗi gây ra | Cách gây | Kiểm tra | Kết quả |
@@ -49,7 +51,10 @@ flowchart LR
 | 3, 51, 52 | Hai thao tác tranh nhau trên cùng một phiếu | Hai kết nối, lặp 60–100 lần, có Kho thật nhận lệnh của Bếp | Đúng một thao tác thắng; Kho rời trạng thái Đang giữ đúng một lần theo bên thắng | Đạt |
 | 24 | Định tuyến theo chi nhánh | Gửi đơn thật vào `order-events.POS01` | Bếp nhận qua `kitchen-orders`; chỉ POS01 nhận trạng thái | Đạt |
 | 25 | Bếp ngừng hoạt động trong khi đơn và yêu cầu hủy vẫn đến | Dừng container `kitchen`, gửi 10 đơn và 5 yêu cầu hủy (có cái trước, có cái sau đơn của nó), bật lại | Mọi đơn đến đúng trạng thái theo bảng 3.2; mỗi đơn bị hủy có đúng một lệnh hoàn kho và một Đã hủy; Kho hoàn kho đủ | Đạt |
-| 10, 36, 12 | Chi nhánh mất mạng | `bin/chaos offline` (bước 6) | | Chưa kiểm thử |
+| 10 | Chi nhánh mất mạng, thu ngân tạo đơn rồi hủy | Tách container `pos01` khỏi `kafka-net`, tạo hai đơn qua API của `pos01`, hủy một đơn, nối mạng lại | Đơn bị hủy đóng `DA_HUY` ngay (200), không có tin nào của đơn đó trên `order-events.POS01`, Kho và Bếp không có bản ghi; đơn còn lại được gửi và lên Đã giữ | Đạt |
+| 36 | Chi nhánh mất mạng sau khi đã gửi đơn; Bếp bắt đầu nấu trước khi yêu cầu hủy tới | Đơn lên Đã giữ, tách `pos01` khỏi `kafka-net`, bấm hủy (202), Bếp bấm Bắt đầu nấu, nối mạng lại, Bếp bấm Hoàn tất | Chi nhánh hiện "Không hủy được: bếp đã bắt đầu nấu", đơn đi tiếp tới Hoàn tất, Kho ghi nguyên liệu đã dùng, không hoàn kho | Đạt |
+| 12 | Gửi lỗi nhiều lần sau khi đã thử gửi | Hàng chờ của chi nhánh gửi tới một topic mà broker chưa có (thăm dò vẫn thành công nên mục được đặt cờ), lặp nhiều vòng, rồi tạo topic | Không mục nào bị bỏ; mục hủy không đi trước mục tạo đơn; khi gửi được thì đủ mọi mục, đúng thứ tự theo đơn; đơn khác không bị chặn | Đạt |
+| 31 (chi nhánh) | Broker đang làm leader bị kill khi chi nhánh đang gửi đơn | `kill` (SIGKILL) container leader trong lúc đơn mới liên tục được tạo và hàng chờ của chi nhánh đang gửi | Mọi mục Kafka đã xác nhận đều đọc lại được; gửi vẫn tiếp tục với broker còn lại | Đạt |
 | 28, 42 | Hai instance cùng xử lý một đơn | Hai kết nối CSDL chạy song song, lặp 100 lần (bước 7 bổ sung bản chạy hai instance thật trên Kafka) | Chỉ một bản ghi, kết quả đúng bảng 3.2 dù tin nào đến trước (28); đúng một đơn được giữ, kho không âm (42) | Đạt |
 | 55 | Cắt nhân bản về Central Order Replica | `bin/chaos cut-replication` (bước 7) | | Chưa kiểm thử |
 

@@ -1,8 +1,15 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 17 · 22 Nov 2026
+Revision 18 · 22 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the implementation phase; section 7 records what has been built so far. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 18
+
+| Section | Change | Reason |
+|---|---|---|
+| 4, 7 | Step 6 is done, so the backend of phase 1 is complete except reporting; progress and estimate updated, with what step 6 built and how it was checked | Scenarios 7, 10, 12, 36, 37, 53 and 54 pass on 22 Nov 2026, and the branch side of 1, 3, 4, 8, 23, 24, 31 and 33 |
+| 7 | The Kitchen's race test of scenario 3 holds the button back by a few milliseconds on every other run | Under the load of the full test run the button won all 60 runs: the cancel handler does more work before it reaches the row lock. The code was right; the test no longer depends on the machine's speed to exercise both winners |
 
 ## Changes in revision 17
 
@@ -371,7 +378,7 @@ Every part was created on 21 Nov 2026, in step 0 or before it. What is left belo
 
 ## 7. Progress
 
-Updated 22 Nov 2026, after step 5. A step is done when its scenarios pass, the code passes Ruff and Pyright, the reviews of section 5.3 are closed, and its sections of the report in `report/` are updated.
+Updated 22 Nov 2026, after step 6. A step is done when its scenarios pass, the code passes Ruff and Pyright, the reviews of section 5.3 are closed, and its sections of the report in `report/` are updated.
 
 | Step | State | Scenarios passing |
 |---|---|---|
@@ -381,13 +388,13 @@ Updated 22 Nov 2026, after step 5. A step is done when its scenarios pass, the c
 | 3. Inventory: release, consumed, waste, stock check | Done 22 Nov 2026 | 5, 22, 43, 49; the Inventory parts of 6 and 48 |
 | 4. Kitchen: tickets, buttons, warnings | Done 22 Nov 2026 | 4, 50, 52; the Kitchen parts of 6 and 48 |
 | 5. Kitchen: cancel requests | Done 22 Nov 2026 | 1, 2, 3, 8, 23, 25, 27, 28, 33, 34, 35, 51 |
-| 6. Branch | Next | 0 of 7 |
-| 6b. Screens | After steps 2–6 | – |
+| 6. Branch | Done 22 Nov 2026 | 7, 10, 12, 36, 37, 53, 54; the branch side of 1, 3, 4, 8, 23, 24, 31, 33 |
+| 6b. Screens | Next | – |
 | 7. Integration | After step 6 | 0 of 1 (scenario 55), plus the end-to-end versions and the performance test |
 | 8. Report material | After step 7 | – |
 | Phase 2 | After phase 1 | 0 of 4 |
 
-**Scenarios:** 32 of 44 pass at their step (73 %). Of those, 6 and 48 wait for phase 2, and 3, 4, 8, 23, 24 and 33 are checked up to the branch's topic: the branch applying the message is step 6, and their end-to-end versions follow it. **Estimate of work done:** about 48 % of the whole project, weighting each step by its expected effort. The report template added a performance test and report material, so the weights were rescaled on 22 Nov 2026: preparation 13 %, step 1 9 %, Inventory 13 %, Kitchen 13 %, branch 11 %, screens 11 %, integration and reporting 9 %, performance test 5 %, report material 8 %, phase 2 5 %, demo 3 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.
+**Scenarios:** 39 of 44 pass at their step (89 %). Of those, 6 and 48 wait for phase 2 for their dish-status part. Left: 55 (step 7) and 18–21 (phase 2). **Estimate of work done:** about 59 % of the whole project, weighting each step by its expected effort. The report template added a performance test and report material, so the weights were rescaled on 22 Nov 2026: preparation 13 %, step 1 9 %, Inventory 13 %, Kitchen 13 %, branch 11 %, screens 11 %, integration and reporting 9 %, performance test 5 %, report material 8 %, phase 2 5 %, demo 3 %. Steps 0 and 1 carry more than their share of scenarios because the cluster, the test harness and the shared consumer are used by every later step.
 
 ### What step 1 built
 
@@ -471,3 +478,25 @@ Shared pieces added to `common`: the reason codes (`reasons.py`), the seed reade
 - **The tests can fail:** removing the wrong-branch check, answering Cancelled before the order arrives, cancelling a Cooking ticket, or treating a Failed record as none each fails at least one test.
 - **Reviews:** the specification review found no violation; it found that message types were not tied to topics (a misconfigured branch could release stock or decide an order) and that a Failed record with no origin answered nothing; both fixed (revision 13 of the design). The test audit asked for the invariants in scenarios 2 and 8, the reply topics in 35 and 28, the release-everything branch of 51 checked at Inventory, a stricter wait in 25, and errors surfaced from the race threads; all added.
 - **Flaky test found:** the full run named it at last: scenario 31's test (fixed, section 6).
+
+### What step 6 built
+
+`backend/order-service/src/order_service/`, one codebase for POS01, POS02 and Online:
+
+| File | Content |
+|---|---|
+| `orders.py` | `create_order` (validation, the order and its create-order entry in one transaction), `cancel_order` (write (2)), reading orders with the send states of BR5, loading the dish catalogue |
+| `statuses.py` | The handlers of `status-events.<branch>`: writes (3), (4), (5) |
+| `sender.py` | `SendQueue`: the head entry of each order, the connectivity probe, write (1) committed before sending, retries with backoff; the connection status for `/monitor` |
+| `monitor.py` | `GET /monitor`: connection, entries waiting, orders waiting for Inventory longer than N, orders about to pass X, orders with the cancel flag, message alerts |
+| `app.py` | The APIs of section 6 of the design, the consumer and sender threads |
+
+Also: the branch DB's `alerts` table (migration `003`, decided by @Naul on 22 Nov 2026) and the shared consumer writing alerts at every service; `Sender.probe` and a per-message refusal in `Sender.send_all`; the `chaos` fixture can cut a container off a network.
+
+### How step 6 was checked
+
+- **Tests:** 221 backend tests pass (198 in tiers 1–2, 23 in tier 3); the branch has 67 of them. Scenario 37 runs the cashier's cancel and the sender's write (1) on two connections 100 times and sees both winners. Scenarios 10 and 36 run end to end: the `pos01` container is cut off `kafka-net` through the Docker Engine API, orders and cancels go through its HTTP API, and the real Inventory and Kitchen answer. Scenario 12 runs twice in tier 3: sends failing on a topic the brokers do not have yet, and the test process really cut off Kafka while entries with the flag are in flight. Scenario 31 kills the leader broker while the branch's send queue is sending. The branch side of 1, 3, 4, 8, 23 and 33 hands the branch's real messages to the real Inventory and Kitchen handlers and their answers back.
+- **The tests can fail:** a local cancel that ignores the flag, a status write without the rank condition, `CancelRejected` limited to open orders, a second cancel entry, a cancel without the row lock, setting the flag without a successful probe, a cancel entry sent before its create-order entry, dropping failed entries, and counting sent orders as about to expire each fail at least one test. Removing the rank condition of write (4) fails none: that condition never decides on its own (revision 14 of the design).
+- **Reviews:** the specification review found two faults, fixed: an entry the producer refuses outright (over 1 MB) stopped the whole send queue, and an unexpected error ended the sender thread for good. It also found that an order Inventory had already answered could stay on the "about to expire" list. Its other findings were choices the documents did not state; they are now "The branch in practice" in revision 14 of the design. The test audit asked for a real network cut in scenario 12, Inventory's invariants after every branch test that touches Inventory, Inventory's side in scenario 3, the Kitchen record in scenario 33, and a wait on the probe instead of a fixed sleep; all done.
+- **Also found:** the full test run showed the Kitchen's race test of scenario 3 could see only one winner on a loaded machine; fixed in the test (revision 18).
+

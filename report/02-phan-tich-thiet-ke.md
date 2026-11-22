@@ -88,7 +88,7 @@ Các nguyên tắc chung: mỗi tin có `event_id` để chống trùng (`proces
 
 ## II. THIẾT KẾ CHỨC NĂNG PHẦN MỀM
 
-Mục này có thẻ use case cho các giao dịch đã xây dựng. Các giao dịch còn lại được bổ sung khi bước tương ứng hoàn thành (chi nhánh: bước 6; cảnh báo và báo cáo: bước 7; tình trạng món: đợt 2).
+Mục này có thẻ use case cho các giao dịch đã xây dựng: Kho, Bếp và chi nhánh. Các giao dịch còn lại được bổ sung khi bước tương ứng hoàn thành (cảnh báo của Kho, Bếp và báo cáo: bước 7; tình trạng món: đợt 2).
 
 ### 1. Kho - module
 
@@ -400,6 +400,167 @@ flowchart TD
   b -- không --> z
 ```
 
+### 3. Đặt món tại chi nhánh - module
+
+POS01, POS02 và Online chạy cùng một mã nguồn (Local Order Service, Online Order Service), phân biệt bằng `BRANCH_ID`. Chi nhánh chỉ tự quyết định trạng thái trong một trường hợp: hủy một đơn mà tin tạo đơn chưa từng được thử gửi (BR9).
+
+#### 3.1. Đặt đơn - use case
+
+##### 3.1.1. Xem danh mục món - giao dịch
+
+- **Tên Usecase:** Xem danh mục món
+- **Mô tả Usecase:** Chức năng cho phép thu ngân hoặc khách hàng online xem danh mục món để chọn khi đặt đơn.
+- **Tác nhân chính:** Thu ngân, khách hàng online. **Tác nhân phụ:** không có.
+- **Điều kiện bắt đầu:** dịch vụ chi nhánh đã khởi động; mỗi lần khởi động nạp (thêm hoặc cập nhật) danh mục từ `backend/seed/menu.json` vào bảng `dishes`. **Điều kiện kết thúc:** không có.
+- **Trình tự các sự kiện:** 1. Mở màn hình đặt món. 2. Màn hình gọi `GET /dishes`. 3. Hệ thống trả các món trong `dishes` của chính chi nhánh.
+- **Các yêu cầu phi chức năng:** vẫn trả lời khi chi nhánh mất kết nối Kafka (kịch bản 10), vì chỉ đọc CSDL của chi nhánh.
+- **Biểu đồ hoạt động:**
+
+```mermaid
+flowchart TD
+  s((Bắt đầu)) --> a[Mở màn hình đặt món] --> b[GET /dishes] --> c[Đọc bảng dishes của chi nhánh] --> d[Hiển thị danh mục] --> z((Kết thúc))
+```
+
+##### 3.1.2. Tạo đơn - giao dịch
+
+- **Tên Usecase:** Tạo đơn
+- **Mô tả Usecase:** Chức năng cho phép thu ngân hoặc khách hàng online tạo một đơn mới; đơn được lưu ở trạng thái Chờ kho và xếp vào hàng chờ gửi, kể cả khi mất mạng.
+- **Tác nhân chính:** Thu ngân, khách hàng online. **Tác nhân phụ:** không có (Kho nhận đơn sau, qua Kafka).
+- **Điều kiện bắt đầu:** đã chọn ít nhất một món. **Điều kiện kết thúc:** đơn `CHO_KHO` trong `orders` và mục `TAO_DON` chưa thử gửi trong `outbox_events`, ghi trong cùng một giao dịch.
+- **Trình tự các sự kiện:**
+  1. Màn hình gọi `POST /orders` với `items[{dish_id, quantity}]`.
+  2. Hệ thống kiểm tra dữ liệu: không có món, số lượng không phải số nguyên dương, món không có trong `dishes` thì trả 400 và không lưu gì (BR9).
+  3. Sinh `order_id`, ghi giờ tạo, chép tên món vào `items`.
+  4. Ghi đơn `CHO_KHO` và mục `TAO_DON` (tin `OrderCreated` tới `order-events.<branch>`), commit, trả 201.
+- **Các yêu cầu phi chức năng:** không chờ Kho; kết quả Đã giữ hoặc Thất bại đến sau qua `status-events.<branch>`. Màn hình hiện "Chưa gửi, bếp chưa nhận" khi mục chưa được thử gửi (BR5).
+- **Biểu đồ hoạt động:**
+
+```mermaid
+flowchart TD
+  s((Bắt đầu)) --> a[POST /orders] --> b{Dữ liệu hợp lệ?}
+  b -- không --> e[400, không lưu gì] --> z((Kết thúc))
+  b -- có --> c[Sinh order_id, ghi giờ tạo] --> d[Ghi orders CHO_KHO và outbox_events TAO_DON trong một giao dịch] --> f[201] --> z
+```
+
+#### 3.2. Hủy đơn - use case
+
+##### 3.2.1. Yêu cầu hủy đơn - giao dịch
+
+- **Tên Usecase:** Yêu cầu hủy đơn
+- **Mô tả Usecase:** Chức năng cho phép thu ngân hoặc khách hàng online yêu cầu hủy một đơn với lý do cố định. Đơn chưa từng được thử gửi thì chi nhánh hủy ngay; đơn đã thử gửi thì yêu cầu được gửi cho Bếp quyết định.
+- **Tác nhân chính:** Thu ngân, khách hàng online. **Tác nhân phụ:** Kitchen Service (quyết định khi đơn đã thử gửi).
+- **Điều kiện bắt đầu:** đơn chưa ở trạng thái kết thúc. **Điều kiện kết thúc:** đơn `DA_HUY` (hủy tại chỗ) hoặc cờ `DANG_YEU_CAU` cùng mục `HUY` trong hàng chờ gửi.
+- **Trình tự các sự kiện:**
+  1. Chọn lý do (`CHANGED_MIND`, `WAITED_TOO_LONG`, `WRONG_ORDER_ENTERED`); màn hình gọi `POST /orders/{id}/cancel`. Lý do khác: 400.
+  2. Khóa dòng `orders` (`SELECT ... FOR UPDATE`). Không có đơn: 404. Đơn đã kết thúc: 409. Đã có yêu cầu đang chờ: 202, không thêm mục `HUY` thứ hai.
+  3. Xóa mục `TAO_DON` của đơn với điều kiện `attempted = FALSE`. Xóa được: đơn chưa từng vào Kafka, chuyển `DA_HUY` với lý do đã chọn, trả 200.
+  4. Không xóa được (đã thử gửi, kể cả khi lần gửi đó báo lỗi): ghi mục `HUY` (tin `CancelRequested` tới `cancel-events.<branch>`) xếp sau mục tạo đơn, bật cờ `DANG_YEU_CAU` kèm giờ yêu cầu, trả 202. Trạng thái chính chưa đổi.
+- **Các yêu cầu phi chức năng:** bấm hủy đúng lúc bộ gửi nhặt mục tạo đơn thì đúng một bên thắng (kịch bản 37); hủy khi mất mạng mà đơn chưa thử gửi thì đơn chắc chắn không được nấu (kịch bản 10); đơn đã thử gửi thì yêu cầu hủy không phải cam kết (kịch bản 36).
+- **Biểu đồ hoạt động:**
+
+```mermaid
+flowchart TD
+  s((Bắt đầu)) --> a[Chọn lý do, POST /orders/id/cancel] --> b{Lý do thuộc nhóm khách hủy?}
+  b -- không --> e0[400] --> z((Kết thúc))
+  b -- có --> c[Khóa dòng orders] --> d{Trạng thái và cờ}
+  d -- không có đơn --> e1[404] --> z
+  d -- đã kết thúc --> e2[409] --> z
+  d -- đang có yêu cầu --> e3[202, không thêm mục] --> z
+  d -- còn lại --> f{Xóa được TAO_DON chưa thử gửi?}
+  f -- có --> g[DA_HUY tại chỗ, 200] --> z
+  f -- không --> h[Ghi mục HUY sau TAO_DON, bật cờ DANG_YEU_CAU, 202] --> z
+```
+
+#### 3.3. Theo dõi đơn - use case
+
+##### 3.3.1. Xem danh sách đơn và trạng thái - giao dịch
+
+- **Tên Usecase:** Xem danh sách đơn và trạng thái
+- **Mô tả Usecase:** Chức năng cho phép thu ngân hoặc khách hàng online xem các đơn của chi nhánh với trạng thái, cờ yêu cầu hủy, thông báo của Bếp và tình trạng gửi.
+- **Tác nhân chính:** Thu ngân, khách hàng online. **Tác nhân phụ:** không có.
+- **Điều kiện bắt đầu:** không có. **Điều kiện kết thúc:** không có.
+- **Trình tự các sự kiện:** 1. Màn hình gọi `GET /orders` hoặc `GET /orders/{id}`. 2. Hệ thống trả đơn kèm `send_state` của mục tạo đơn và `cancel_send_state` của mục hủy gần nhất: `CHUA_GUI` (chưa gửi, bếp chưa nhận), `DANG_GUI` (đang gửi, chưa biết bếp đã nhận chưa), `DA_GUI` (Kafka đã xác nhận).
+- **Các yêu cầu phi chức năng:** Kafka xác nhận không có nghĩa Kho đã nhận đơn (BR9); trạng thái chỉ đổi khi có tin trạng thái.
+- **Biểu đồ hoạt động:**
+
+```mermaid
+flowchart TD
+  s((Bắt đầu)) --> a[GET /orders] --> b[Đọc orders và mục gửi của từng đơn] --> c[Hiển thị trạng thái, cờ hủy, tình trạng gửi] --> z((Kết thúc))
+```
+
+#### 3.4. Giám sát chi nhánh - use case
+
+##### 3.4.1. Xem kết nối, số tin chờ gửi, cảnh báo - giao dịch
+
+- **Tên Usecase:** Xem kết nối, số tin chờ gửi, cảnh báo
+- **Mô tả Usecase:** Chức năng cho phép thu ngân xem các mục Luồng D của chi nhánh. Hệ thống chỉ cảnh báo, không tự hủy đơn vì chờ lâu (Q6).
+- **Tác nhân chính:** Thu ngân. **Tác nhân phụ:** không có.
+- **Điều kiện bắt đầu:** không có. **Điều kiện kết thúc:** không có.
+- **Trình tự các sự kiện:** 1. Màn hình gọi `GET /monitor`. 2. Hệ thống trả: kết quả lần thăm dò Kafka gần nhất; số mục chưa được Kafka xác nhận; đơn Chờ kho quá N = 10 phút (kèm nút Yêu cầu hủy trên màn hình); đơn còn trong hàng chờ gửi khi còn dưới 1 giờ nữa là quá X = 4 giờ; đơn có cờ yêu cầu hủy kèm thời gian đã chờ; các tin trạng thái không đọc được hoặc loại lạ (bảng `alerts`, loại `CAN_KIEM_TRA`).
+- **Các yêu cầu phi chức năng:** kịch bản 53 (Kho tắt, đơn chờ quá N phút) và 54 (mất mạng, đơn sắp quá hạn).
+- **Biểu đồ hoạt động:**
+
+```mermaid
+flowchart TD
+  s((Bắt đầu)) --> a[GET /monitor] --> b[Kết quả thăm dò Kafka gần nhất]
+  b --> c[Đếm mục chưa gửi xong] --> d[Đơn CHO_KHO quá N phút] --> e[Đơn trong hàng chờ sắp quá X giờ] --> f[Đơn có cờ yêu cầu hủy] --> g[Cảnh báo tin trạng thái hỏng] --> z((Kết thúc))
+```
+
+#### 3.5. Đồng bộ đơn với Kho và Bếp - use case
+
+##### 3.5.1. Gửi hàng chờ lên Kafka - giao dịch
+
+- **Tên Usecase:** Gửi hàng chờ lên Kafka
+- **Mô tả Usecase:** Chức năng cho phép dịch vụ chi nhánh gửi các mục trong hàng chờ (tạo đơn, yêu cầu hủy) lên Kafka, giữ thứ tự theo từng đơn.
+- **Tác nhân chính:** Local Order Service (tự động, luồng chạy nền). **Tác nhân phụ:** Kafka.
+- **Điều kiện bắt đầu:** hàng chờ có mục chưa được xác nhận. **Điều kiện kết thúc:** mục được Kafka xác nhận có `sent_at`; mục chưa được xác nhận vẫn nằm trong hàng chờ.
+- **Trình tự các sự kiện:**
+  1. Lấy mục chưa gửi có `id` nhỏ nhất của mỗi đơn, nên mục hủy không bao giờ đi trước mục tạo đơn của cùng đơn, còn các đơn khác không bị chặn.
+  2. Có mục chưa có cờ: thăm dò kết nối Kafka (lấy metadata của cụm, chờ tối đa 2 giây). Thăm dò thất bại: không đặt cờ, không gửi; đơn vẫn hủy tại chỗ được.
+  3. Thăm dò vừa thành công: đặt `attempted = TRUE` có điều kiện `sent_at IS NULL` và commit trước khi gửi. Không còn dòng: mục đã bị hủy tại chỗ, bỏ qua.
+  4. Gửi với `acks=all`; mục được xác nhận thì ghi `sent_at`. Mục lỗi giữ cờ và được gửi lại với thời gian chờ tăng dần, không bao giờ bị bỏ.
+- **Các yêu cầu phi chức năng:** mạng chập chờn lâu không làm mất mục nào, và khi có mạng lại thì gửi đúng thứ tự theo đơn (kịch bản 12); broker leader chết khi đang gửi thì không mất mục đã được xác nhận (kịch bản 31).
+- **Biểu đồ hoạt động:**
+
+```mermaid
+flowchart TD
+  s((Bắt đầu)) --> a[Lấy mục chưa gửi nhỏ nhất của mỗi đơn] --> b{Có mục chưa có cờ?}
+  b -- có --> c{Thăm dò Kafka thành công?}
+  c -- không --> h[Giữ nguyên, chờ rồi thử lại] --> z((Kết thúc))
+  c -- có --> d[Đặt attempted = TRUE, commit] --> e[Gửi lên Kafka]
+  b -- không --> e
+  e --> f{Kafka xác nhận?}
+  f -- có --> g[Ghi sent_at] --> z
+  f -- không --> h
+```
+
+##### 3.5.2. Áp dụng trạng thái đơn nhận về theo thứ hạng - giao dịch
+
+- **Tên Usecase:** Áp dụng trạng thái đơn nhận về theo thứ hạng
+- **Mô tả Usecase:** Chức năng cho phép dịch vụ chi nhánh cập nhật đơn theo tin trạng thái của Kho và Bếp trên `status-events.<branch>`, không bao giờ lùi trạng thái (BR3).
+- **Tác nhân chính:** Local Order Service (tự động, consumer). **Tác nhân phụ:** Inventory Service, Kitchen Service.
+- **Điều kiện bắt đầu:** có tin trên topic trạng thái của chi nhánh. **Điều kiện kết thúc:** tin được ghi vào `processed_events` cùng giao dịch với thay đổi (nếu có).
+- **Trình tự các sự kiện:**
+  1. `OrderReserved` (hạng 1), `OrderFailed`, `OrderCancelled`, `OrderCompleted` (hạng 2): cập nhật chỉ khi hạng mới lớn hơn hạng hiện tại; trạng thái kết thúc tắt cờ yêu cầu hủy.
+  2. `CancelPending`: bật dòng "bếp sẽ không nấu" (`BEP_KHONG_NAU`) chỉ khi đơn chưa kết thúc và cờ đang `DANG_YEU_CAU`.
+  3. `CancelRejected`: tắt cờ và ghi thông báo "Không hủy được: bếp đã bắt đầu nấu", ở mọi hạng.
+  4. Tin không đọc được: thử 5 lần rồi chuyển `dlq` và ghi cảnh báo `CAN_KIEM_TRA`; tin loại lạ: ghi cảnh báo và bỏ qua (mục 9 của đặc tả).
+- **Các yêu cầu phi chức năng:** Đã hủy đến trước Đã giữ thì giữ Đã hủy (kịch bản 7); Thất bại tắt cờ, và `CancelPending` đến sau bị bỏ qua (kịch bản 8); tin trùng không gây tác dụng lần hai (BR4).
+- **Biểu đồ hoạt động:**
+
+```mermaid
+flowchart TD
+  s((Bắt đầu)) --> a{Loại tin}
+  a -- OrderReserved, OrderFailed, OrderCancelled, OrderCompleted --> b{Hạng mới lớn hơn hạng hiện tại?}
+  b -- có --> b1[Cập nhật trạng thái; hạng 2 thì tắt cờ] --> z((Kết thúc))
+  b -- không --> z
+  a -- CancelPending --> c{Chưa kết thúc và cờ DANG_YEU_CAU?}
+  c -- có --> c1[Cờ BEP_KHONG_NAU] --> z
+  c -- không --> z
+  a -- CancelRejected --> d[Tắt cờ, ghi thông báo bếp đã nấu] --> z
+  a -- không đọc được hoặc loại lạ --> e[Cảnh báo CAN_KIEM_TRA; không đọc được thì vào dlq] --> z
+```
+
 ## III. THIẾT KẾ CƠ SỞ DỮ LIỆU
 
 ### 1. CÁC CƠ SỞ DỮ LIỆU CỦA HỆ THỐNG
@@ -426,7 +587,7 @@ flowchart LR
     d["dishes"]
     mc["menu_cache, menu_cache_meta"]
     rh["replication_heartbeat"]
-    pb["processed_events"]
+    pb["alerts, processed_events"]
   end
   subgraph I["Inventory DB"]
     st["stock"] --- re["recipes"]
@@ -449,6 +610,9 @@ flowchart LR
   ob ==>|Kafka: OrderCreated| io
   ia ==>|Kafka: OrderReserved, OrderFailed, IngredientCheckChanged| ko
   ka ==>|Kafka: StockConsumed, ReleaseRequested| io
+  ia ==>|Kafka: OrderReserved, OrderFailed| o
+  ka ==>|Kafka: CancelPending, CancelRejected, OrderCancelled, OrderCompleted| o
+  ob ==>|Kafka: CancelRequested| ko
 ```
 
 Giữa các CSDL không có khóa ngoại: mỗi đơn mang cùng một `order_id` (UUID do chi nhánh sinh) ở cả ba nơi, và dữ liệu đi giữa chúng qua Kafka (nét đôi) hoặc qua logical replication (nét đứt).
@@ -478,8 +642,9 @@ Giữa các CSDL không có khóa ngoại: mỗi đơn mang cùng một `order_i
 | 19 | Branch DB | `menu_cache_meta` | Một dòng: `epoch` hiện tại và lần cuối nghe được từ Kho (đợt 2) |
 | 20 | Branch DB | `replication_heartbeat` | Nhịp nhân bản của chi nhánh, cho mốc "dữ liệu tính đến" |
 | 21 | Branch DB | `processed_events` | Như mục 8 |
-| 22 | Central Order Replica | `orders` | Bản sao `orders` của mọi chi nhánh |
-| 23 | Central Order Replica | `replication_heartbeat` | Bản sao nhịp nhân bản của mọi chi nhánh |
+| 22 | Branch DB | `alerts` | Cảnh báo `CAN_KIEM_TRA`: tin trạng thái không đọc được (đã chuyển `dlq`) hoặc loại lạ (bỏ qua); hiện trên `GET /monitor` |
+| 23 | Central Order Replica | `orders` | Bản sao `orders` của mọi chi nhánh |
+| 24 | Central Order Replica | `replication_heartbeat` | Bản sao nhịp nhân bản của mọi chi nhánh |
 
 #### 2.2. Thiết kế chi tiết các bảng
 

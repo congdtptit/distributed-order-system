@@ -284,6 +284,17 @@ Nguồn: CSDL `pos01-db` đang chạy.
 ```mermaid
 erDiagram
     orders ||--o{ outbox_events : "order_id"
+    alerts {
+        bigint id PK
+        text kind
+        uuid order_id
+        uuid event_id
+        text source_topic
+        int source_partition
+        bigint source_offset
+        jsonb detail
+        timestamptz created_at
+    }
     dishes {
         text dish_id PK
         text name
@@ -330,6 +341,20 @@ erDiagram
         timestamptz beat_at
     }
 ```
+
+###### Bảng `alerts`
+
+| Field | Type | Null | Key | Default | Extra |
+|---|---|---|---|---|---|
+| id | BIGINT |  | PRI |  | auto_increment |
+| kind | TEXT |  | UNI |  | CHECK ((kind = 'CAN_KIEM_TRA'::text)) |
+| order_id | UUID | YES |  |  |  |
+| event_id | UUID | YES |  |  |  |
+| source_topic | TEXT |  | UNI |  |  |
+| source_partition | INT |  | UNI |  |  |
+| source_offset | BIGINT |  | UNI |  |  |
+| detail | JSONB |  |  | '{}'::jsonb |  |
+| created_at | TIMESTAMPTZ |  |  | now() |  |
 
 ###### Bảng `dishes`
 
