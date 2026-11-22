@@ -12,6 +12,7 @@ This document turns business specification v1.5 (the lean edition) into three th
 | 5 | New rule "The branch in practice": the send states, the connectivity probe, the sender's backoff, one sender per branch, what `GET /monitor` lists, messages the branch cannot apply, the leftover cancel entry | Built in step 6 (22 Nov 2026); the spec review listed what the documents did not state |
 | 5 | Note: the rank condition of write (4) never decides on its own | The step 6 mutation check: every write that makes an order terminal turns the flag off, and write (2) refuses a terminal order, so a terminal order with the flag `DANG_YEU_CAU` cannot exist. The condition stays as a guard |
 | 6 | The branch API rows: `POST /orders` returns the order, invalid input is 400 (also for the cancel reason), the fields of `GET /monitor` | Built in step 6 |
+| 6 | `GET /alerts` of Inventory and the Kitchen: newest first, at most 100, `kind` limited to that service's kinds (422 otherwise) | Built in step 6b, ahead of step 7, because the Kitchen screen shows these alerts |
 
 ## Changes in revision 13
 

@@ -22,6 +22,7 @@ from kitchen_support import (
     records_count,
     sent_envelopes,
 )
+from kitchen_support import cancel_requested as kit_cancel
 from psycopg.types.json import Jsonb
 
 from common import reasons
@@ -396,3 +397,16 @@ def test_failed_at_inventory_on_a_cancel_pending_record_is_recorded(kdb: str) ->
         reasons.ORDER_EXPIRED,
     )
     assert outbox(kdb) == []
+
+
+def test_alerts_api_lists_wrong_branch_cancels(kdb: str, api: TestClient) -> None:
+    """``GET /alerts`` (section 6 of document 02): a wrong-branch cancel request's alert,
+    filterable by ``kind``."""
+    env = order_reserved()
+    assert deliver(kdb, env)
+    assert deliver(kdb, kit_cancel(env.order_id, branch="POS02"))
+    body = api.get("/alerts").json()
+    assert [(a["kind"], a["order_id"]) for a in body] == [("HUY_SAI_CHI_NHANH", str(env.order_id))]
+    assert body[0]["detail"] == {"origin_branch": "POS01", "dismissed": ["POS02"]}
+    assert api.get("/alerts", params={"kind": "CAN_KIEM_TRA"}).json() == []
+    assert api.get("/alerts", params={"kind": "LENH_KHONG_KHOP"}).status_code == 422

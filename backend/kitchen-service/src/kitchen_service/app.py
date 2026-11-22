@@ -11,12 +11,14 @@ import os
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Annotated, Any
+from datetime import datetime
+from typing import Annotated, Any, Literal
 
 import psycopg
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 
+from common.alerts import list_alerts
 from common.api import get_clock, get_conn
 from common.clock import Clock, SystemClock
 from common.consumer import ConsumerSettings, Handler, MessageConsumer
@@ -165,3 +167,27 @@ def reject_ticket(order_id: uuid.UUID, body: Rejection, conn: Conn, clock: Clock
 def complete_ticket(order_id: uuid.UUID, conn: Conn, clock: ClockDep) -> Ticket:
     """Cooking → Completed; emits OrderCompleted."""
     return _act(conn, lambda: complete(conn, order_id, clock))
+
+
+class Alert(BaseModel):
+    """A Flow D item a person needs to look at (the ``alerts`` table, section 4 of
+    docs/02-detailed-design.md)."""
+
+    id: int
+    kind: str
+    order_id: uuid.UUID | None
+    event_id: uuid.UUID | None
+    source_topic: str
+    source_partition: int
+    source_offset: int
+    detail: dict[str, Any]
+    created_at: datetime
+
+
+@app.get("/alerts")
+def alerts(
+    conn: Conn, kind: Literal["CAN_KIEM_TRA", "HUY_SAI_CHI_NHANH"] | None = None
+) -> list[Alert]:
+    """Orders that need review and wrong-branch cancel requests,
+    newest first (at most 100); ``kind`` filters."""
+    return [Alert(**a) for a in list_alerts(conn, kind)]

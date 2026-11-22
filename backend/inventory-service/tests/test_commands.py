@@ -2,6 +2,7 @@
 commands. Table 3.3 and the stock accounting table of docs/01-business-spec.md, BR6, BR12,
 Flow A; section 3 of docs/02-detailed-design.md."""
 
+import uuid
 from collections.abc import Callable, Iterator
 from decimal import Decimal
 from typing import Any
@@ -385,3 +386,15 @@ def test_kitchen_commands_on_a_branch_topic_are_refused(inv: str) -> None:
     assert stock(inv) == held
     record = order_record(inv, order.order_id)
     assert record is not None and record[0] == "DANG_GIU"
+
+
+def test_alerts_api_lists_unmatched_commands(inv: str, api: TestClient) -> None:
+    """``GET /alerts`` (section 6 of document 02): an unmatched release command's alert,
+    newest first, filterable by ``kind``."""
+    unknown = uuid.uuid4()
+    assert deliver(inv, release_requested(unknown))
+    body = api.get("/alerts").json()
+    assert [(a["kind"], a["order_id"]) for a in body] == [("LENH_KHONG_KHOP", str(unknown))]
+    assert body[0]["source_topic"] == "stock-commands"
+    assert api.get("/alerts", params={"kind": "CAN_KIEM_TRA"}).json() == []
+    assert api.get("/alerts", params={"kind": "HUY_SAI_CHI_NHANH"}).status_code == 422

@@ -1,6 +1,78 @@
 {
   "components": {
     "schemas": {
+      "Alert": {
+        "description": "A Flow D item a person needs to look at (the ``alerts`` table, section 4 of\ndocs/02-detailed-design.md).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "title": "Detail",
+            "type": "object"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "source_offset": {
+            "title": "Source Offset",
+            "type": "integer"
+          },
+          "source_partition": {
+            "title": "Source Partition",
+            "type": "integer"
+          },
+          "source_topic": {
+            "title": "Source Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "order_id",
+          "event_id",
+          "source_topic",
+          "source_partition",
+          "source_offset",
+          "detail",
+          "created_at"
+        ],
+        "title": "Alert",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -196,6 +268,61 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/alerts": {
+      "get": {
+        "description": "Orders that need review and wrong-branch cancel requests,\nnewest first (at most 100); ``kind`` filters.",
+        "operationId": "alerts_alerts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "CAN_KIEM_TRA",
+                    "HUY_SAI_CHI_NHANH"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Alert"
+                  },
+                  "title": "Response Alerts Alerts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Alerts"
+      }
+    },
     "/health": {
       "get": {
         "operationId": "health_health_get",

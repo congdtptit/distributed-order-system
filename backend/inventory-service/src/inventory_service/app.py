@@ -10,16 +10,18 @@ The APIs are in section 6 of docs/02-detailed-design.md.
 
 import logging
 import os
+import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import psycopg
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from common.alerts import list_alerts
 from common.api import get_clock, get_conn
 from common.clock import Clock, SystemClock
 from common.consumer import ConsumerSettings, MessageConsumer
@@ -189,3 +191,27 @@ def clear_stock_check(
     item = _stock_item(conn, ingredient_id)
     conn.commit()  # before the response: a 200 means the change is stored
     return item
+
+
+class Alert(BaseModel):
+    """A Flow D item a person needs to look at (the ``alerts`` table, section 3 of
+    docs/02-detailed-design.md)."""
+
+    id: int
+    kind: str
+    order_id: uuid.UUID | None
+    event_id: uuid.UUID | None
+    source_topic: str
+    source_partition: int
+    source_offset: int
+    detail: dict[str, Any]
+    created_at: datetime
+
+
+@app.get("/alerts")
+def alerts(
+    conn: Conn, kind: Literal["CAN_KIEM_TRA", "LENH_KHONG_KHOP"] | None = None
+) -> list[Alert]:
+    """Orders that need review and unmatched commands,
+    newest first (at most 100); ``kind`` filters."""
+    return [Alert(**a) for a in list_alerts(conn, kind)]

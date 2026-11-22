@@ -48,3 +48,23 @@ def write_alert(
         ),
     )
     return cur.rowcount == 1
+
+
+def list_alerts(
+    conn: psycopg.Connection[Any], kind: str | None = None, limit: int = 100
+) -> list[dict[str, Any]]:
+    """The newest alerts first, of one kind if given: ``GET /alerts`` of Inventory and the
+    Kitchen (section 6 of docs/02-detailed-design.md)."""
+    cur = conn.execute(
+        """
+        SELECT id, kind, order_id, event_id, source_topic, source_partition, source_offset,
+               detail, created_at
+          FROM alerts
+         WHERE %s::text IS NULL OR kind = %s
+         ORDER BY id DESC
+         LIMIT %s
+        """,
+        (kind, kind, limit),
+    )
+    names = [d.name for d in cur.description or []]
+    return [dict(zip(names, row, strict=True)) for row in cur.fetchall()]
