@@ -1,34 +1,30 @@
-// The Inventory screen (the store keeper): the four quantities of each ingredient and its
-// stock-check flag, stock receipts, ending a stock check, and Inventory's alerts. Specified in
-// .claude/skills/screen/references/screens.md ("inventory"). It shows what Inventory returns.
+// The Inventory screen: stock ledger with visual capacity bars, stock-check priority,
+// stock receipts, clear-check, and Flow D alerts.
 
-import {
-  Alert,
-  Button,
-  Center,
-  Group,
-  List,
-  Loader,
-  Stack,
-  Table,
-  Text,
-  VisuallyHidden,
-} from "@mantine/core";
-import {
-  IconAlertCircle,
-  IconAlertTriangle,
-  IconBell,
-  IconBox,
-  IconChecklist,
-  IconPackageImport,
-} from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
+import { AlertCircle, AlertTriangle, CheckSquare, Package, PackagePlus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { InventoryAlert, StockItem } from "../../api/inventory";
 import { amount, inventoryApi } from "../../api/inventory";
 import { clock, ServiceBanner, StatusBadge, TABULAR } from "../../components/common";
-import { Empty, Figures, PageHeader, Panel } from "../../components/layout";
+import { StackedBar } from "../../components/DataBar";
 import { ALERT_KIND, STOCK_CHECK } from "../../labels";
+import {
+  Alert,
+  Badge,
+  Button,
+  cn,
+  EmptyState,
+  Panel,
+  Spinner,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from "../../ui";
 import { ClearCheckModal, ReceiptModal } from "./StockDialogs";
 
 export function InventoryScreen() {
@@ -37,6 +33,7 @@ export function InventoryScreen() {
   const [receiving, setReceiving] = useState<StockItem | null>(null);
   const [clearing, setClearing] = useState<StockItem | null>(null);
   const announcement = useFlagAnnouncer(stock.data);
+
   // Flagged ingredients first (screens.md), then the order Inventory returns.
   const items = [...(stock.data ?? [])].sort(
     (a, b) => Number(b.needs_check) - Number(a.needs_check),
@@ -44,118 +41,150 @@ export function InventoryScreen() {
   const flaggedCount = items.filter((i) => i.needs_check).length;
 
   return (
-    <Stack gap="lg">
-      <PageHeader
-        title="Kho"
-        description="Tồn kho toàn chuỗi theo bốn lượng của mỗi nguyên liệu. Kho giữ nguyên liệu cho đơn trước khi Bếp nấu."
-      />
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Kho</h1>
+        {stock.data && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="gray">{stock.data.length} nguyên liệu</Badge>
+            {flaggedCount > 0 && (
+              <Badge tone="red" icon={<AlertTriangle className="h-3 w-3" aria-hidden="true" />}>
+                {flaggedCount} chờ kiểm kho
+              </Badge>
+            )}
+          </div>
+        )}
+      </div>
+
       {(stock.isError || alerts.isError) && (
         <ServiceBanner
           service="Kho"
           lastAnswer={Math.max(stock.dataUpdatedAt, alerts.dataUpdatedAt)}
         />
       )}
-      {stock.data && (
-        <Figures
-          figures={[
-            {
-              label: "Nguyên liệu",
-              value: stock.data.length,
-              icon: IconBox,
-              color: "indigo",
-            },
-            {
-              label: "Nguyên liệu đang chờ kiểm",
-              value: flaggedCount,
-              icon: IconAlertTriangle,
-              color: flaggedCount ? "red" : "gray",
-              hint: flaggedCount
-                ? "Món dùng nguyên liệu này tạm Hết"
-                : "Không nguyên liệu nào bị cờ",
-            },
-            {
-              label: "Cảnh báo của Kho",
-              value: alerts.data?.length ?? 0,
-              icon: IconBell,
-              color: alerts.data?.length ? "orange" : "gray",
-            },
-          ]}
-        />
+
+      {flaggedCount > 0 && (
+        <Alert
+          tone="danger"
+          icon={<AlertTriangle className="h-4 w-4" />}
+          className="py-2.5 text-xs"
+        >
+          Có {flaggedCount} nguyên liệu đang chờ kiểm kho — món dùng nguyên liệu này tạm Hết trên
+          thực đơn chi nhánh.
+        </Alert>
       )}
+
       <InventoryAlerts alerts={alerts.data ?? []} />
-      <Panel title="Tồn kho toàn chuỗi" flush>
+
+      <Panel title="Tồn kho toàn chuỗi" count={items.length} flush>
         {stock.isPending && !stock.isError ? (
-          <Center py="xl">
-            <Loader size="sm" aria-label="Đang tải tồn kho" />
-          </Center>
+          <div className="flex justify-center py-10">
+            <Spinner size="md" label="Đang tải tồn kho" />
+          </div>
         ) : items.length === 0 ? (
-          <Empty icon={IconBox}>
+          <EmptyState icon={Package}>
             Chưa có nguyên liệu nào. Kho nạp nguyên liệu từ file seed khi khởi động lần đầu.
-          </Empty>
+          </EmptyState>
         ) : (
-          <Table.ScrollContainer minWidth={820}>
-            <Table highlightOnHover>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Nguyên liệu</Table.Th>
-                  <Table.Th ta="right">Có thể giữ</Table.Th>
-                  <Table.Th ta="right">Đang giữ</Table.Th>
-                  <Table.Th ta="right">Đã dùng</Table.Th>
-                  <Table.Th ta="right">Hao hụt</Table.Th>
-                  <Table.Th>Kiểm kho</Table.Th>
-                  <Table.Th ta="right">Thao tác</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {items.map((item) => (
-                  <Table.Tr key={item.ingredient_id} bg={item.needs_check ? "red.0" : "white"}>
-                    <Table.Td>
-                      <Text size="sm" fw={600}>
-                        {item.name}
-                      </Text>
-                    </Table.Td>
-                    {[item.available, item.reserved, item.consumed, item.wasted].map((value, i) => (
-                      <Table.Td
-                        key={["available", "reserved", "consumed", "wasted"][i]}
-                        ta="right"
-                        style={TABULAR}
-                        {...(i === 0 ? { fw: 600 } : { c: "gray.7" })}
-                      >
-                        {amount(value)} {item.unit}
-                      </Table.Td>
-                    ))}
-                    <Table.Td>
-                      {item.needs_check && <StatusBadge code="CHO_KIEM_KHO" table={STOCK_CHECK} />}
-                    </Table.Td>
-                    <Table.Td>
-                      <Group gap="xs" wrap="nowrap" justify="flex-end">
-                        {item.needs_check && (
-                          <Button
-                            size="xs"
-                            color="teal"
-                            leftSection={<IconChecklist size={14} aria-hidden />}
-                            onClick={() => setClearing(item)}
+          <TableContainer>
+            <Table className="min-w-[820px]">
+              <TableHead>
+                <TableRow className="hover:bg-transparent">
+                  <TableHeaderCell>Nguyên liệu</TableHeaderCell>
+                  <TableHeaderCell className="text-right">Có thể giữ</TableHeaderCell>
+                  <TableHeaderCell className="text-right">Đang giữ</TableHeaderCell>
+                  <TableHeaderCell className="text-right">Đã dùng</TableHeaderCell>
+                  <TableHeaderCell className="text-right">Hao hụt</TableHeaderCell>
+                  <TableHeaderCell>Kiểm kho</TableHeaderCell>
+                  <TableHeaderCell className="text-right">Thao tác</TableHeaderCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {items.map((item) => {
+                  const avail = Number(item.available) || 0;
+                  const res = Number(item.reserved) || 0;
+                  const waste = Number(item.wasted) || 0;
+                  return (
+                    <TableRow
+                      key={item.ingredient_id}
+                      className={cn(item.needs_check && "bg-rose-50/90 hover:bg-rose-100/70")}
+                    >
+                      <TableCell>
+                        <div className="min-w-[140px] space-y-1.5">
+                          <span className="block font-semibold text-ink">{item.name}</span>
+                          <StackedBar
+                            className="h-2 max-w-[140px]"
+                            segments={[
+                              {
+                                key: "avail",
+                                label: "Có thể giữ",
+                                value: avail,
+                                colorClass: "bg-blue-600",
+                              },
+                              {
+                                key: "res",
+                                label: "Đang giữ",
+                                value: res,
+                                colorClass: "bg-amber-500",
+                              },
+                              {
+                                key: "waste",
+                                label: "Hao hụt",
+                                value: waste,
+                                colorClass: "bg-rose-600",
+                              },
+                            ]}
+                          />
+                        </div>
+                      </TableCell>
+                      {[item.available, item.reserved, item.consumed, item.wasted].map(
+                        (value, i) => (
+                          <TableCell
+                            key={["available", "reserved", "consumed", "wasted"][i]}
+                            style={TABULAR}
+                            className={cn(
+                              "text-right font-mono text-xs",
+                              i === 0
+                                ? "font-bold text-ink"
+                                : i === 1 && Number(value) > 0
+                                  ? "font-semibold text-blue-800"
+                                  : i === 3 && Number(value) > 0
+                                    ? "font-semibold text-rose-700"
+                                    : "text-ink-secondary",
+                            )}
                           >
-                            Kiểm kho xong
-                          </Button>
+                            {`${amount(value)} ${item.unit}`}
+                          </TableCell>
+                        ),
+                      )}
+                      <TableCell>
+                        {item.needs_check && (
+                          <StatusBadge code="CHO_KIEM_KHO" table={STOCK_CHECK} />
                         )}
-                        <Button
-                          size="xs"
-                          variant="default"
-                          leftSection={<IconPackageImport size={14} aria-hidden />}
-                          onClick={() => setReceiving(item)}
-                        >
-                          Nhập kho
-                        </Button>
-                      </Group>
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex flex-nowrap justify-end gap-1.5">
+                          {item.needs_check && (
+                            <Button size="xs" variant="accent" onClick={() => setClearing(item)}>
+                              <CheckSquare className="h-3.5 w-3.5" aria-hidden="true" />
+                              Kiểm kho xong
+                            </Button>
+                          )}
+                          <Button size="xs" variant="secondary" onClick={() => setReceiving(item)}>
+                            <PackagePlus className="h-3.5 w-3.5" aria-hidden="true" />
+                            Nhập kho
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
             </Table>
-          </Table.ScrollContainer>
+          </TableContainer>
         )}
       </Panel>
+
       <ReceiptModal
         key={`r-${receiving?.ingredient_id ?? ""}`}
         item={receiving}
@@ -166,36 +195,31 @@ export function InventoryScreen() {
         item={clearing}
         onClose={() => setClearing(null)}
       />
-      <VisuallyHidden>
-        <div role="status" aria-live="polite">
-          {announcement}
-        </div>
-      </VisuallyHidden>
-    </Stack>
+      <div role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </div>
+    </div>
   );
 }
 
-/** Inventory's Flow D alerts (section 8): unmatched commands and orders that need review. */
 function InventoryAlerts({ alerts }: { alerts: InventoryAlert[] }) {
   if (!alerts.length) return null;
   return (
     <section aria-label="Cảnh báo của Kho">
       <Alert
-        color="orange"
-        icon={<IconAlertCircle aria-hidden />}
+        tone="orange"
+        icon={<AlertCircle className="h-4 w-4" />}
         title={`Cảnh báo (${alerts.length})`}
       >
-        <List spacing={4} size="sm">
+        <ul className="mt-1 space-y-1">
           {alerts.map((alert) => (
-            <List.Item key={alert.id}>
-              <Text size="sm" style={TABULAR}>
-                {clock(alert.created_at)} ·{" "}
-                {ALERT_KIND[alert.kind as keyof typeof ALERT_KIND] ?? alert.kind}
-                {alert.order_id ? ` · đơn ${alert.order_id.slice(0, 8)}` : ""} · {describe(alert)}
-              </Text>
-            </List.Item>
+            <li key={alert.id} className="text-xs text-orange-950" style={TABULAR}>
+              {clock(alert.created_at)} ·{" "}
+              {ALERT_KIND[alert.kind as keyof typeof ALERT_KIND] ?? alert.kind}
+              {alert.order_id ? ` · đơn ${alert.order_id.slice(0, 8)}` : ""} · {describe(alert)}
+            </li>
           ))}
-        </List>
+        </ul>
       </Alert>
     </section>
   );
@@ -212,7 +236,6 @@ function describe(alert: InventoryAlert): string {
   return `tin trên ${alert.source_topic} đã chuyển vào dlq`;
 }
 
-/** One polite announcement when an ingredient is flagged or cleared between two reads. */
 function useFlagAnnouncer(items: StockItem[] | undefined): string {
   const previous = useRef<Map<string, boolean> | null>(null);
   const [message, setMessage] = useState("");

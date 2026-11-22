@@ -1,39 +1,18 @@
-// The Kitchen screen (tablet or wall screen): Queued and Cooking tickets with their buttons,
-// the reject dialog, and the Kitchen's alerts. Specified in
-// .claude/skills/screen/references/screens.md ("kitchen"). It shows what the Kitchen service
-// returns; a 409 is the normal end of a race (BR7) and only reloads.
+// The Kitchen Display screen: Queued and Cooking lanes with 44px+ buttons, reject dialog,
+// and Flow D alerts. A 409 is the normal outcome of a cancel race (BR7) and reloads cleanly.
 
-import {
-  Alert,
-  Badge,
-  Button,
-  Center,
-  Grid,
-  Group,
-  List,
-  Loader,
-  Paper,
-  SimpleGrid,
-  Stack,
-  Text,
-  ThemeIcon,
-  Title,
-  VisuallyHidden,
-} from "@mantine/core";
-import { notifications } from "@mantine/notifications";
-import { IconAlertCircle, IconChefHat, IconClock, IconFlame } from "@tabler/icons-react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { AlertCircle, ChefHat, Clock, Flame } from "lucide-react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ApiError, detailMessage } from "../../api/http";
 import type { Alert as KitchenAlert, Ticket } from "../../api/kitchen";
 import { kitchenApi } from "../../api/kitchen";
 import { clock, ServiceBanner, TABULAR } from "../../components/common";
-import { Empty, PageHeader } from "../../components/layout";
 import { ALERT_KIND, KITCHEN_STATUS } from "../../labels";
+import { Alert, Button, cn, EmptyState, Spinner, toast } from "../../ui";
 import { RejectModal } from "./RejectModal";
 import { type TicketAction, TicketCard } from "./TicketCard";
 
-/** Tickets shown per column before "Xem thêm". */
 const PAGE = 20;
 
 interface Request {
@@ -43,12 +22,8 @@ interface Request {
   spoiled?: string[];
 }
 
-/** The Kitchen screen; the demo page embeds it beside a branch (``embedded``: a level-2
- * heading and one card per row in each column). */
-export function KitchenScreen({ embedded = false }: { embedded?: boolean } = {}) {
+export function KitchenScreen() {
   const client = useQueryClient();
-  // A page of each column, not every ticket: a long queue made the screen lag when it
-  // reloaded every 2 seconds. "Xem thêm" grows the page.
   const [limit, setLimit] = useState(PAGE);
   const tickets = useQuery({
     queryKey: ["kitchen", "tickets", limit],
@@ -79,20 +54,20 @@ export function KitchenScreen({ embedded = false }: { embedded?: boolean } = {})
         complete: `Phiếu ${short} đã hoàn tất`,
         reject: `Đã từ chối phiếu ${short}`,
       }[request.action];
-      notifications.show({ color: "green", message });
+      toast.show({ color: "green", message });
       setRejecting(null);
       setRefused(null);
       reload();
     },
     onError: (failure, request) => {
       if (failure instanceof ApiError && (failure.status === 409 || failure.status === 404)) {
-        notifications.show({ color: "yellow", message: "Phiếu vừa đổi trạng thái, đã tải lại" });
+        toast.show({ color: "yellow", message: "Phiếu vừa đổi trạng thái, đã tải lại" });
         setRejecting(null);
         reload();
       } else if (failure instanceof ApiError && failure.status === 400) {
         setRefused(detailMessage(failure.body) ?? "lý do hoặc nguyên liệu không hợp lệ");
       } else {
-        notifications.show({
+        toast.show({
           color: "red",
           title: "Không kết nối được tới Bếp",
           message: `Thao tác trên phiếu ${request.orderId.slice(0, 8)} chưa được ghi nhận; bấm lại để thử lại.`,
@@ -117,37 +92,34 @@ export function KitchenScreen({ embedded = false }: { embedded?: boolean } = {})
   const cooking = (tickets.data ?? []).filter((t) => t.status === "DANG_NAU");
 
   return (
-    <Stack gap="lg">
-      <PageHeader
-        title="Bếp"
-        level={embedded ? 2 : 1}
-        {...(embedded
-          ? {}
-          : {
-              description:
-                "Phiếu của các đơn Kho đã giữ nguyên liệu. Bếp là bên duy nhất quyết định nấu hay hủy.",
-            })}
-      />
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Bếp</h1>
+      </div>
+
       {(tickets.isError || alerts.isError) && (
         <ServiceBanner
           service="Bếp"
           lastAnswer={Math.max(tickets.dataUpdatedAt, alerts.dataUpdatedAt)}
         />
       )}
+
       <KitchenAlerts alerts={alerts.data ?? []} />
+
       {tickets.isPending && !tickets.isError ? (
-        <Center py="xl">
-          <Loader size="sm" aria-label="Đang tải phiếu" />
-        </Center>
+        <div className="flex justify-center py-12">
+          <Spinner size="md" label="Đang tải phiếu" />
+        </div>
       ) : (
-        <Grid gap="md">
-          <Column
-            span={{ base: 12, md: 6, xl: embedded ? 6 : 8 }}
-            cards={embedded ? { base: 1 } : { base: 1, xl: 2 }}
-            level={embedded ? 3 : 2}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          <Lane
+            className="lg:col-span-8"
+            cardsClass="grid-cols-1 xl:grid-cols-2"
+            level={2}
             title="Chờ nấu"
-            icon={IconClock}
-            color="indigo"
+            laneClass="border-blue-200/90 bg-blue-50/75"
+            badgeClass="bg-blue-600 text-white"
+            icon={<Clock className="h-4 w-4 text-blue-700" aria-hidden="true" />}
             total={counts.data?.CHO_NAU}
             onMore={more}
             empty="Chưa có phiếu nào đang chờ nấu. Đơn Kho đã giữ nguyên liệu sẽ hiện ở đây."
@@ -160,14 +132,16 @@ export function KitchenScreen({ embedded = false }: { embedded?: boolean } = {})
                 onAction={(a) => onAction(t, a)}
               />
             ))}
-          </Column>
-          <Column
-            span={{ base: 12, md: 6, xl: embedded ? 6 : 4 }}
-            cards={{ base: 1 }}
-            level={embedded ? 3 : 2}
+          </Lane>
+
+          <Lane
+            className="lg:col-span-4"
+            cardsClass="grid-cols-1"
+            level={2}
             title="Đang nấu"
-            icon={IconFlame}
-            color="yellow"
+            laneClass="border-amber-200/90 bg-amber-50/80"
+            badgeClass="bg-amber-500 text-slate-950"
+            icon={<Flame className="h-4 w-4 text-amber-700" aria-hidden="true" />}
             total={counts.data?.DANG_NAU}
             onMore={more}
             empty="Chưa có phiếu nào đang nấu. Phiếu bấm Bắt đầu nấu sẽ chuyển sang đây."
@@ -180,9 +154,10 @@ export function KitchenScreen({ embedded = false }: { embedded?: boolean } = {})
                 onAction={(a) => onAction(t, a)}
               />
             ))}
-          </Column>
-        </Grid>
+          </Lane>
+        </div>
       )}
+
       <RejectModal
         key={rejecting?.order_id ?? "none"}
         ticket={rejecting}
@@ -194,115 +169,99 @@ export function KitchenScreen({ embedded = false }: { embedded?: boolean } = {})
         }
         onClose={() => setRejecting(null)}
       />
-      <VisuallyHidden>
-        <div role="status" aria-live="polite">
-          {announcement}
-        </div>
-      </VisuallyHidden>
-    </Stack>
+      <div role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </div>
+    </div>
   );
 }
 
-/** One status column, a lane on a grey ground. On a wall screen the Queued column is wider and
- * holds two cards a row. */
-function Column({
-  span,
-  cards,
+function Lane({
+  className,
+  cardsClass,
   level,
   title,
-  icon: Icon,
-  color,
+  laneClass,
+  badgeClass,
+  icon,
   total,
   onMore,
   empty,
   children,
 }: {
-  span: { base: number; md: number; xl: number };
-  cards: { base: number; xl?: number };
+  className?: string;
+  cardsClass: string;
   level: 2 | 3;
   title: string;
-  icon: typeof IconClock;
-  color: string;
-  /** The column's total from GET /tickets/counts; never shown below the tickets on screen,
-   * since the two requests are not one snapshot. */
+  laneClass: string;
+  badgeClass: string;
+  icon: ReactNode;
   total: number | undefined;
   onMore: () => void;
   empty: string;
-  children: React.ReactNode[];
+  children: ReactNode[];
 }) {
   const count = Math.max(total ?? 0, children.length);
   const hidden = count - children.length;
+  const Heading = level === 2 ? "h2" : "h3";
+
   return (
-    <Grid.Col span={span} style={{ minWidth: 0 }}>
-      <Paper
-        component="section"
-        aria-label={title}
-        bg="gray.1"
-        shadow="none"
-        p="sm"
-        h="100%"
-        style={{ borderColor: "var(--mantine-color-gray-2)" }}
-      >
-        <Stack gap="sm">
-          <Group gap="xs" px={4} pt={2}>
-            <ThemeIcon variant="light" color={color} size={28} aria-hidden>
-              <Icon size={16} />
-            </ThemeIcon>
-            <Title
-              order={level}
-              size="h4"
-              style={{ display: "flex", alignItems: "center", gap: 8, textWrap: "nowrap" }}
-            >
-              {title}{" "}
-              <Badge component="span" color={color} variant="filled" size="md" circle={count < 10}>
-                <VisuallyHidden>(</VisuallyHidden>
-                {count}
-                <VisuallyHidden>)</VisuallyHidden>
-              </Badge>
-            </Title>
-          </Group>
-          {children.length ? (
-            <SimpleGrid cols={cards} spacing="sm">
-              {children}
-            </SimpleGrid>
-          ) : (
-            <Paper shadow="none" style={{ borderStyle: "dashed" }}>
-              <Empty icon={IconChefHat}>{empty}</Empty>
-            </Paper>
-          )}
-          {hidden > 0 && (
-            <Button variant="white" onClick={onMore}>
-              Xem thêm (còn {hidden} phiếu)
-            </Button>
-          )}
-        </Stack>
-      </Paper>
-    </Grid.Col>
+    <section
+      aria-label={title}
+      className={cn("flex flex-col gap-3 rounded-2xl border p-3.5", laneClass, className)}
+    >
+      <div className="flex items-center gap-2 px-1">
+        {icon}
+        <Heading className="flex items-center gap-2 text-sm font-semibold text-ink whitespace-nowrap">
+          <span>{title}</span>{" "}
+          <span
+            className={cn(
+              "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-xs font-semibold tabular-nums",
+              badgeClass,
+            )}
+          >
+            <span className="sr-only">(</span>
+            {count}
+            <span className="sr-only">)</span>
+          </span>
+        </Heading>
+      </div>
+
+      {children.length ? (
+        <div className={cn("grid items-stretch gap-3", cardsClass)}>{children}</div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-line-strong bg-white/80">
+          <EmptyState icon={ChefHat}>{empty}</EmptyState>
+        </div>
+      )}
+
+      {hidden > 0 && (
+        <Button variant="secondary" size="sm" onClick={onMore} className="w-full">
+          Xem thêm (còn {hidden} phiếu)
+        </Button>
+      )}
+    </section>
   );
 }
 
-/** The Kitchen's Flow D alerts (section 8 of the specification): wrong-branch cancel requests
- * and orders that need review. */
 function KitchenAlerts({ alerts }: { alerts: KitchenAlert[] }) {
   if (!alerts.length) return null;
   return (
     <section aria-label="Cảnh báo của Bếp">
       <Alert
-        color="orange"
-        icon={<IconAlertCircle aria-hidden />}
+        tone="orange"
+        icon={<AlertCircle className="h-4 w-4" />}
         title={`Cảnh báo (${alerts.length})`}
       >
-        <List spacing={4} size="sm">
+        <ul className="mt-1 space-y-1">
           {alerts.map((alert) => (
-            <List.Item key={alert.id}>
-              <Text size="sm" style={TABULAR}>
-                {clock(alert.created_at)} ·{" "}
-                {ALERT_KIND[alert.kind as keyof typeof ALERT_KIND] ?? alert.kind}
-                {alert.order_id ? ` · đơn ${alert.order_id.slice(0, 8)}` : ""} · {describe(alert)}
-              </Text>
-            </List.Item>
+            <li key={alert.id} className="text-xs text-orange-950" style={TABULAR}>
+              {clock(alert.created_at)} ·{" "}
+              {ALERT_KIND[alert.kind as keyof typeof ALERT_KIND] ?? alert.kind}
+              {alert.order_id ? ` · đơn ${alert.order_id.slice(0, 8)}` : ""} · {describe(alert)}
+            </li>
           ))}
-        </List>
+        </ul>
       </Alert>
     </section>
   );
@@ -317,7 +276,6 @@ function describe(alert: KitchenAlert): string {
   return `tin trên ${alert.source_topic} đã chuyển vào dlq`;
 }
 
-/** One polite announcement per ticket status change between two reads. */
 function useStatusAnnouncer(tickets: Ticket[] | undefined): string {
   const previous = useRef<Map<string, string> | null>(null);
   const [message, setMessage] = useState("");

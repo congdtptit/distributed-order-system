@@ -4,7 +4,7 @@ import { SCREENS } from "./screens";
 import { renderRoute as renderAt } from "./test/render";
 
 describe("layout", () => {
-  it("lists the six screens in the navbar", () => {
+  it("lists the five screens in the navbar", () => {
     renderAt("/kitchen");
     const nav = screen.getByRole("navigation", { name: "Các màn hình" });
     for (const s of SCREENS) {

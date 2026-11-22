@@ -1,8 +1,14 @@
 # Implementation plan – architecture, testing and how to use Claude Code
 
-Revision 24 · 22 Nov 2026
+Revision 25 · 22 Nov 2026
 
 This document says how to implement business specification v1.5 and the detailed design (revision 4): what to build with, how to test, in what order to work, and how to use Claude Code. The project is in the implementation phase; section 7 records what has been built so far. Where this document disagrees with the specification or the detailed design, those two documents are right.
+
+## Changes in revision 25
+
+| Section | Change | Reason |
+|---|---|---|
+| 2, 7 | Frontend rebuilt from Mantine to Tailwind CSS v4 + Radix UI + Lucide icons + bundled offline fonts (`Be Vietnam Pro`, `JetBrains Mono`), with purpose-built screen layouts (`design.md`) | @Naul, 22 Nov 2026: the earlier Mantine admin-console restyle still looked generic and template-driven; rebuilt cleanly while preserving OpenAPI types and all 89 screen tests |
 
 ## Changes in revision 24
 
@@ -204,7 +210,7 @@ The project is built from scratch; there is no existing codebase to follow. Pyth
 | Code quality | Ruff for formatting and linting, Pyright for type checking | Python has no compiler to catch type errors, so the type checker runs together with the tests |
 | Frontend language | TypeScript 5.9, chosen on 21 Nov 2026 (@Naul) | Typed against the same API contract as the services. Not TypeScript 7: `openapi-typescript` needs the TypeScript 5 compiler API |
 | Frontend framework | React with Vite, React Router | Common, well documented, no server-side rendering needed for a demo |
-| UI components | Mantine, with Tabler icons | Tables, badges, modals and notifications that look finished without designing them; keeps the frontend plain |
+| UI components | Tailwind CSS v4, Radix UI primitives, Lucide icons, and bundled offline fonts (`Be Vietnam Pro`, `JetBrains Mono`) | Full visual control without template boilerplate or external CDNs, while keeping accessible WAI-ARIA primitives in `frontend/src/ui/` |
 | Server state | TanStack Query, polling every 2 seconds on the screen in view | Statuses arrive asynchronously through Kafka, so screens must refresh; polling is enough and needs no WebSocket |
 | API types | `openapi-typescript`, generated from each service's FastAPI OpenAPI document | A change to a request or response breaks the frontend build instead of the demo |
 | Frontend quality | Biome for formatting and linting, `tsc --noEmit`, Vitest with Testing Library and MSW | One tool for format and lint; tests run without a browser |
@@ -601,3 +607,9 @@ Also: the branch DB's `alerts` table (migration `003`, decided by @Naul on 22 No
 - **Why:** @Naul judged the first look ugly and non-standard (22 Nov 2026): headings at the browser's 34px, titles straight on a white page, buttons of four sizes and variants, the order form a single column of number fields.
 - **What changed:** the look only, recorded in `.claude/skills/screen/references/design.md`: theme values in `frontend/src/theme.ts` (indigo accent, grey page, white panels, one type scale, quiet table headers); the page pieces `PageHeader`, `Panel`, `Figures` and `Empty` in `frontend/src/components/layout.tsx`; a grouped navbar; dish tiles with a stepper on the order form; the Kitchen as a board of lanes; figures at the top of Kho, Giám sát and Quản lý. No API call, label, status rule or text a test or the runbook relies on changed.
 - **How it was checked:** the 89 screen tests pass unchanged, with `tsc` and Biome clean; screenshots at 1280, 1024, 1920 and 500 wide.
+
+### The frontend rebuilt (Tailwind CSS v4 + Radix UI)
+
+- **Why:** @Naul judged the Mantine admin-console restyle still too rigid, dated, and template-like compared to modern web interfaces (22 Nov 2026).
+- **What changed:** replaced Mantine and Tabler icons with Tailwind CSS v4 (`@tailwindcss/vite`), accessible Radix UI primitives (`Dialog`, `Select`, `Tooltip`, `Checkbox`), `lucide-react` icons, and locally bundled `Be Vietnam Pro` + `JetBrains Mono` fonts (`frontend/src/styles/` and `frontend/src/ui/`). Redesigned the shell (`AppShell` collapsible rail + translucent topbar) and all six screens around their workflows: POS split-pane with sticky order slip on Branch, equal-height KDS cards without redundant column badges on Kitchen, stacked stock capacity bars on Inventory, compact status strip on Monitor, chain proportion bar and freshness indicators on Reports, and a compact scenario pill bar with an optional stock toggle on Demo. OpenAPI types (`src/api/`), `src/labels.ts`, and all behavioral contracts stayed unchanged.
+- **How it was checked:** `tsc --noEmit`, `biome check`, `vite build`, and all 89 Vitest/MSW tests pass with zero relaxed assertions; live browser inspection at `1440×900` and `390×844` mobile.

@@ -1,19 +1,16 @@
 // The two dialogs of the Inventory screen: a stock receipt (POST /stock/receipts) and the end
-// of a stock check (POST /ingredients/{id}/clear-check, BR6), with the answers of section 6 of
-// docs/02-detailed-design.md. Quantities are sent as decimal strings.
+// of a stock check (POST /ingredients/{id}/clear-check, BR6), with the answers of section 6.
 
-import { Alert, Button, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ApiError, detailMessage } from "../../api/http";
 import type { StockItem } from "../../api/inventory";
 import { amount, inventoryApi } from "../../api/inventory";
+import { Alert, Button, cn, Dialog, toast } from "../../ui";
 
 const QUANTITY = /^\d{1,9}([.,]\d{1,3})?$/;
 const INVALID = "Số lượng không hợp lệ: số dương, tối đa 3 chữ số thập phân.";
 
-/** "2,5" or "2.5" -> "2.5"; null if it is not a quantity NUMERIC(12,3) can hold. */
 function parse(text: string): string | null {
   const trimmed = text.trim();
   return QUANTITY.test(trimmed) ? trimmed.replace(",", ".") : null;
@@ -25,7 +22,7 @@ function useReload() {
 }
 
 function noAnswer() {
-  notifications.show({
+  toast.show({
     color: "red",
     title: "Không kết nối được tới Kho",
     message: "Thao tác chưa được ghi nhận; bấm xác nhận lại để thử lại.",
@@ -35,6 +32,7 @@ function noAnswer() {
 export function ReceiptModal({ item, onClose }: { item: StockItem | null; onClose: () => void }) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const inputId = useId();
   const reload = useReload();
   const close = () => {
     setText("");
@@ -46,7 +44,7 @@ export function ReceiptModal({ item, onClose }: { item: StockItem | null; onClos
       inventoryApi.receive(id, quantity),
     onSuccess: (_stock, { quantity }) => {
       if (item) {
-        notifications.show({
+        toast.show({
           color: "green",
           message: `Đã nhập ${amount(quantity)} ${item.unit} ${item.name}`,
         });
@@ -57,7 +55,7 @@ export function ReceiptModal({ item, onClose }: { item: StockItem | null; onClos
     onError: (failure) => {
       if (failure instanceof ApiError && failure.status === 422) setError(INVALID);
       else if (failure instanceof ApiError && failure.status === 404) {
-        notifications.show({
+        toast.show({
           color: "yellow",
           message: "Kho không có nguyên liệu này, đã tải lại",
         });
@@ -75,31 +73,50 @@ export function ReceiptModal({ item, onClose }: { item: StockItem | null; onClos
     }
     receive.mutate({ id: item.ingredient_id, quantity });
   };
+
   return (
-    <Modal opened={item !== null} onClose={close} title={`Nhập kho ${item?.name ?? ""}`} centered>
-      <Stack gap="md">
-        <Text size="sm">Số lượng nhập được cộng vào lượng còn có thể giữ cho đơn mới.</Text>
-        <TextInput
-          label={`Số lượng nhập (${item?.unit ?? ""})`}
-          inputMode="decimal"
-          value={text}
-          onChange={(event) => {
-            setText(event.currentTarget.value);
-            setError(null);
-          }}
-          error={error}
-          data-autofocus
-        />
-        <Group justify="space-between">
-          <Button variant="default" onClick={close}>
+    <Dialog
+      open={item !== null}
+      onOpenChange={(open) => {
+        if (!open) close();
+      }}
+      title={`Nhập kho ${item?.name ?? ""}`}
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-ink-secondary">
+          Số lượng nhập được cộng vào lượng còn có thể giữ cho đơn mới.
+        </p>
+        <div className="space-y-1.5">
+          <label htmlFor={inputId} className="block text-sm font-medium text-ink">
+            {`Số lượng nhập (${item?.unit ?? ""})`}
+          </label>
+          <input
+            id={inputId}
+            type="text"
+            inputMode="decimal"
+            autoFocus
+            value={text}
+            onChange={(event) => {
+              setText(event.currentTarget.value);
+              setError(null);
+            }}
+            className={cn(
+              "h-10 w-full rounded-lg border bg-surface px-3 font-mono text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/30",
+              error ? "border-rose-500" : "border-line-strong",
+            )}
+          />
+          {error && <p className="text-xs font-medium text-rose-700">{error}</p>}
+        </div>
+        <div className="flex items-center justify-between pt-1">
+          <Button variant="secondary" onClick={close}>
             Đóng
           </Button>
-          <Button onClick={confirm} loading={receive.isPending}>
+          <Button variant="primary" onClick={confirm} loading={receive.isPending}>
             Xác nhận nhập kho
           </Button>
-        </Group>
-      </Stack>
-    </Modal>
+        </div>
+      </div>
+    </Dialog>
   );
 }
 
@@ -113,6 +130,7 @@ export function ClearCheckModal({
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<string | null>(null);
+  const inputId = useId();
   const reload = useReload();
   const close = () => {
     setText("");
@@ -125,7 +143,7 @@ export function ClearCheckModal({
       inventoryApi.clearCheck(id, counted),
     onSuccess: () => {
       if (item) {
-        notifications.show({ color: "green", message: `Đã gỡ cờ kiểm kho của ${item.name}` });
+        toast.show({ color: "green", message: `Đã gỡ cờ kiểm kho của ${item.name}` });
       }
       reload();
       close();
@@ -137,7 +155,7 @@ export function ClearCheckModal({
         setBlocked(typeof reserved === "string" ? reserved : (detailMessage(failure.body) ?? "?"));
       } else if (failure instanceof ApiError && failure.status === 422) setError(INVALID);
       else if (failure instanceof ApiError && failure.status === 404) {
-        notifications.show({
+        toast.show({
           color: "yellow",
           message: "Kho không có nguyên liệu này, đã tải lại",
         });
@@ -159,46 +177,60 @@ export function ClearCheckModal({
     setBlocked(null);
     clear.mutate({ id: item.ingredient_id, counted });
   };
+
   return (
-    <Modal
-      opened={item !== null}
-      onClose={close}
+    <Dialog
+      open={item !== null}
+      onOpenChange={(open) => {
+        if (!open) close();
+      }}
       title={`Kiểm kho xong: ${item?.name ?? ""}`}
-      centered
     >
-      <Stack gap="md">
-        <Text size="sm">
+      <div className="space-y-4">
+        <p className="text-sm leading-relaxed text-ink-secondary">
           Gỡ cờ thì Kho lại giữ được nguyên liệu này cho đơn mới, và cảnh báo trên phiếu bếp biến
           mất. Nếu nhập tồn đếm được (gồm cả lượng đang giữ), Kho đặt lại lượng còn có thể giữ; để
           trống thì giữ nguyên.
-        </Text>
-        <TextInput
-          label={`Tồn đếm được (${item?.unit ?? ""})`}
-          description="Không bắt buộc"
-          inputMode="decimal"
-          value={text}
-          onChange={(event) => {
-            setText(event.currentTarget.value);
-            setError(null);
-          }}
-          error={error}
-          data-autofocus
-        />
+        </p>
+        <div className="space-y-1.5">
+          <label htmlFor={inputId} className="block text-sm font-medium text-ink">
+            {`Tồn đếm được (${item?.unit ?? ""})`}
+          </label>
+          <p className="text-xs text-ink-muted">Không bắt buộc</p>
+          <input
+            id={inputId}
+            type="text"
+            inputMode="decimal"
+            autoFocus
+            value={text}
+            onChange={(event) => {
+              setText(event.currentTarget.value);
+              setError(null);
+            }}
+            className={cn(
+              "h-10 w-full rounded-lg border bg-surface px-3 font-mono text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/30",
+              error ? "border-rose-500" : "border-line-strong",
+            )}
+          />
+          {error && <p className="text-xs font-medium text-rose-700">{error}</p>}
+        </div>
+
         {blocked && item && (
-          <Alert color="orange" role="alert">
+          <Alert tone="orange" role="alert" className="text-xs">
             Tồn đếm được ít hơn lượng đang giữ {amount(blocked)} {item.unit}. Hãy từ chối các phiếu
             còn giữ {item.name} trên màn Bếp (lý do Nguyên liệu hỏng) rồi kiểm kho lại.
           </Alert>
         )}
-        <Group justify="space-between">
-          <Button variant="default" onClick={close}>
+
+        <div className="flex items-center justify-between pt-1">
+          <Button variant="secondary" onClick={close}>
             Đóng
           </Button>
-          <Button color="teal" onClick={confirm} loading={clear.isPending}>
+          <Button variant="accent" onClick={confirm} loading={clear.isPending}>
             Gỡ cờ kiểm kho
           </Button>
-        </Group>
-      </Stack>
-    </Modal>
+        </div>
+      </div>
+    </Dialog>
   );
 }

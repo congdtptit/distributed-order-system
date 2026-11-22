@@ -1,12 +1,9 @@
 // The branch's orders as the service returns them (GET /orders, newest first): status, cancel
-// flag, the Kitchen's notice, the send states of BR5, and the Cancel button where section 6 of
-// the specification allows it.
+// flag, the Kitchen's notice, the send states of BR5, and the Cancel button where section 6 allows.
 
-import { Button, Group, Stack, Table, Text } from "@mantine/core";
-import { IconReceipt, IconX } from "@tabler/icons-react";
+import { Receipt, X } from "lucide-react";
 import type { Order } from "../../api/branch";
 import { clock, duration, OrderId, StatusBadge, TABULAR } from "../../components/common";
-import { Empty } from "../../components/layout";
 import {
   CANCEL_FLAG,
   CANCEL_MESSAGE,
@@ -15,6 +12,18 @@ import {
   reasonLabel,
   SEND_STATE,
 } from "../../labels";
+import {
+  Button,
+  cn,
+  EmptyState,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from "../../ui";
 
 /** Rank 2 of section 3.1: the Cancel button is hidden (section 6, branch side, step 1). */
 const TERMINAL = new Set(["HOAN_TAT", "DA_HUY", "THAT_BAI"]);
@@ -32,31 +41,31 @@ export function OrdersTable({
 }) {
   if (!orders.length) {
     return (
-      <Empty icon={IconReceipt}>
+      <EmptyState icon={Receipt}>
         Chưa có đơn nào. Đơn tạo ở chi nhánh này sẽ hiện ở đây, kèm trạng thái Kho và Bếp trả về.
-      </Empty>
+      </EmptyState>
     );
   }
   return (
-    <Table.ScrollContainer minWidth={760}>
-      <Table highlightOnHover>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Đơn</Table.Th>
-            <Table.Th>Giờ tạo</Table.Th>
-            <Table.Th>Món</Table.Th>
-            <Table.Th>Trạng thái</Table.Th>
-            <Table.Th>Gửi đi</Table.Th>
-            <Table.Th ta="right">Thao tác</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
+    <TableContainer>
+      <Table className="min-w-[740px]">
+        <TableHead>
+          <TableRow className="hover:bg-transparent">
+            <TableHeaderCell>Đơn</TableHeaderCell>
+            <TableHeaderCell>Giờ tạo</TableHeaderCell>
+            <TableHeaderCell>Món</TableHeaderCell>
+            <TableHeaderCell>Trạng thái</TableHeaderCell>
+            <TableHeaderCell>Gửi đi</TableHeaderCell>
+            <TableHeaderCell className="text-right">Thao tác</TableHeaderCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
           {orders.map((order) => (
             <OrderRow key={order.order_id} order={order} onCancel={onCancel} />
           ))}
-        </Table.Tbody>
+        </TableBody>
       </Table>
-    </Table.ScrollContainer>
+    </TableContainer>
   );
 }
 
@@ -72,24 +81,29 @@ function OrderRow({ order, onCancel }: { order: Order; onCancel: (orderId: strin
   const cancelState = flag ? lookup(CANCEL_SEND_STATE, order.cancel_send_state) : null;
   const canCancel = !TERMINAL.has(order.status) && order.cancel_flag === "KHONG";
 
+  const sendDot =
+    order.send_state === "DA_GUI"
+      ? "bg-emerald-500"
+      : order.send_state === "DANG_GUI"
+        ? "bg-amber-500"
+        : "bg-slate-400";
+
   return (
-    <Table.Tr>
-      <Table.Td>
+    <TableRow>
+      <TableCell>
         <OrderId id={order.order_id} />
-      </Table.Td>
-      <Table.Td style={TABULAR}>
-        <Text size="sm" c="dimmed">
-          {clock(order.created_at)}
-        </Text>
-      </Table.Td>
-      <Table.Td>
-        <Text size="sm" fw={500}>
+      </TableCell>
+      <TableCell style={TABULAR}>
+        <span className="font-mono text-xs text-ink-secondary">{clock(order.created_at)}</span>
+      </TableCell>
+      <TableCell>
+        <span className="text-sm font-medium text-ink">
           {order.items.map((item) => `${item.name} ×${item.quantity}`).join(", ")}
-        </Text>
-      </Table.Td>
-      <Table.Td>
-        <Stack gap={4} align="flex-start">
-          <Group gap={4}>
+        </span>
+      </TableCell>
+      <TableCell>
+        <div className="flex flex-col items-start gap-1">
+          <div className="flex flex-wrap items-center gap-1.5">
             <StatusBadge code={order.status} table={ORDER_STATUS} />
             {flag && (
               <StatusBadge
@@ -99,46 +113,33 @@ function OrderRow({ order, onCancel }: { order: Order; onCancel: (orderId: strin
                 {...(waited ? { suffix: waited } : {})}
               />
             )}
-          </Group>
-          {reason && (
-            <Text size="xs" c="dimmed">
-              {reason}
-            </Text>
-          )}
-          {notice && (
-            <Text size="xs" c="red.8">
-              {notice}
-            </Text>
-          )}
-        </Stack>
-      </Table.Td>
-      <Table.Td>
-        <Stack gap={2}>
+          </div>
+          {reason && <span className="text-xs text-ink-secondary">{reason}</span>}
+          {notice && <span className="text-xs font-medium text-rose-700">{notice}</span>}
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="space-y-0.5">
           {sendState && (
-            <Text size="xs" c="dimmed">
-              {sendState}
-            </Text>
+            <span className="inline-flex items-center gap-1.5 text-xs text-ink-secondary">
+              <span
+                className={cn("h-1.5 w-1.5 shrink-0 rounded-full", sendDot)}
+                aria-hidden="true"
+              />
+              <span>{sendState}</span>
+            </span>
           )}
-          {cancelState && (
-            <Text size="xs" c="orange.9">
-              {cancelState}
-            </Text>
-          )}
-        </Stack>
-      </Table.Td>
-      <Table.Td ta="right">
+          {cancelState && <p className="text-xs font-medium text-orange-800">{cancelState}</p>}
+        </div>
+      </TableCell>
+      <TableCell className="text-right">
         {canCancel && (
-          <Button
-            size="xs"
-            variant="light"
-            color="red"
-            leftSection={<IconX size={14} aria-hidden />}
-            onClick={() => onCancel(order.order_id)}
-          >
+          <Button size="xs" variant="danger-soft" onClick={() => onCancel(order.order_id)}>
+            <X className="h-3 w-3" aria-hidden="true" />
             Hủy đơn
           </Button>
         )}
-      </Table.Td>
-    </Table.Tr>
+      </TableCell>
+    </TableRow>
   );
 }

@@ -30,7 +30,7 @@ A screen shows what the services decide; it decides nothing itself. Everything b
 
 ## Step 3: build
 
-1. Follow `references/design.md` for layout, components, status colours, labels and polling. Use Mantine components; do not add another UI library.
+1. Follow `references/design.md` for layout, components, status colours, labels and polling. Use the Tailwind CSS v4 + Radix UI primitives in `frontend/src/ui/`; do not add another UI library.
 2. All Vietnamese labels for status codes and reasons come from the single label module named in `references/design.md`. Add missing labels there, using the glossary in `CLAUDE.md`.
 3. Run the screen's tests until they pass, then `docker compose exec frontend npx --no-install tsc --noEmit` and `docker compose exec frontend npx --no-install biome check src`.
 

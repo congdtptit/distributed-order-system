@@ -88,27 +88,20 @@ Tài liệu này minh họa cách viết lại các đoạn văn thường gặp
 
 ---
 
-## Mẫu 5. Đánh giá kết quả, hạn chế và hướng phát triển
+## Mẫu 5. Đánh giá kết quả và đối chiếu mục tiêu
 
-### Trước (chỉ khen một chiều, 4 ý liệt kê dài đều nhau kiểu tài liệu quảng cáo)
+### Trước (khen chung chung, 3 ý liệt kê dài đều nhau kiểu tài liệu quảng cáo)
 
 > Hệ thống RMS đã đạt được những kết quả nổi bật:
 >
 > - **Tính nhất quán xuyên suốt:** Đảm bảo sự đồng bộ chặt chẽ từ phân tích thiết kế đến mã nguồn cài đặt và kiểm thử tự động trên cơ sở dữ liệu thật.
 > - **Bảo vệ tính đúng đắn dữ liệu ở mức cao:** Giải quyết trực diện các tình huống tranh chấp điển hình trong nghiệp vụ tuyển dụng.
 > - **Giao diện tối giản hiện đại:** Đáp ứng chuẩn tiếp cận và tách rõ luồng nghiệp vụ theo từng vai trò.
->
-> **Hướng phát triển:**
-> 1. **Thư viện mẫu quy trình chuẩn:** Cho phép HR lưu trữ và áp dụng nhanh bộ tiêu chí đánh giá, giúp tiết kiệm thời gian vận hành.
-> 2. **Trung tâm thông báo đa kênh:** Tích hợp gửi thông báo email và đồng bộ lịch Google Calendar để nâng cao trải nghiệm hội đồng phỏng vấn.
-> 3. **Phân tích dữ liệu nâng cao:** Bổ sung biểu đồ xu hướng dài hạn nhằm hỗ trợ Ban lãnh đạo ra quyết định chiến lược.
 
-**Các điểm cần sửa:** Chỉ có khen mà thiếu phần hạn chế thật của đồ án; ba gạch đầu dòng đánh giá mở đầu bằng khung in đậm giống hệt nhau; phần hướng phát triển lặp mô típ "tên tính năng -> giúp/nhằm nâng cao/hỗ trợ..." rất đặc trưng của LLM.
+**Các điểm cần sửa:** Ba gạch đầu dòng mở đầu bằng khung in đậm giống hệt nhau, nhiều tính từ chung chung (*ở mức cao*, *tối giản hiện đại*, *giải quyết trực diện*) nhưng thiếu đối chiếu cụ thể với yêu cầu bài toán.
 
-### Sau (viết liền mạch, nêu rõ phần đạt được, điểm còn thiếu và việc cần làm tiếp)
+### Sau (viết liền mạch, đối chiếu thẳng yêu cầu đặt ra và bằng chứng kỹ thuật)
 
-> So với bốn mục tiêu đặt ra ở Chương 1 (`Bảng 4.8`), bản cài đặt hiện tại đáp ứng trọn vẹn luồng nghiệp vụ từ tạo đợt tuyển, nhận hồ sơ, điều phối Kanban, chấm điểm phỏng vấn đến phát hành Offer và ghi vết kiểm toán. Toàn bộ 11 bộ kiểm thử tích hợp API với PostgreSQL 16 và 40 ca Playwright E2E đều chạy qua trên môi trường cục bộ mà không bỏ qua khẳng định nào.
+> Đối chiếu với bốn mục tiêu kỹ thuật đặt ra ở Chương 1 (`Bảng 4.8`), bản cài đặt hoàn thiện luồng xử lý khép kín từ tạo đợt tuyển, tiếp nhận hồ sơ, điều phối Kanban, chấm điểm phỏng vấn đến phát hành Offer và ghi vết kiểm toán. Toàn bộ 11 bộ kiểm thử tích hợp API trên PostgreSQL 16 và 40 ca Playwright E2E trên Chrome đều chạy đạt mà không bỏ qua khẳng định nào.
 >
-> Dù vậy, bản cài đặt vẫn còn những giới hạn rõ rệt khi xét khả năng vận hành ở quy mô lớn hơn. Tệp CV hiện lưu trực tiếp trên ổ đĩa máy chủ ứng dụng (`uploads/cvs/`) và thư xác minh được gửi đồng bộ ngay trong request chính qua SMTP; cách làm này gọn khi chạy trên một máy chủ đơn lẻ nhưng sẽ thành điểm nghẽn nếu mở rộng nhiều thực thể Backend hoặc khi máy chủ mail phản hồi chậm. Ngoài ra, giao diện Dashboard mới dừng ở thống kê trong ngày và tổng định biên, chưa tính được các chỉ số theo chuỗi thời gian như thời gian tuyển trung bình theo phòng ban hay tỷ lệ chuyển đổi qua từng vòng.
->
-> Vì thế, hướng mở rộng tiếp theo tập trung trước hết vào hạ tầng lưu trữ và tác vụ nền: tách tệp CV sang kho đối tượng tương thích S3 (`MinIO`) kèm liên kết tải có thời hạn, đồng thời đưa tác vụ gửi email vào hàng đợi bất đồng bộ để có thể thử lại khi lỗi mạng. Khi lượng dữ liệu lịch sử đủ lớn, phân hệ Dashboard sẽ bổ sung biểu đồ xu hướng và bộ mẫu quy trình vòng tuyển dùng lại cho các đợt tương tự.
+> Về mặt xử lý đồng thời và tính nhất quán dữ liệu, các thao tác chuyển vòng, phê duyệt vượt định biên và chốt `Offer` đều chạy trong giao dịch `Serializable` kết hợp khóa lạc quan `revision`, bảo đảm loại bỏ ghi đè mất cập nhật khi nhiều nhân sự thao tác song song. Số liệu bảng điều khiển tổng hợp đọc qua giao dịch `READ ONLY, REPEATABLE READ` theo múi giờ `Asia/Ho_Chi_Minh`, giữ khớp hoàn toàn giữa các thẻ thống kê và bảng tiến độ chỉ tiêu.

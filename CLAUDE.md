@@ -12,7 +12,7 @@ Course project on distributed systems: order taking for a restaurant chain. Bran
 ## Current phase: implementation
 
 - `.claude/project-phase` contains `code`. Only the user changes that file; a hook blocks edits to it.
-- The order of work is section 4 of `docs/03-implementation-plan.md`; steps 0 to 7 and phase 2 (Flow C) are done, and all 44 scenarios pass; step 8 (report material) is under way; section 7 there records the progress. The demo is prepared (`demo/kich-ban.md`). The screens were restyled to a standard admin-console look on 22 Nov 2026 (`.claude/skills/screen/references/design.md`). Next: the template's page layout and the cover. A new migration needs `docker compose restart <service>`: reload applies code, not migrations. The final report follows the lecturer's template; document 04 says what it needs. Business code is written one scenario at a time with `/scenario <n>`, screens one at a time with `/screen <name>`.
+- The order of work is section 4 of `docs/03-implementation-plan.md`; steps 0 to 7 and phase 2 (Flow C) are done, and all 44 scenarios pass; step 8 (report material) is under way; section 7 there records the progress. The demo is prepared (`demo/kich-ban.md`). The frontend was rebuilt on Tailwind CSS v4, Radix UI, Lucide icons, and bundled offline fonts on 22 Nov 2026 (`.claude/skills/screen/references/design.md`). Next: the template's page layout and the cover. A new migration needs `docker compose restart <service>`: reload applies code, not migrations. The final report follows the lecturer's template; document 04 says what it needs. Business code is written one scenario at a time with `/scenario <n>`, screens one at a time with `/screen <name>`.
 - The project is built from scratch, with no existing codebase to follow.
 
 ## Layout and commands
@@ -22,7 +22,7 @@ Course project on distributed systems: order taking for a restaurant chain. Bran
 | `docker-compose.yml` | Entry point of Docker Compose: includes the files of `docker/` and declares the networks |
 | `docker/` | One file per group of containers: `kafka.yml`, `databases.yml`, `services.yml`, `frontend.yml`, `tools.yml` |
 | `backend/` | Python 3.12 uv workspace and its `Dockerfile` (one image for every Python container): `common/`, `order-service/`, `inventory-service/`, `kitchen-service/`, `query-service/`, each with `src/`, `tests/`, `migrations/`; `scripts/` for the init jobs and tools |
-| `frontend/` | TypeScript screens: React, Vite, Mantine, TanStack Query |
+| `frontend/` | TypeScript screens: React, Vite, Tailwind CSS v4, Radix UI, TanStack Query |
 | `bin/chaos` | Fault injection on the running cluster: a branch offline, a broker or service stopped, replication cut |
 | `perf/`, `bin/perf` | The JMeter load test (`perf/plan.jmx`); `bin/perf` runs it and writes `report/generated/hieu-nang.md` |
 | `report/` | The course report in Vietnamese, in the lecturer's template: Markdown with Mermaid diagrams, `generated/` from scripts, `build.sh` exports Word. `report/README.md` says how |

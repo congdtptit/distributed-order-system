@@ -22,3 +22,11 @@ function RawBlock(el)
     return pandoc.RawBlock("openxml", '<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
   end
 end
+
+-- Promote standalone "*Bảng X.Y. ...*" paragraphs to Pandoc's TableCaption style (centered, keepNext).
+function Para(el)
+  local txt = pandoc.utils.stringify(el)
+  if txt:match("^Bảng%s+%d+[%.%d]*%.") then
+    return pandoc.Div({ pandoc.Plain(el.content) }, { ["custom-style"] = "TableCaption" })
+  end
+end

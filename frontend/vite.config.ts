@@ -1,4 +1,5 @@
 /// <reference types="vitest/config" />
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -26,8 +27,8 @@ const proxy = Object.fromEntries(
 );
 
 export default defineConfig({
-  plugins: [react()],
-  server: { host: true, port: 5173, strictPort: true, proxy },
+  plugins: [tailwindcss(), react()],
+  server: { host: true, port: 5173, strictPort: true, watch: { usePolling: true }, proxy },
   test: {
     environment: "jsdom",
     globals: true,

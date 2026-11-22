@@ -2,26 +2,15 @@
 // cancel, and see Flow D. Specified in .claude/skills/screen/references/screens.md ("branch").
 // It shows what the Branch service returns and decides nothing itself.
 
-import {
-  Badge,
-  Button,
-  Center,
-  Group,
-  Loader,
-  SegmentedControl,
-  Stack,
-  Text,
-  VisuallyHidden,
-} from "@mantine/core";
-import { IconPlugConnected, IconPlugConnectedX, IconQuestionMark } from "@tabler/icons-react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { HelpCircle, Plug, PlugZap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import type { BranchId, Monitor, Order } from "../../api/branch";
 import { BRANCHES, branchApi, isBranch } from "../../api/branch";
-import { ServiceBanner } from "../../components/common";
-import { PageHeader, Panel } from "../../components/layout";
+import { ServiceBanner, TABULAR } from "../../components/common";
 import { ORDER_STATUS } from "../../labels";
+import { Badge, Button, Panel, SegmentedRadio, Spinner } from "../../ui";
 import { BranchAlerts } from "./BranchAlerts";
 import { CancelModal } from "./CancelModal";
 import { OrderForm } from "./OrderForm";
@@ -34,24 +23,14 @@ const MAX_ORDERS = 200;
 export function BranchScreen() {
   const { branchId } = useParams();
   if (!isBranch(branchId)) {
-    return <Text>Không có chi nhánh {branchId}.</Text>;
+    return <p className="text-sm text-ink-secondary">Không có chi nhánh {branchId}.</p>;
   }
   return <BranchPanel key={branchId} branch={branchId} />;
 }
 
-/** The branch screen's content. The demo page embeds it beside the Kitchen: a level-2
- * heading, the branch selector staying on the demo page, and a single-column layout. */
-export function BranchPanel({
-  branch,
-  embedded = false,
-}: {
-  branch: BranchId;
-  embedded?: boolean;
-}) {
+function BranchPanel({ branch }: { branch: BranchId }) {
   const api = branchApi(branch);
   const navigate = useNavigate();
-  // A page of the newest orders, not all 200: reloading every order every 2 seconds made the
-  // screen lag. "Xem thêm" grows the page up to the 200 the branch keeps listing.
   const [limit, setLimit] = useState(PAGE);
   const orders = useQuery({
     queryKey: ["branch", branch, "orders", limit],
@@ -63,28 +42,19 @@ export function BranchPanel({
   const announcement = useStatusAnnouncer(orders.data);
 
   return (
-    <Stack gap="lg">
-      <PageHeader
-        title={`Chi nhánh ${branch}`}
-        level={embedded ? 2 : 1}
-        {...(embedded
-          ? {}
-          : {
-              description:
-                "Quầy thu ngân: tạo đơn, theo dõi trạng thái Kho và Bếp trả về, hủy đơn.",
-            })}
-        actions={
-          <>
-            <Connection monitor={monitor.data} answering={!monitor.isError} />
-            <SegmentedControl
-              aria-label="Chọn chi nhánh"
-              data={[...BRANCHES]}
-              value={branch}
-              onChange={(value) => navigate(`/${embedded ? "demo" : "branch"}/${value}`)}
-            />
-          </>
-        }
-      />
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Chi nhánh {branch}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <Connection monitor={monitor.data} answering={!monitor.isError} />
+          <SegmentedRadio
+            aria-label="Chọn chi nhánh"
+            options={BRANCHES.map((b) => ({ value: b, label: b }))}
+            value={branch}
+            onChange={(value) => navigate(`/branch/${value}`)}
+          />
+        </div>
+      </div>
 
       {(orders.isError || monitor.isError) && (
         <ServiceBanner
@@ -95,41 +65,36 @@ export function BranchPanel({
 
       {monitor.data && <BranchAlerts monitor={monitor.data} onCancel={setCancelling} />}
 
-      <OrderForm
-        branch={branch}
-        headingLevel={embedded ? 3 : 2}
-        offline={monitor.data?.connection.connected === false}
-      />
+      <OrderForm branch={branch} offline={monitor.data?.connection.connected === false} />
 
-      <Panel title="Đơn của chi nhánh" level={embedded ? 3 : 2} flush>
+      <Panel title="Đơn của chi nhánh" level={2} count={orders.data?.length} flush>
         {orders.isPending && !orders.isError ? (
-          <Center py="xl">
-            <Loader size="sm" aria-label="Đang tải đơn" />
-          </Center>
+          <div className="flex justify-center py-10">
+            <Spinner size="md" label="Đang tải đơn" />
+          </div>
         ) : (
           <>
             <OrdersTable orders={orders.data ?? []} onCancel={setCancelling} />
             {(orders.data?.length ?? 0) >= limit && limit < MAX_ORDERS && (
-              <Center p="sm">
+              <div className="flex justify-center border-t border-line p-3">
                 <Button
-                  variant="subtle"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setLimit((l) => Math.min(l + PAGE, MAX_ORDERS))}
                 >
                   Xem thêm {PAGE} đơn cũ hơn
                 </Button>
-              </Center>
+              </div>
             )}
           </>
         )}
       </Panel>
 
       <CancelModal branch={branch} orderId={cancelling} onClose={() => setCancelling(null)} />
-      <VisuallyHidden>
-        <div role="status" aria-live="polite">
-          {announcement}
-        </div>
-      </VisuallyHidden>
-    </Stack>
+      <div role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </div>
+    </div>
   );
 }
 
@@ -138,25 +103,26 @@ function Connection({ monitor, answering }: { monitor: Monitor | undefined; answ
   const connected = answering ? monitor?.connection.connected : undefined;
   const badge =
     connected === true
-      ? { color: "green", label: "Đã kết nối Kafka", Icon: IconPlugConnected }
+      ? { tone: "green" as const, label: "Đã kết nối Kafka", Icon: Plug }
       : connected === false
-        ? { color: "red", label: "Mất kết nối Kafka", Icon: IconPlugConnectedX }
-        : { color: "gray", label: "Chưa rõ kết nối Kafka", Icon: IconQuestionMark };
+        ? { tone: "red" as const, label: "Mất kết nối Kafka", Icon: PlugZap }
+        : { tone: "gray" as const, label: "Chưa rõ kết nối Kafka", Icon: HelpCircle };
+
   return (
-    <Group gap="xs">
-      <Badge color={badge.color} size="lg" leftSection={<badge.Icon size={14} aria-hidden />}>
+    <div className="flex flex-wrap items-center gap-2">
+      <Badge tone={badge.tone} icon={<badge.Icon className="h-3.5 w-3.5" aria-hidden="true" />}>
         {badge.label}
       </Badge>
       {monitor && (
-        <Badge color="gray" size="lg" style={{ fontVariantNumeric: "tabular-nums" }}>
-          {monitor.waiting_to_send} mục chờ gửi
+        <Badge tone={monitor.waiting_to_send > 0 ? "orange" : "gray"}>
+          <span style={TABULAR}>{monitor.waiting_to_send} mục chờ gửi</span>
         </Badge>
       )}
-    </Group>
+    </div>
   );
 }
 
-/** One polite announcement per status change between two reads (design.md, "Behaviour"). */
+/** One polite announcement per status change between two reads. */
 function useStatusAnnouncer(orders: Order[] | undefined): string {
   const previous = useRef<Map<string, string> | null>(null);
   const [message, setMessage] = useState("");

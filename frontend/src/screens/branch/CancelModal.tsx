@@ -2,14 +2,13 @@
 // (sections 6 and 10 of the specification), then POST /orders/{id}/cancel. The branch decides
 // whether the cancel is local (200) or goes to the Kitchen (202); the dialog only reports it.
 
-import { Button, Group, Modal, Select, Stack, Text } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { BranchId } from "../../api/branch";
 import { branchApi } from "../../api/branch";
 import { ApiError, detailMessage } from "../../api/http";
 import { CANCEL_EXPLANATION, CUSTOMER_CANCEL_REASONS, REASON } from "../../labels";
+import { Button, Dialog, Select, toast } from "../../ui";
 
 export function CancelModal({
   branch,
@@ -36,7 +35,7 @@ export function CancelModal({
   const cancel = useMutation({
     mutationFn: ({ id, code }: { id: string; code: string }) => api.cancel(id, code),
     onSuccess: ({ status }) => {
-      notifications.show(
+      toast.show(
         status === 200
           ? { color: "green", message: `Đã hủy đơn ${short} tại chi nhánh` }
           : {
@@ -49,26 +48,26 @@ export function CancelModal({
     },
     onError: (failure, variables) => {
       if (failure instanceof ApiError && failure.status === 409) {
-        notifications.show({ color: "yellow", message: "Đơn vừa đổi trạng thái, đã tải lại" });
+        toast.show({ color: "yellow", message: "Đơn vừa đổi trạng thái, đã tải lại" });
         reload();
         close();
       } else if (failure instanceof ApiError && failure.status === 404) {
-        notifications.show({ color: "red", message: "Không tìm thấy đơn này ở chi nhánh" });
+        toast.show({ color: "red", message: "Không tìm thấy đơn này ở chi nhánh" });
         reload();
         close();
       } else if (failure instanceof ApiError && failure.status === 400) {
         setError(detailMessage(failure.body) ?? "Lý do không hợp lệ");
       } else {
-        notifications.show({
+        toast.show({
           color: "red",
           title: `Không kết nối được tới chi nhánh ${branch}`,
           message: (
-            <Group gap="xs">
-              <Text size="sm">Yêu cầu hủy chưa được ghi nhận.</Text>
-              <Button size="compact-xs" variant="light" onClick={() => cancel.mutate(variables)}>
+            <div className="mt-1 flex items-center gap-2">
+              <span>Yêu cầu hủy chưa được ghi nhận.</span>
+              <Button size="xs" variant="danger-soft" onClick={() => cancel.mutate(variables)}>
                 Thử lại
               </Button>
-            </Group>
+            </div>
           ),
         });
       }
@@ -85,31 +84,38 @@ export function CancelModal({
   };
 
   return (
-    <Modal opened={orderId !== null} onClose={close} title={`Hủy đơn ${short}`} centered>
-      <Stack gap="md">
-        <Text size="sm">{CANCEL_EXPLANATION}</Text>
+    <Dialog
+      open={orderId !== null}
+      onOpenChange={(open) => {
+        if (!open) close();
+      }}
+      title={`Hủy đơn ${short}`}
+    >
+      <div className="space-y-4">
+        <p className="rounded-lg bg-subtle px-3 py-2.5 text-sm leading-relaxed text-ink-secondary">
+          {CANCEL_EXPLANATION}
+        </p>
         <Select
           label="Lý do hủy"
           placeholder="Chọn lý do"
-          withAsterisk
-          data={CUSTOMER_CANCEL_REASONS.map((code) => ({ value: code, label: REASON[code] }))}
+          required
+          options={CUSTOMER_CANCEL_REASONS.map((code) => ({ value: code, label: REASON[code] }))}
           value={reason}
-          onChange={(value) => {
+          onValueChange={(value) => {
             setReason(value);
             setError(null);
           }}
           error={error}
-          comboboxProps={{ withinPortal: false }}
         />
-        <Group justify="space-between" mt="sm">
-          <Button variant="default" onClick={close}>
+        <div className="flex items-center justify-between pt-2">
+          <Button variant="secondary" onClick={close}>
             Đóng
           </Button>
-          <Button color="red" onClick={confirm} loading={cancel.isPending}>
+          <Button variant="danger" onClick={confirm} loading={cancel.isPending}>
             Xác nhận hủy
           </Button>
-        </Group>
-      </Stack>
-    </Modal>
+        </div>
+      </div>
+    </Dialog>
   );
 }

@@ -16,7 +16,7 @@ Kỹ năng này chuẩn hóa cách viết và biên tập lại báo cáo bài t
 ## 1. Giọng văn và ngôi xưng chuẩn
 
 - **Ưu tiên diễn đạt khách quan, tránh đại từ cá nhân:** Không dùng *tôi, chúng tôi, em, bọn em, mình*. Thay bằng chủ thể kỹ thuật gắn trực tiếp với đối tượng xử lý (*hệ thống, phân hệ, lược đồ, API, bộ kiểm thử, tài liệu*) hoặc câu khuyết chủ ngữ tự nhiên trong tiếng Việt (*"Tách dữ liệu vị trí khỏi đợt tuyển...", "Khóa cấu trúc vòng ngay khi đợt chuyển sang trạng thái mở..."*).
-- **Giữ góc nhìn của người làm thực tế:** Trình bày bài toán gặp phải, lý do chọn giải pháp A thay vì phương án B, cơ chế chạy trong mã nguồn và những giới hạn chưa xử lý ở phiên bản hiện tại. Không đứng từ bên ngoài bình luận vĩ mô hay ca ngợi sản phẩm.
+- **Giữ góc nhìn của người làm thực tế:** Trình bày bài toán gặp phải, lý do chọn giải pháp kỹ thuật, cơ chế vận hành trong mã nguồn và bằng chứng kiểm chứng thực tế đáp ứng yêu cầu đề bài. Không đứng từ bên ngoài bình luận vĩ mô, không ca ngợi sáo rỗng, và không tự liệt kê nhược điểm hay thiếu sót ngoài phạm vi mẫu báo cáo yêu cầu.
 - **Tránh lặp tên nhóm thực hiện:** Chỉ dùng cụm trung tính như *nhóm thực hiện* hoặc *báo cáo* ở những chỗ bắt buộc nêu bối cảnh khảo sát hoặc phân công công việc, không mở đầu đoạn nào cũng bằng *"Nhóm chúng tôi đã..."* hay *"Nhóm tiến hành..."*.
 
 ## 2. Sáu nguyên tắc bắt buộc khi viết và sửa
@@ -33,19 +33,19 @@ Kỹ năng này chuẩn hóa cách viết và biên tập lại báo cáo bài t
 6. **Tuân thủ hình thức đồ án kỹ thuật Việt Nam:**
    - Tiêu đề cấp chương có thể viết hoa toàn bộ (`CHƯƠNG 1. ...`), nhưng tiêu đề tiểu mục từ cấp 2 trở xuống viết hoa chữ cái đầu câu (*Sentence case*, chỉ viết hoa thêm danh từ riêng hoặc ký hiệu viết tắt) và không có dấu chấm ở cuối tiêu đề.
    - Chú thích bảng đặt **phía trên** bảng (`Bảng X.Y. ...`); chú thích hình/sơ đồ đặt **phía dưới** hình (`Hình X.Y. ...`). Mọi bảng và hình đều phải được nhắc trực tiếp trong đoạn văn bản liền kề.
-   - Phần tổng kết chương hoặc đánh giá hệ thống cần viết thẳng những mặt còn hạn chế bên cạnh kết quả đã làm, thay vì chỉ viết mục ưu điểm và "tóm lại qua chương này".
+   - Phần kết luận hoặc đánh giá kết quả tập trung đối chiếu trực tiếp những gì hệ thống đã giải quyết với mục tiêu và yêu cầu đặt ra, dẫn chứng bằng cơ chế hoặc kết quả đo kiểm thực tế thay vì viết "tóm lại qua chương này" hay tự nhận thêm điểm yếu không liên quan.
 
 ## 3. Tài liệu tham chiếu chuyên sâu
 
 Trước khi biên tập một chương dài hoặc rà soát toàn bộ báo cáo, đọc hai tài liệu tham chiếu đi kèm:
 
 - [Bảng nhận diện dấu hiệu AI và lỗi dịch máy tiếng Việt](./references/anti-ai-patterns-vi.md): Phân loại đầy đủ các dấu hiệu nội dung, cấu trúc câu, định dạng Markdown và từ vựng dịch máy cần loại bỏ khi viết báo cáo tiếng Việt.
-- [Ví dụ đối chiếu Trước và Sau cho báo cáo CNTT](./references/before-after-examples.md): Các mẫu sửa thực tế cho từng phần của đồ án (mở đầu chương, khảo sát hiện trạng, phân tích chức năng, lựa chọn kiến trúc, dẫn bảng/hình, đánh giá hạn chế và hướng phát triển).
+- [Ví dụ đối chiếu Trước và Sau cho báo cáo CNTT](./references/before-after-examples.md): Các mẫu sửa thực tế cho từng phần của đồ án (mở đầu chương, khảo sát hiện trạng, phân tích chức năng, lựa chọn kiến trúc, dẫn bảng/hình, đánh giá và đối chiếu mục tiêu).
 
 ## 4. Quy trình làm việc 4 bước
 
 1. **Đọc khung ngữ cảnh trước khi sửa:** Kiểm tra mục tiêu chương, bảng ký hiệu viết tắt và các đoạn kề cận để giữ đồng nhất thuật ngữ và thứ tự đánh số `Hình`/`Bảng`. Nếu sửa báo cáo của một mã nguồn có sẵn, đối chiếu nhanh để chắc chắn tên tệp, thông số và chức năng nêu trong văn bản khớp với thực tế.
-2. **Quét các lỗi cấu trúc lớn trước:** Xử lý ở cấp đoạn và tiểu mục trước khi sửa từng câu. Gộp các danh sách `- **...**:` không cần thiết thành đoạn văn, xóa bỏ các đoạn mở bài/kết chương rào đón kiểu sáo ngữ, kiểm tra xem phần đánh giá đã có hạn chế thực tế chưa.
+2. **Quét các lỗi cấu trúc lớn trước:** Xử lý ở cấp đoạn và tiểu mục trước khi sửa từng câu. Gộp các danh sách `- **...**:` không cần thiết thành đoạn văn, xóa bỏ các đoạn mở bài/kết chương rào đón kiểu sáo ngữ, kiểm tra xem phần đánh giá đã bám sát yêu cầu đối chiếu kết quả chưa.
 3. **Biên tập từng câu về giọng kỹ thuật khách quan:** Loại bỏ đại từ chủ quan, xóa dấu `—`, cắt *"một cách"* / *"việc"* / bị động thừa, thay động từ mang màu sắc quảng cáo (*tối ưu vượt trội, bộc lộ đứt gãy nghiêm trọng, giải quyết trực diện*) bằng mô tả cơ chế cụ thể.
 4. **Kiểm tra lại trước khi hoàn tất:** Rà nhanh theo danh sách chốt ở mục 5. Không tạo thêm ghi chú bình luận của trợ lý hay phần giải thích thừa vào nội dung tệp báo cáo.
 

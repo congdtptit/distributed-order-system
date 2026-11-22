@@ -1,61 +1,59 @@
-// Pieces every screen uses (.claude/skills/screen/references/design.md): status badges with an
-// icon and a label, short order ids, the banner for a service that does not answer, times.
+// Shared domain display primitives: status badges (icon + label), short order ids,
+// unreachable-service banners, and Vietnamese time/duration formatters.
 
-import { ActionIcon, Alert, Badge, CopyButton, Group, Text, Tooltip } from "@mantine/core";
 import {
-  IconAlertTriangle,
-  IconBan,
-  IconCheck,
-  IconCircleCheck,
-  IconClock,
-  IconCopy,
-  IconFlame,
-  IconHandStop,
-  IconPackage,
-  IconPlugConnectedX,
-  IconToolsKitchen2,
-} from "@tabler/icons-react";
-import type { ComponentType } from "react";
+  AlertTriangle,
+  Ban,
+  Check,
+  CheckCircle2,
+  Clock,
+  Copy,
+  Flame,
+  Hand,
+  Package,
+  PlugZap,
+  Utensils,
+} from "lucide-react";
+import { type ComponentType, useState } from "react";
 import type { StatusLabel } from "../labels";
+import { Alert, Badge, Tooltip } from "../ui";
 
-const ICONS: Record<string, ComponentType<{ size?: number; "aria-hidden"?: boolean }>> = {
-  CHO_KHO: IconClock,
-  DA_GIU: IconPackage,
-  DANG_GIU: IconPackage,
-  CHO_NAU: IconToolsKitchen2,
-  HUY_CHO_DON: IconHandStop,
-  DANG_NAU: IconFlame,
-  HOAN_TAT: IconCircleCheck,
-  DA_DUNG: IconCircleCheck,
-  DA_HUY: IconBan,
-  DA_TRA: IconBan,
-  THAT_BAI: IconAlertTriangle,
-  CHO_KIEM_KHO: IconAlertTriangle,
-  DANG_YEU_CAU: IconHandStop,
-  BEP_KHONG_NAU: IconHandStop,
+const ICONS: Record<string, ComponentType<{ className?: string; "aria-hidden"?: boolean }>> = {
+  CHO_KHO: Clock,
+  DA_GIU: Package,
+  DANG_GIU: Package,
+  CHO_NAU: Utensils,
+  HUY_CHO_DON: Hand,
+  DANG_NAU: Flame,
+  HOAN_TAT: CheckCircle2,
+  DA_DUNG: CheckCircle2,
+  DA_HUY: Ban,
+  DA_TRA: Ban,
+  THAT_BAI: AlertTriangle,
+  CHO_KIEM_KHO: AlertTriangle,
+  DANG_YEU_CAU: Hand,
+  BEP_KHONG_NAU: Hand,
 };
 
-/** A status or flag as a badge: colour, icon and label, never colour alone. A code missing
- * from the table is shown as it is rather than hidden. */
+/** A status or flag as a badge: colour, icon and label, never colour alone. */
 export function StatusBadge({
   code,
   table,
-  variant = "light",
+  variant = "soft",
   suffix,
 }: {
   code: string;
   table: Record<string, StatusLabel>;
-  variant?: "light" | "outline";
+  variant?: "soft" | "outline";
   suffix?: string;
 }) {
   const entry = table[code];
   const Icon = ICONS[code];
   return (
     <Badge
-      color={entry?.color ?? "gray"}
+      tone={entry?.color ?? "gray"}
       variant={variant}
-      leftSection={Icon ? <Icon size={12} aria-hidden /> : null}
-      styles={{ label: { textTransform: "none" } }}
+      icon={Icon ? <Icon className="h-3 w-3" aria-hidden /> : undefined}
     >
       {entry?.label ?? code}
       {suffix ? ` · ${suffix}` : ""}
@@ -63,29 +61,34 @@ export function StatusBadge({
   );
 }
 
-/** The first 8 characters of an order id; the full id in a tooltip and copyable. */
+/** The first 8 characters of an order id; full id in tooltip and copyable. */
 export function OrderId({ id }: { id: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = () => {
+    void navigator.clipboard?.writeText(id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
   return (
-    <Group gap={4} wrap="nowrap">
+    <span className="inline-flex items-center gap-1 whitespace-nowrap">
       <Tooltip label={id}>
-        <Text ff="monospace" size="sm" span>
-          {id.slice(0, 8)}
-        </Text>
+        <span className="font-mono text-xs font-medium text-ink">{id.slice(0, 8)}</span>
       </Tooltip>
-      <CopyButton value={id}>
-        {({ copied, copy }) => (
-          <ActionIcon
-            variant="subtle"
-            size="md"
-            color={copied ? "teal" : "gray"}
-            onClick={copy}
-            aria-label={copied ? "Đã chép mã đơn" : `Chép mã đơn ${id.slice(0, 8)}`}
-          >
-            {copied ? <IconCheck size={14} aria-hidden /> : <IconCopy size={14} aria-hidden />}
-          </ActionIcon>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label={copied ? "Đã chép mã đơn" : `Chép mã đơn ${id.slice(0, 8)}`}
+        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-subtle hover:text-ink"
+      >
+        {copied ? (
+          <Check className="h-3 w-3 text-blue-600" aria-hidden="true" />
+        ) : (
+          <Copy className="h-3 w-3" aria-hidden="true" />
         )}
-      </CopyButton>
-    </Group>
+      </button>
+    </span>
   );
 }
 
@@ -93,8 +96,9 @@ export function OrderId({ id }: { id: string }) {
 export function ServiceBanner({ service, lastAnswer }: { service: string; lastAnswer: number }) {
   return (
     <Alert
-      color="red"
-      icon={<IconPlugConnectedX aria-hidden />}
+      tone="danger"
+      role="alert"
+      icon={<PlugZap className="h-4 w-4" aria-hidden="true" />}
       title={`Không kết nối được tới ${service}`}
     >
       {lastAnswer

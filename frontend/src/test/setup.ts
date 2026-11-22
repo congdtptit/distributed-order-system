@@ -1,9 +1,9 @@
 import "@testing-library/jest-dom/vitest";
-import { notifications } from "@mantine/notifications";
 import { cleanup } from "@testing-library/react";
+import { toast } from "../ui";
 import { server } from "./server";
 
-// jsdom lacks the browser APIs Mantine reads on start.
+// jsdom lacks pointer-capture & ResizeObserver APIs that Radix UI reads.
 Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: (query: string) => ({
@@ -25,12 +25,15 @@ class ResizeObserverStub {
 }
 window.ResizeObserver = ResizeObserverStub;
 window.HTMLElement.prototype.scrollIntoView = () => {};
+window.HTMLElement.prototype.hasPointerCapture = () => false;
+window.HTMLElement.prototype.setPointerCapture = () => {};
+window.HTMLElement.prototype.releasePointerCapture = () => {};
 
 // MSW: every request a test makes must have a handler (src/test/server.ts).
 beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
 afterEach(() => {
   cleanup();
-  notifications.clean(); // the store is module-wide: a notice must not leak into the next test
+  toast.clean();
   server.resetHandlers();
 });
 afterAll(() => server.close());

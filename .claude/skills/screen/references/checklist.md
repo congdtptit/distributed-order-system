@@ -1,6 +1,6 @@
 # Checklist before handing over a screen
 
-Go through every item. The ids in backticks name the general UI rule behind an item (they come from a UI/UX rule set that was filtered for this project: web screens on desktop and tablet, Mantine, no marketing pages, no native mobile app).
+Go through every item. The ids in backticks name the general UI rule behind an item (they come from a UI/UX rule set that was filtered for this project: web screens on desktop and tablet, Tailwind CSS v4 + Radix UI, no marketing pages, no native mobile app).
 
 ## The project's own rules
 

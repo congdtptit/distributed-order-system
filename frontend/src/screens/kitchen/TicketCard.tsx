@@ -1,19 +1,11 @@
-// One ticket of the Kitchen screen: origin branch, time, dishes, reserved ingredients, the red
-// warning for a flagged ingredient (Flow A step 6), and the buttons table 3.2 allows in its
-// status. Buttons are at least 44px high with 8px between them (design.md, "Sizes").
+// One ticket of the Kitchen Display System (KDS): dishes & quantities first, origin branch,
+// time, reserved ingredients, red warning for a flagged ingredient, and 44px+ action buttons.
 
-import { Alert, Badge, Button, Card, Divider, Group, Stack, Text } from "@mantine/core";
-import {
-  IconAlertTriangle,
-  IconCheck,
-  IconClock,
-  IconPlayerPlay,
-  IconX,
-} from "@tabler/icons-react";
+import { AlertTriangle, Check, Clock, Play, X } from "lucide-react";
 import type { Ticket } from "../../api/kitchen";
 import { ticketItems } from "../../api/kitchen";
-import { clock, OrderId, StatusBadge, TABULAR } from "../../components/common";
-import { KITCHEN_STATUS } from "../../labels";
+import { clock, OrderId, TABULAR } from "../../components/common";
+import { Alert, Badge, Button, Card, cn } from "../../ui";
 
 export type TicketAction = "start" | "reject" | "complete";
 
@@ -21,9 +13,6 @@ function quantity(value: number | null | undefined, unit: string | null | undefi
   if (value === null || value === undefined) return "";
   return ` ${value.toLocaleString("vi-VN")}${unit ? ` ${unit}` : ""}`;
 }
-
-/** design.md, "Sizes": Kitchen buttons at least 44px high, 8px apart. */
-const KITCHEN_BUTTON = { h: 44, size: "md", style: { flex: 1 } } as const;
 
 export function TicketCard({
   ticket,
@@ -41,96 +30,107 @@ export function TicketCard({
 
   return (
     <Card
-      padding="md"
+      as="article"
       data-ticket={ticket.order_id}
-      style={{
-        borderLeft: `4px solid var(--mantine-color-${queued ? "indigo" : "yellow"}-5)`,
-      }}
+      className={cn(
+        "flex h-full flex-col justify-between gap-3.5 p-4",
+        queued ? "border-blue-200/90" : "border-amber-200/90",
+      )}
     >
-      <Stack gap="sm">
-        <Group justify="space-between" wrap="nowrap">
-          <OrderId id={ticket.order_id} />
-          <StatusBadge code={ticket.status} table={KITCHEN_STATUS} />
-        </Group>
-        <Group gap={6} wrap="wrap">
-          <Badge color="gray" variant="outline">
-            Chi nhánh {ticket.origin_branch ?? "?"}
-          </Badge>
+      <div className="space-y-3">
+        {/* Top Meta */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <OrderId id={ticket.order_id} />
+            <Badge tone="gray">Chi nhánh {ticket.origin_branch ?? "?"}</Badge>
+          </div>
           {ticket.order_created_at && (
-            <Group gap={4} c="dimmed">
-              <IconClock size={14} aria-hidden />
-              <Text size="sm" c="dimmed" style={TABULAR}>
-                đặt lúc {clock(ticket.order_created_at)}
-              </Text>
-            </Group>
+            <span
+              className="inline-flex items-center gap-1 font-mono text-xs text-ink-muted"
+              style={TABULAR}
+            >
+              <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+              đặt lúc {clock(ticket.order_created_at)}
+            </span>
           )}
-        </Group>
-        <Stack gap={2}>
+        </div>
+
+        {/* Hero: Dishes */}
+        <div className="space-y-1">
           {ticketItems(ticket).map((item) => (
-            <Text key={item.dish_id || item.name} fw={650} size="lg" lh={1.35}>
+            <p
+              key={item.dish_id || item.name}
+              className="text-lg font-bold leading-snug tracking-[-0.01em] text-ink"
+              style={TABULAR}
+            >
               {`${item.name} ×${item.quantity}`}
-            </Text>
+            </p>
           ))}
-        </Stack>
-        <Text size="xs" c="dimmed" style={TABULAR}>
-          Nguyên liệu đã giữ:{" "}
+        </div>
+
+        {/* Reserved Ingredients */}
+        <div
+          className="rounded-lg border border-line bg-subtle px-2.5 py-2 text-xs leading-relaxed text-ink-secondary"
+          style={TABULAR}
+        >
+          <span className="font-semibold text-ink">Nguyên liệu đã giữ: </span>
           {ticket.reserved
             .map((r) => `${r.name ?? r.ingredient_id}${quantity(r.quantity, r.unit)}`)
             .join(", ")}
-        </Text>
+        </div>
+
+        {/* Flagged Stock Warning */}
         {flagged.length > 0 && (
           <Alert
-            color="red"
-            variant="light"
-            icon={<IconAlertTriangle aria-hidden />}
+            tone="danger"
             role="alert"
-            p="xs"
-            styles={{ root: { borderLeft: "3px solid var(--mantine-color-red-6)" } }}
+            icon={<AlertTriangle className="h-4 w-4" />}
+            className="px-3 py-2 text-xs"
           >
-            <Text size="sm" c="red.9">
-              {flagged.join(", ")} đang chờ kiểm kho. Kiểm tra trước khi nấu; nếu hỏng thật thì từ
-              chối phiếu với lý do Nguyên liệu hỏng.
-            </Text>
+            {flagged.join(", ")} đang chờ kiểm kho. Kiểm tra trước khi nấu; nếu hỏng thật thì từ
+            chối phiếu với lý do Nguyên liệu hỏng.
           </Alert>
         )}
-        <Divider color="gray.2" />
-        <Group gap="xs" wrap="nowrap">
-          {queued ? (
-            <>
-              <Button
-                {...KITCHEN_BUTTON}
-                leftSection={<IconPlayerPlay size={18} aria-hidden />}
-                onClick={() => onAction("start")}
-                loading={busy === "start"}
-                disabled={busy !== null && busy !== "start"}
-              >
-                Bắt đầu nấu
-              </Button>
-              <Button
-                {...KITCHEN_BUTTON}
-                style={{ flex: "0 0 auto" }}
-                color="red"
-                variant="outline"
-                leftSection={<IconX size={18} aria-hidden />}
-                onClick={() => onAction("reject")}
-                disabled={busy !== null}
-              >
-                Từ chối
-              </Button>
-            </>
-          ) : (
+      </div>
+
+      {/* Pinned Footer Actions (min 44px high, 8px apart) */}
+      <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
+        {queued ? (
+          <>
             <Button
-              {...KITCHEN_BUTTON}
-              color="green"
-              leftSection={<IconCheck size={18} aria-hidden />}
-              onClick={() => onAction("complete")}
-              loading={busy === "complete"}
+              size="kds"
+              variant="primary"
+              className="min-w-[136px] flex-1"
+              onClick={() => onAction("start")}
+              loading={busy === "start"}
+              disabled={busy !== null && busy !== "start"}
             >
-              Hoàn tất
+              <Play className="h-4 w-4" aria-hidden="true" />
+              Bắt đầu nấu
             </Button>
-          )}
-        </Group>
-      </Stack>
+            <Button
+              size="kds"
+              variant="danger-soft"
+              className="flex-1"
+              onClick={() => onAction("reject")}
+              disabled={busy !== null}
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+              Từ chối
+            </Button>
+          </>
+        ) : (
+          <Button
+            size="kds"
+            className="w-full flex-1 bg-emerald-600 text-white hover:bg-emerald-700"
+            onClick={() => onAction("complete")}
+            loading={busy === "complete"}
+          >
+            <Check className="h-4 w-4" aria-hidden="true" />
+            Hoàn tất
+          </Button>
+        )}
+      </div>
     </Card>
   );
 }
