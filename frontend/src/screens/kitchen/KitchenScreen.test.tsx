@@ -188,7 +188,7 @@ describe("kitchen screen: rejecting", () => {
     expect(await within(dialog).findByText("Chọn lý do từ chối")).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole("combobox", { name: "Lý do từ chối" }));
     const options = (await screen.findAllByRole("option")).map((o) => o.textContent);
-    expect(options).toEqual(["Hỏng thiết bị", "Thiếu nhân viên", "Nguyên liệu hỏng"]);
+    expect(options).toEqual(["Hỏng thiết bị", "Thiếu nhân lực", "Nguyên liệu hỏng"]);
   });
 
   it("requires a spoiled ingredient of this ticket for the reason Spoiled ingredient", async () => {
@@ -224,7 +224,7 @@ describe("kitchen screen: rejecting", () => {
     );
     renderRoute("/kitchen");
     const dialog = await openReject();
-    await chooseReason(dialog, "Thiếu nhân viên");
+    await chooseReason(dialog, "Thiếu nhân lực");
     expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole("button", { name: "Xác nhận từ chối" }));
     expect(await screen.findByText(`Đã từ chối phiếu ${ID.slice(0, 8)}`)).toBeInTheDocument();

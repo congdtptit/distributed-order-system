@@ -19,8 +19,9 @@ from typing import Any
 
 import psycopg
 
-DATABASES: list[tuple[str, str, str, str, str, str]] = [
+DATABASES: list[tuple[str, str, str, str, str, str, str]] = [
     (
+        "4.2.2.1. Inventory DB",
         "Inventory DB",
         "postgresql://app:app@inventory-db:5432/inventory",
         "inventory-db",
@@ -29,6 +30,7 @@ DATABASES: list[tuple[str, str, str, str, str, str]] = [
         "Sơ đồ thực thể - quan hệ của cơ sở dữ liệu Inventory DB",
     ),
     (
+        "4.2.2.2. Kitchen DB",
         "Kitchen DB",
         "postgresql://app:app@kitchen-db:5432/kitchen",
         "kitchen-db",
@@ -37,6 +39,7 @@ DATABASES: list[tuple[str, str, str, str, str, str]] = [
         "Sơ đồ thực thể - quan hệ của cơ sở dữ liệu Kitchen DB",
     ),
     (
+        "4.2.2.3. Branch DB (POS01, POS02, ONLINE)",
         "Branch DB (POS01, POS02, ONLINE)",
         "postgresql://app:app@pos01-db:5432/branch",
         "pos01-db",
@@ -45,6 +48,7 @@ DATABASES: list[tuple[str, str, str, str, str, str]] = [
         "Sơ đồ thực thể - quan hệ của cơ sở dữ liệu Branch DB",
     ),
     (
+        "4.2.2.4. Central Order Replica",
         "Central Order Replica",
         "postgresql://app:app@central-db:5432/central",
         "central-db",
@@ -126,7 +130,7 @@ def format_default(value: object) -> str | None:
     if value is None:
         return None
     text = str(value)
-    text = re.sub(r"::(?:text|jsonb|text\[\]|numeric)", "", text)
+    text = re.sub(r"::(?:text\[\]|text|jsonb|numeric)", "", text)
     return text
 
 
@@ -142,6 +146,7 @@ def format_check(expr: str) -> str:
 
 
 def render(
+    heading: str,
     title: str,
     host: str,
     er_img: str,
@@ -159,31 +164,38 @@ def render(
             for c in cols:
                 keys[(table, c)].append("PRI")
         elif kind == "u":
+            uni_label = "UNI (tổ hợp)" if len(cols) > 1 else "UNI"
             for c in cols:
-                keys[(table, c)].append("UNI")
+                keys[(table, c)].append(uni_label)
         elif kind == "f":
             for c, rc in zip(cols, ref_cols, strict=True):
                 keys[(table, c)].append(f"FK → {ref_table}.{rc}")
         elif kind == "c" and len(cols) == 1:
             checks[(table, cols[0])].append(format_check(str(definition)))
 
+    end_table = table_num + len(columns) - 1
+    range_text = (
+        f"Bảng 2.{table_num}"
+        if table_num == end_table
+        else f"từ Bảng 2.{table_num} đến Bảng 2.{end_table}"
+    )
     out = [
-        f"##### {title}",
+        f"##### {heading}",
         "",
-        f"Lược đồ thực thể và các ràng buộc bảng của `{host}` thể hiện trên {fig_label}.",
+        f"Lược đồ thực thể và các ràng buộc bảng của `{host}` thể hiện trên {fig_label}; "
+        f"chi tiết cấu trúc {len(columns)} bảng dữ liệu được trình bày {range_text}.",
         "",
         f"![{fig_label}. {fig_caption}]({er_img})",
         "",
     ]
 
     for table, rows in columns.items():
+        caption = f"*Bảng 2.{table_num}. Cấu trúc bảng `{table}` ({title})*"
+        table_num += 1
         out += [
-            f"*Bảng 2.{table_num}. Cấu trúc bảng `{table}` ({title})*",
-            "",
             "| Field | Type | Null | Key | Default | Extra |",
             "|---|---|---|---|---|---|",
         ]
-        table_num += 1
         for r in rows:
             name = str(r[1])
             default = format_default(r[5])
@@ -206,7 +218,7 @@ def render(
                 )
                 + " |"
             )
-        out.append("")
+        out += ["", caption, ""]
     return "\n".join(out), table_num
 
 
@@ -217,11 +229,11 @@ def main() -> int:
         "",
     ]
     table_num = 6
-    for title, dsn, host, er_img, fig_label, fig_caption in DATABASES:
+    for heading, title, dsn, host, er_img, fig_label, fig_caption in DATABASES:
         try:
             with psycopg.connect(dsn, connect_timeout=5) as conn:
                 block, table_num = render(
-                    title, host, er_img, fig_label, fig_caption, table_num, conn
+                    heading, title, host, er_img, fig_label, fig_caption, table_num, conn
                 )
                 parts.append(block)
         except psycopg.OperationalError as exc:

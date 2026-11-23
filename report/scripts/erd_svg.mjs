@@ -85,7 +85,7 @@ export function buildErdDiagram({ name, title, width = 1140, height = 700, entit
     const dash = r.dashed ? `stroke-dasharray="5,4"` : "";
     const lineColor = r.dashed ? "#475569" : "#1e293b";
 
-    // Route orthogonal path from p1 -> diamond -> p2
+    // Route orthogonal path from p1 -> exact diamond vertex -> p2 (never piercing sloped sides)
     let path1;
     let path2;
     if (r.route === "hv") {
@@ -97,6 +97,24 @@ export function buildErdDiagram({ name, title, width = 1140, height = 700, entit
     } else if (r.route === "u") {
       path1 = `M ${p1.x},${p1.y} L ${p1.x},${dy} L ${dx},${dy}`;
       path2 = `M ${dx},${dy} L ${p2.x},${dy} L ${p2.x},${p2.y}`;
+    } else if ((r.fromSide === "r" && r.toSide === "l") || (r.fromSide === "l" && r.toSide === "r")) {
+      const dir = r.fromSide === "r" ? 1 : -1;
+      if (Math.abs(p1.y - dy) <= 1 && Math.abs(p2.y - dy) <= 1) {
+        path1 = `M ${p1.x},${p1.y} L ${dx - dir * dw},${dy}`;
+        path2 = `M ${dx + dir * dw},${dy} L ${p2.x},${p2.y}`;
+      } else if (Math.abs(p1.y - dy) > dh + 8 && Math.abs(p2.y - dy) > dh + 8) {
+        const s1 = p1.y > dy ? 1 : -1;
+        const s2 = p2.y > dy ? 1 : -1;
+        path1 = `M ${p1.x},${p1.y} L ${dx},${p1.y} L ${dx},${dy + s1 * dh}`;
+        path2 = `M ${dx},${dy + s2 * dh} L ${dx},${p2.y} L ${p2.x},${p2.y}`;
+      } else {
+        const vL = dx - dir * dw;
+        const vR = dx + dir * dw;
+        const m1 = (p1.x + vL) / 2;
+        const m2 = (vR + p2.x) / 2;
+        path1 = `M ${p1.x},${p1.y} L ${m1},${p1.y} L ${m1},${dy} L ${vL},${dy}`;
+        path2 = `M ${vR},${dy} L ${m2},${dy} L ${m2},${p2.y} L ${p2.x},${p2.y}`;
+      }
     } else {
       path1 = `M ${p1.x},${p1.y} L ${dx},${p1.y} L ${dx},${dy}`;
       path2 = `M ${dx},${dy} L ${dx},${p2.y} L ${p2.x},${p2.y}`;

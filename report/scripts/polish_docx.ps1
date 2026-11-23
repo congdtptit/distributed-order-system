@@ -215,20 +215,20 @@ try {
 <w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:unhideWhenUsed/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="130" w:after="50"/><w:jc w:val="left"/><w:outlineLvl w:val="2"/></w:pPr><w:rPr><w:b/><w:bCs/><w:color w:val="000000"/><w:sz w:val="25"/><w:szCs w:val="25"/></w:rPr></w:style>
 "@
   Upsert-Style 'Heading4' @"
-<w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:unhideWhenUsed/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="100" w:after="40"/><w:jc w:val="left"/><w:outlineLvl w:val="3"/></w:pPr><w:rPr><w:b/><w:bCs/><w:i/><w:iCs/><w:color w:val="000000"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:unhideWhenUsed/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="110" w:after="45"/><w:jc w:val="left"/><w:outlineLvl w:val="3"/></w:pPr><w:rPr><w:b/><w:bCs/><w:color w:val="000000"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:style>
 "@
   Upsert-Style 'Heading5' @"
-<w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:unhideWhenUsed/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="90" w:after="35"/><w:jc w:val="left"/><w:outlineLvl w:val="4"/></w:pPr><w:rPr><w:b/><w:bCs/><w:i/><w:iCs/><w:color w:val="000000"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:unhideWhenUsed/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="90" w:after="35"/><w:ind w:left="140"/><w:jc w:val="left"/><w:outlineLvl w:val="4"/></w:pPr><w:rPr><w:b/><w:bCs/><w:i/><w:iCs/><w:color w:val="000000"/><w:sz w:val="23"/><w:szCs w:val="23"/></w:rPr></w:style>
 "@
   # Force Heading1Char..Heading9Char linked character styles to pure black 000000
   foreach ($hcCol in @($stylesXml.SelectNodes("//w:style[starts-with(@w:styleId,'Heading')]//w:color", $mgrS))) {
     $null = $hcCol.SetAttribute('val', $wNs, '000000')
   }
   Upsert-Style 'TableCaption' @"
-<w:style w:type="paragraph" w:customStyle="1" w:styleId="TableCaption"><w:name w:val="Table Caption"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="110" w:after="50"/><w:jc w:val="center"/></w:pPr><w:rPr><w:i/><w:iCs/><w:color w:val="000000"/><w:sz w:val="21"/><w:szCs w:val="21"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:customStyle="1" w:styleId="TableCaption"><w:name w:val="Table Caption"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="45" w:after="160"/><w:jc w:val="center"/></w:pPr><w:rPr><w:i/><w:iCs/><w:color w:val="000000"/><w:sz w:val="21"/><w:szCs w:val="21"/></w:rPr></w:style>
 "@
   Upsert-Style 'TableCaption0' @"
-<w:style w:type="paragraph" w:customStyle="1" w:styleId="TableCaption0"><w:name w:val="TableCaption"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="110" w:after="50"/><w:jc w:val="center"/></w:pPr><w:rPr><w:i/><w:iCs/><w:color w:val="000000"/><w:sz w:val="21"/><w:szCs w:val="21"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:customStyle="1" w:styleId="TableCaption0"><w:name w:val="TableCaption"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="45" w:after="160"/><w:jc w:val="center"/></w:pPr><w:rPr><w:i/><w:iCs/><w:color w:val="000000"/><w:sz w:val="21"/><w:szCs w:val="21"/></w:rPr></w:style>
 "@
   Upsert-Style 'ImageCaption' @"
 <w:style w:type="paragraph" w:customStyle="1" w:styleId="ImageCaption"><w:name w:val="Image Caption"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="40" w:after="160"/><w:jc w:val="center"/></w:pPr><w:rPr><w:i/><w:iCs/><w:color w:val="000000"/><w:sz w:val="21"/><w:szCs w:val="21"/></w:rPr></w:style>
@@ -411,7 +411,7 @@ try {
         }
       }
     }
-    # Guarantee TableCaption/TableCaption0 is centered, spaced cleanly, and keepNext-bound to the table below
+    # Guarantee TableCaption/TableCaption0 sits cleanly below the table, centered, without gluing to the next section
     if ($st -and $st.Value -in @('TableCaption0','TableCaption')) {
       $pPrTc = $p.SelectSingleNode('./w:pPr', $mgrD)
       $psNode = $pPrTc.SelectSingleNode('./w:pStyle', $mgrD)
@@ -422,8 +422,7 @@ try {
       $newPs = $docXml.CreateElement('w', 'pStyle', $wNs)
       $null = $newPs.SetAttribute('val', $wNs, 'TableCaption')
       $pPrTc.ReplaceChild($newPs, $psNode) | Out-Null
-      $knTc = $docXml.CreateElement('w', 'keepNext', $wNs); $pPrTc.AppendChild($knTc) | Out-Null
-      $spTc = $docXml.CreateElement('w', 'spacing', $wNs); $null = $spTc.SetAttribute('before', $wNs, '110'); $null = $spTc.SetAttribute('after', $wNs, '50'); $pPrTc.AppendChild($spTc) | Out-Null
+      $spTc = $docXml.CreateElement('w', 'spacing', $wNs); $null = $spTc.SetAttribute('before', $wNs, '45'); $null = $spTc.SetAttribute('after', $wNs, '160'); $pPrTc.AppendChild($spTc) | Out-Null
       $jcTc = $docXml.CreateElement('w', 'jc', $wNs); $null = $jcTc.SetAttribute('val', $wNs, 'center'); $pPrTc.AppendChild($jcTc) | Out-Null
     }
     # Style inline SourceCode or blockquotes & ensure CaptionedFigure has keepNext
@@ -608,6 +607,18 @@ try {
       $tblGrid.AppendChild($gc) | Out-Null
     }
 
+    # Check whether this table is followed directly by a TableCaption below it
+    $nextAfterTbl = $tbl.NextSibling
+    while ($nextAfterTbl -and ($nextAfterTbl.NodeType -ne [System.Xml.XmlNodeType]::Element -or $nextAfterTbl.LocalName -match '^bookmark')) { $nextAfterTbl = $nextAfterTbl.NextSibling }
+    $hasBottomCaption = $false
+    if ($nextAfterTbl -and $nextAfterTbl.LocalName -eq 'p') {
+      $pStyleEl = $nextAfterTbl.SelectSingleNode('./w:pPr/w:pStyle', $mgrD)
+      $nStVal = if ($pStyleEl) { $pStyleEl.GetAttribute('val', $wNs) } else { '' }
+      if ($nStVal -in @('TableCaption','TableCaption0') -or $nextAfterTbl.InnerText.Trim() -match '^Bảng\s+\d+\.\d+\.') {
+        $hasBottomCaption = $true
+      }
+    }
+
     # Style each row and cell explicitly
     for ($ri = 0; $ri -lt $rows.Count; $ri++) {
       $tr = $rows[$ri]
@@ -640,7 +651,8 @@ try {
             $oldTag = $cpPr.SelectSingleNode("./w:$tag", $mgrD)
             if ($oldTag) { $cpPr.RemoveChild($oldTag) | Out-Null }
           }
-          if ($ri -eq 0) {
+          $needKeepNext = ($ri -eq 0) -or ($hasBottomCaption -and $ri -eq ($rows.Count - 1))
+          if ($needKeepNext) {
             $kn = $docXml.CreateElement('w', 'keepNext', $wNs)
             $cpStyle = $cpPr.SelectSingleNode('./w:pStyle', $mgrD)
             if ($cpStyle) { $cpPr.InsertAfter($kn, $cpStyle) | Out-Null } else { $cpPr.PrependChild($kn) | Out-Null }

@@ -58,16 +58,16 @@ export const ALERT_KIND = {
 export const REASON = {
   INSUFFICIENT_INGREDIENTS: "Không đủ nguyên liệu",
   AWAITING_STOCK_CHECK: "Nguyên liệu đang chờ kiểm kho",
-  NO_RECIPE: "Món không có công thức",
+  NO_RECIPE: "Món chưa có công thức",
   ORDER_EXPIRED: "Đơn quá hạn",
-  FUTURE_CREATION_TIME: "Giờ tạo đơn không hợp lệ (ở tương lai)",
+  FUTURE_CREATION_TIME: "Thời gian tạo không hợp lệ",
   INVALID_ORDER_DATA: "Dữ liệu đơn không hợp lệ",
   EQUIPMENT_FAILURE: "Hỏng thiết bị",
-  SHORT_STAFFED: "Thiếu nhân viên",
+  SHORT_STAFFED: "Thiếu nhân lực",
   SPOILED_INGREDIENT: "Nguyên liệu hỏng",
   CHANGED_MIND: "Khách đổi ý",
-  WAITED_TOO_LONG: "Khách chờ quá lâu",
-  WRONG_ORDER_ENTERED: "Thu ngân nhập sai đơn",
+  WAITED_TOO_LONG: "Đợi quá lâu",
+  WRONG_ORDER_ENTERED: "Nhập nhầm đơn",
 } as const satisfies Record<string, string>;
 
 /** The reasons a cashier or customer may give for a cancel ("proposed" in section 11 of the

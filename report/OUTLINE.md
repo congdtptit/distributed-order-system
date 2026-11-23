@@ -20,7 +20,7 @@ Tài liệu này là khung thống nhất trước khi biên tập từng phần
 1. **Văn phong và chống văn AI:** Tuân thủ `.claude/skills/vietnamese-tech-report-writing/SKILL.md`: văn xuôi kỹ thuật khách quan, giữ nguyên tên thành phần/DB/bảng/cột/topic/event/API và mã trạng thái bằng tiếng Anh hoặc dạng định danh không dấu (`DANG_GIU`, `CHO_NAU`...), không dùng gạch ngang dài `—` chêm câu, không lạm dụng danh sách gạch đầu dòng in đậm.
 2. **Nguyên tắc thuyết phục (không tự khai điểm yếu):** Chỉ trình bày giải pháp kỹ thuật, cơ chế hoạt động, kiến trúc đã xây dựng và kiểm chứng được; không đưa các mục "hạn chế/thiếu sót" ngoài phạm vi mẫu yêu cầu, không đưa nhật ký sửa lỗi hay thông số chưa tối ưu vào báo cáo.
 3. **Sơ đồ và hình ảnh (không dùng Mermaid):** Toàn bộ sơ đồ (quy trình nghiệp vụ, HLD, Use Case, Biểu đồ hoạt động, Sơ đồ CSDL tổng quát, Mô hình kiểm thử phân tán) được thiết kế bằng HTML/SVG xuất ra PNG độ phân giải cao (cùng phong cách sạch, rõ của báo cáo mẫu hệ thống tuyển dụng). Các ảnh chụp giao diện ở Phần III chụp mới hoàn toàn trên phiên bản UI mới.
-4. **Đánh số đồng bộ:** Đánh số đề mục thống nhất theo `1.1`, `2.1`, `3.1`, `4.1` bên dưới các `PHẦN I–IV` của mẫu thầy. Chú thích bảng đặt **phía trên** (`*Bảng X.Y. ...*`); chú thích hình đặt **phía dưới** (`*Hình X.Y. ...*`); mọi bảng và hình đều có câu dẫn trong văn bản.
+4. **Đánh số đồng bộ:** Đánh số đề mục thống nhất theo `1.1`, `2.1`, `3.1`, `4.1` bên dưới các `PHẦN I–IV` của mẫu thầy. Chú thích bảng đặt **phía dưới** (`*Bảng X.Y. ...*`); chú thích hình đặt **phía dưới** (`*Hình X.Y. ...*`); mọi bảng và hình đều có câu dẫn trong văn bản.
 
 ---
 

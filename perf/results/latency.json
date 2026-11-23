@@ -5,10 +5,10 @@
   },
   "poll_ms": 20.0,
   "reserved_ms": {
-    "min": 189,
-    "mean": 264,
-    "median": 224,
+    "min": 184,
+    "mean": 261,
+    "median": 214,
     "p95": 410,
-    "max": 434
+    "max": 424
   }
 }

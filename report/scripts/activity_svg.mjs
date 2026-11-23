@@ -41,7 +41,7 @@ function wrapLines(text, maxChars) {
   return lines;
 }
 
-export function buildActivityDiagram({ name, title, cols = [240, 320, 240], colGap = 72, rowGap = 34, nodes, edges }) {
+export function buildActivityDiagram({ name, title, cols = [240, 320, 240], colGap = 104, rowGap = 36, nodes, edges }) {
   const padX = 28;
   const padY = 24;
   const titleH = title ? 36 : 0;
@@ -62,15 +62,24 @@ export function buildActivityDiagram({ name, title, cols = [240, 320, 240], colG
 
   for (const n of nodes) {
     const colW = cols[Math.floor(n.col)] ?? 260;
-    const w = n.w ?? (n.type === "start" || n.type === "end" ? 30 : Math.min(colW, n.maxW ?? colW));
+    const w =
+      n.w ??
+      (n.type === "start" || n.type === "end"
+        ? 30
+        : n.type === "fork" || n.type === "join"
+          ? Math.min(colW * 1.6, n.barW ?? 280)
+          : Math.min(colW, n.maxW ?? colW));
     let h;
     let lines = [];
     if (n.type === "start" || n.type === "end") {
       h = 30;
+    } else if (n.type === "fork" || n.type === "join") {
+      h = 8;
     } else {
-      const approxChars = Math.max(16, Math.floor((w - 24) / 6.7));
+      const innerPad = n.type === "decision" ? 44 : 24;
+      const approxChars = Math.max(16, Math.floor((w - innerPad) / 6.7));
       lines = wrapLines(n.label, approxChars);
-      h = Math.max(40, lines.length * 17 + 18);
+      h = Math.max(42, lines.length * 17 + (n.type === "decision" ? 22 : 18));
     }
     const cx =
       n.col % 1 === 0
@@ -100,13 +109,13 @@ export function buildActivityDiagram({ name, title, cols = [240, 320, 240], colG
     item.y = item.cy - item.h / 2;
   }
 
-  function anchor(item, side) {
+  function anchor(item, side, off = 0) {
     switch (side) {
-      case "t": return { x: item.cx, y: item.y };
-      case "b": return { x: item.cx, y: item.y + item.h };
-      case "l": return { x: item.x, y: item.cy };
-      case "r": return { x: item.x + item.w, y: item.cy };
-      default: return { x: item.cx, y: item.y + item.h };
+      case "t": return { x: item.cx + off, y: item.y };
+      case "b": return { x: item.cx + off, y: item.y + item.h };
+      case "l": return { x: item.x, y: item.cy + off };
+      case "r": return { x: item.x + item.w, y: item.cy + off };
+      default: return { x: item.cx + off, y: item.y + item.h };
     }
   }
 
@@ -119,8 +128,8 @@ export function buildActivityDiagram({ name, title, cols = [240, 320, 240], colG
 
     const fs = e.fromSide ?? "b";
     const ts = e.toSide ?? "t";
-    const p1 = anchor(fromNode, fs);
-    const p2 = anchor(toNode, ts);
+    const p1 = anchor(fromNode, fs, e.fromOff ?? 0);
+    const p2 = anchor(toNode, ts, e.toOff ?? 0);
     const color = e.color ?? "#475569";
 
     let d;
@@ -203,9 +212,28 @@ export function buildActivityDiagram({ name, title, cols = [240, 320, 240], colG
         <circle cx="${item.cx}" cy="${item.cy}" r="13" fill="#ffffff" stroke="#0f172a" stroke-width="2.2"/>
         <circle cx="${item.cx}" cy="${item.cy}" r="7.5" fill="#0f172a"/>
       `);
+    } else if (item.type === "fork" || item.type === "join") {
+      nodeSvgs.push(`
+        <rect x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" rx="3" fill="#0f172a"/>
+      `);
+    } else if (item.type === "decision") {
+      const theme = NODE_THEMES.decision;
+      const tip = 16;
+      const lineH = 16.5;
+      const startY = item.cy - ((item.lines.length - 1) * lineH) / 2 + 4.5;
+      const textEls = item.lines
+        .map(
+          (line, idx) =>
+            `<text x="${item.cx}" y="${startY + idx * lineH}" text-anchor="middle" font-size="12" font-weight="650" fill="${theme.text}">${esc(line)}</text>`
+        )
+        .join("");
+      const pts = `${item.x + tip},${item.y} ${item.x + item.w - tip},${item.y} ${item.x + item.w},${item.cy} ${item.x + item.w - tip},${item.y + item.h} ${item.x + tip},${item.y + item.h} ${item.x},${item.cy}`;
+      nodeSvgs.push(`
+        <polygon points="${pts}" fill="${theme.fill}" stroke="${theme.stroke}" stroke-width="1.8" stroke-linejoin="round"/>
+        ${textEls}
+      `);
     } else {
       const theme = NODE_THEMES[item.type ?? "action"] ?? NODE_THEMES.action;
-      const rx = item.type === "decision" ? 18 : 9;
       const lineH = 16.5;
       const startY = item.cy - ((item.lines.length - 1) * lineH) / 2 + 4.5;
       const textEls = item.lines
@@ -218,7 +246,7 @@ export function buildActivityDiagram({ name, title, cols = [240, 320, 240], colG
         .join("");
 
       nodeSvgs.push(`
-        <rect x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" rx="${rx}" fill="${theme.fill}" stroke="${theme.stroke}" stroke-width="1.7"/>
+        <rect x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" rx="9" fill="${theme.fill}" stroke="${theme.stroke}" stroke-width="1.7"/>
         ${textEls}
       `);
     }

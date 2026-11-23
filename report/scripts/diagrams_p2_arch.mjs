@@ -80,7 +80,7 @@ export const P2_ARCH_DIAGRAMS = [
           <line x1="585" y1="410" x2="585" y2="428" stroke="#475569" stroke-width="1.5" marker-end="url(#hArrG)"/>
 
           <rect x="464" y="430" width="242" height="36" rx="8" fill="#e0f2fe" stroke="#0d9488" stroke-width="1.2"/>
-          <text x="585" y="453" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0f172a">Dashboard quản lý &amp; giám sát</text>
+          <text x="585" y="453" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0f172a">Dashboard Báo cáo quản lý</text>
 
           <!-- Dashed Logical Replication arrows: POS orders & Online orders -> Central Order Replica -->
           <path d="M 323,264 L 323,382" fill="none" stroke="#475569" stroke-width="1.6" stroke-dasharray="5,4" marker-end="url(#hArrG)"/>
@@ -182,158 +182,161 @@ export const P2_ARCH_DIAGRAMS = [
     scale: 2,
     body: `
       <div style="border:1.5px solid #cbd5e1;border-radius:14px;padding:14px 16px;background:#ffffff;">
-        <svg width="1148" height="710" viewBox="0 0 1148 710" xmlns="http://www.w3.org/2000/svg" style="display:block;font-family:'Segoe UI',Arial,sans-serif;">
+        <svg width="1148" height="720" viewBox="0 0 1148 720" xmlns="http://www.w3.org/2000/svg" style="display:block;font-family:'Segoe UI',Arial,sans-serif;">
           <defs>
             <marker id="ucArr" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
-              <path d="M0,1 L8,4.5 L0,8" fill="none" stroke="#475569" stroke-width="1.4"/>
+              <path d="M0,1 L8,4.5 L0,8" fill="none" stroke="#1d4ed8" stroke-width="1.5"/>
             </marker>
           </defs>
 
-          <rect x="200" y="14" width="748" height="626" rx="14" fill="#fcfdff" stroke="#334155" stroke-width="2"/>
+          <rect x="206" y="14" width="736" height="636" rx="14" fill="#fcfdff" stroke="#334155" stroke-width="2"/>
           <text x="574" y="42" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">HỆ THỐNG ĐẶT HÀNG TẠI QUẦY VÀ ONLINE HỢP NHẤT</text>
 
-          <g transform="translate(88, 125)" stroke="#1d4ed8" stroke-width="2" fill="none">
+          <!-- Left Actors -->
+          <g transform="translate(88, 175)" stroke="#1d4ed8" stroke-width="2" fill="none">
             <circle cx="0" cy="-26" r="14"/>
             <line x1="0" y1="-12" x2="0" y2="20"/>
             <line x1="-18" y1="-2" x2="18" y2="-2"/>
             <line x1="0" y1="20" x2="-14" y2="44"/>
             <line x1="0" y1="20" x2="14" y2="44"/>
           </g>
-          <text x="88" y="190" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">Thu ngân tại quầy</text>
-          <text x="88" y="207" text-anchor="middle" font-size="11.5" fill="#475569">(POS01, POS02)</text>
+          <text x="88" y="240" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">Thu ngân tại quầy</text>
+          <text x="88" y="257" text-anchor="middle" font-size="11.5" fill="#475569">(POS01, POS02)</text>
 
-          <g transform="translate(88, 360)" stroke="#0f766e" stroke-width="2" fill="none">
+          <g transform="translate(88, 415)" stroke="#0f766e" stroke-width="2" fill="none">
             <circle cx="0" cy="-26" r="14"/>
             <line x1="0" y1="-12" x2="0" y2="20"/>
             <line x1="-18" y1="-2" x2="18" y2="-2"/>
             <line x1="0" y1="20" x2="-14" y2="44"/>
             <line x1="0" y1="20" x2="14" y2="44"/>
           </g>
-          <text x="88" y="425" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">Khách hàng Online</text>
-          <text x="88" y="442" text-anchor="middle" font-size="11.5" fill="#475569">(Kênh trực tuyến)</text>
+          <text x="88" y="480" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">Khách hàng Online</text>
+          <text x="88" y="497" text-anchor="middle" font-size="11.5" fill="#475569">(Kênh trực tuyến)</text>
 
-          <g transform="translate(1060, 145)" stroke="#b45309" stroke-width="2" fill="none">
-            <circle cx="0" cy="-26" r="14"/>
-            <line x1="0" y1="-12" x2="0" y2="20"/>
-            <line x1="-18" y1="-2" x2="18" y2="-2"/>
-            <line x1="0" y1="20" x2="-14" y2="44"/>
-            <line x1="0" y1="20" x2="14" y2="44"/>
+          <!-- Right Actors (evenly spaced, zero crossing through labels) -->
+          <g transform="translate(1056, 108)" stroke="#b45309" stroke-width="2" fill="none">
+            <circle cx="0" cy="-24" r="13"/>
+            <line x1="0" y1="-11" x2="0" y2="18"/>
+            <line x1="-16" y1="-1" x2="16" y2="-1"/>
+            <line x1="0" y1="18" x2="-13" y2="40"/>
+            <line x1="0" y1="18" x2="13" y2="40"/>
           </g>
-          <text x="1060" y="210" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">Nhân viên Kho</text>
-          <text x="1060" y="227" text-anchor="middle" font-size="11.5" fill="#475569">(Kho trung tâm)</text>
+          <text x="1056" y="168" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0f172a">Nhân viên Kho</text>
+          <text x="1056" y="184" text-anchor="middle" font-size="11" fill="#475569">(Kho trung tâm)</text>
 
-          <g transform="translate(1060, 365)" stroke="#6d28d9" stroke-width="2" fill="none">
-            <circle cx="0" cy="-26" r="14"/>
-            <line x1="0" y1="-12" x2="0" y2="20"/>
-            <line x1="-18" y1="-2" x2="18" y2="-2"/>
-            <line x1="0" y1="20" x2="-14" y2="44"/>
-            <line x1="0" y1="20" x2="14" y2="44"/>
+          <g transform="translate(1056, 265)" stroke="#1d4ed8" stroke-width="2" fill="none">
+            <rect x="-20" y="-28" width="40" height="32" rx="6" fill="#eff6ff"/>
+            <line x1="-12" y1="-14" x2="12" y2="-14"/>
+            <line x1="-12" y1="-6" x2="12" y2="-6"/>
+            <line x1="0" y1="4" x2="0" y2="14"/>
+            <line x1="-14" y1="14" x2="14" y2="14"/>
           </g>
-          <text x="1060" y="430" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">Nhân viên Bếp</text>
-          <text x="1060" y="447" text-anchor="middle" font-size="11.5" fill="#475569">(Bếp trung tâm)</text>
+          <text x="1056" y="300" text-anchor="middle" font-size="12" font-weight="700" fill="#1e3a8a">«system»</text>
+          <text x="1056" y="316" text-anchor="middle" font-size="12" font-weight="700" fill="#0f172a">Xử lý sự kiện nền</text>
+          <text x="1056" y="332" text-anchor="middle" font-size="11" fill="#475569">(Inventory / Kitchen)</text>
 
-          <g transform="translate(1060, 545)" stroke="#334155" stroke-width="2" fill="none">
-            <circle cx="0" cy="-26" r="14"/>
-            <line x1="0" y1="-12" x2="0" y2="20"/>
-            <line x1="-18" y1="-2" x2="18" y2="-2"/>
-            <line x1="0" y1="20" x2="-14" y2="44"/>
-            <line x1="0" y1="20" x2="14" y2="44"/>
+          <g transform="translate(1056, 430)" stroke="#6d28d9" stroke-width="2" fill="none">
+            <circle cx="0" cy="-24" r="13"/>
+            <line x1="0" y1="-11" x2="0" y2="18"/>
+            <line x1="-16" y1="-1" x2="16" y2="-1"/>
+            <line x1="0" y1="18" x2="-13" y2="40"/>
+            <line x1="0" y1="18" x2="13" y2="40"/>
           </g>
-          <text x="1060" y="610" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">Quản lý / Vận hành</text>
-          <text x="1060" y="627" text-anchor="middle" font-size="11.5" fill="#475569">(Giám sát toàn chuỗi)</text>
+          <text x="1056" y="490" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0f172a">Nhân viên Bếp</text>
+          <text x="1056" y="506" text-anchor="middle" font-size="11" fill="#475569">(Bếp trung tâm)</text>
 
-          <ellipse cx="360" cy="112" rx="125" ry="34" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.8"/>
-          <text x="360" y="107" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1e3a8a">UC-01: Xem thực đơn</text>
-          <text x="360" y="124" text-anchor="middle" font-size="11.5" fill="#334155">kèm trạng thái món (Còn/Hết/Ẩn)</text>
+          <g transform="translate(1056, 578)" stroke="#334155" stroke-width="2" fill="none">
+            <circle cx="0" cy="-24" r="13"/>
+            <line x1="0" y1="-11" x2="0" y2="18"/>
+            <line x1="-16" y1="-1" x2="16" y2="-1"/>
+            <line x1="0" y1="18" x2="-13" y2="40"/>
+            <line x1="0" y1="18" x2="13" y2="40"/>
+          </g>
+          <text x="1056" y="638" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0f172a">Quản lý chuỗi</text>
+          <text x="1056" y="654" text-anchor="middle" font-size="11" fill="#475569">(Tổng hợp &amp; vận hành)</text>
 
-          <ellipse cx="360" cy="202" rx="125" ry="34" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.8"/>
-          <text x="360" y="197" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1e3a8a">UC-02: Tạo đơn đặt món</text>
-          <text x="360" y="214" text-anchor="middle" font-size="11.5" fill="#334155">Lưu cục bộ &amp; ghi Outbox bất đồng bộ</text>
+          <!-- Left Column Use Cases (Module 1: UC-01..UC-03) -->
+          <ellipse cx="378" cy="146" rx="142" ry="38" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.8"/>
+          <text x="378" y="140" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1e3a8a">UC-01: Xem thực đơn và đặt món</text>
+          <text x="378" y="158" text-anchor="middle" font-size="11.2" fill="#334155">GD-01, GD-02 (Còn/Hết/Ẩn &amp; Outbox)</text>
 
-          <ellipse cx="360" cy="292" rx="125" ry="34" fill="#f0fdfa" stroke="#0f766e" stroke-width="1.8"/>
-          <text x="360" y="287" text-anchor="middle" font-size="12.5" font-weight="700" fill="#115e59">UC-03: Yêu cầu hủy đơn</text>
-          <text x="360" y="304" text-anchor="middle" font-size="11.5" fill="#334155">Hủy tại chỗ hoặc chuyển Bếp phân xử</text>
+          <ellipse cx="378" cy="296" rx="142" ry="38" fill="#f0fdfa" stroke="#0f766e" stroke-width="1.8"/>
+          <text x="378" y="290" text-anchor="middle" font-size="12.5" font-weight="700" fill="#115e59">UC-02: Hủy đơn đặt món</text>
+          <text x="378" y="308" text-anchor="middle" font-size="11.2" fill="#334155">GD-03 (Hủy tại chỗ hoặc chuyển Bếp)</text>
 
-          <ellipse cx="360" cy="382" rx="125" ry="34" fill="#f0fdfa" stroke="#0f766e" stroke-width="1.8"/>
-          <text x="360" y="377" text-anchor="middle" font-size="12.5" font-weight="700" fill="#115e59">UC-04: Theo dõi đơn</text>
-          <text x="360" y="394" text-anchor="middle" font-size="11.5" fill="#334155">Xem trạng thái đơn &amp; tiến độ gửi</text>
+          <ellipse cx="378" cy="446" rx="142" ry="38" fill="#f0fdfa" stroke="#0f766e" stroke-width="1.8"/>
+          <text x="378" y="440" text-anchor="middle" font-size="12.5" font-weight="700" fill="#115e59">UC-03: Theo dõi đơn và giám sát kênh</text>
+          <text x="378" y="458" text-anchor="middle" font-size="11.2" fill="#334155">GD-04 (Thứ hạng trạng thái &amp; cảnh báo)</text>
 
-          <ellipse cx="485" cy="542" rx="128" ry="34" fill="#f8fafc" stroke="#334155" stroke-width="1.8"/>
-          <text x="485" y="537" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0f172a">Đồng bộ Outbox &amp; Kafka</text>
-          <text x="485" y="554" text-anchor="middle" font-size="11.5" fill="#475569">Chống trùng, giữ thứ tự theo đơn</text>
+          <!-- Right Column Use Cases (Modules 2, 3, 4: UC-04..UC-09) -->
+          <ellipse cx="776" cy="106" rx="142" ry="34" fill="#fffbeb" stroke="#b45309" stroke-width="1.8"/>
+          <text x="776" y="100" text-anchor="middle" font-size="12.5" font-weight="700" fill="#92400e">UC-05: Quản lý tồn kho</text>
+          <text x="776" y="117" text-anchor="middle" font-size="11.2" fill="#334155">GD-07, GD-08, GD-09 (Tra cứu, nhập, kiểm)</text>
 
-          <ellipse cx="792" cy="108" rx="124" ry="34" fill="#fffbeb" stroke="#b45309" stroke-width="1.8"/>
-          <text x="792" y="103" text-anchor="middle" font-size="12.5" font-weight="700" fill="#92400e">UC-05: Quản lý tồn kho</text>
-          <text x="792" y="120" text-anchor="middle" font-size="11.5" fill="#334155">Xem tồn kho, nhập kho, kiểm kho</text>
+          <ellipse cx="776" cy="196" rx="142" ry="34" fill="#fffbeb" stroke="#b45309" stroke-width="1.8"/>
+          <text x="776" y="190" text-anchor="middle" font-size="12.5" font-weight="700" fill="#92400e">UC-04: Xử lý nguyên liệu đơn đa nguồn</text>
+          <text x="776" y="207" text-anchor="middle" font-size="11.2" fill="#334155">GD-05, GD-06 (Giữ kho, hoàn &amp; hao hụt)</text>
 
-          <ellipse cx="792" cy="196" rx="124" ry="34" fill="#fffbeb" stroke="#b45309" stroke-width="1.8"/>
-          <text x="792" y="191" text-anchor="middle" font-size="12.5" font-weight="700" fill="#92400e">UC-06: Giữ &amp; hoàn kho</text>
-          <text x="792" y="208" text-anchor="middle" font-size="11.5" fill="#334155">Giữ đủ cả đơn &amp; công bố trạng thái món</text>
+          <ellipse cx="776" cy="286" rx="142" ry="34" fill="#fffbeb" stroke="#b45309" stroke-width="1.8"/>
+          <text x="776" y="280" text-anchor="middle" font-size="12.5" font-weight="700" fill="#92400e">UC-06: Đồng bộ trạng thái thực đơn</text>
+          <text x="776" y="297" text-anchor="middle" font-size="11.2" fill="#334155">GD-10 (Công bố phiên bản &amp; snapshot)</text>
 
-          <ellipse cx="792" cy="296" rx="124" ry="34" fill="#f5f3ff" stroke="#6d28d9" stroke-width="1.8"/>
-          <text x="792" y="291" text-anchor="middle" font-size="12.5" font-weight="700" fill="#5b21b6">UC-07: Điều phối phiếu bếp</text>
-          <text x="792" y="308" text-anchor="middle" font-size="11.5" fill="#334155">Xem phiếu, Bắt đầu nấu, Hoàn tất</text>
+          <ellipse cx="776" cy="382" rx="142" ry="34" fill="#f5f3ff" stroke="#6d28d9" stroke-width="1.8"/>
+          <text x="776" y="376" text-anchor="middle" font-size="12.5" font-weight="700" fill="#5b21b6">UC-07: Tiếp nhận đơn và phân xử hủy</text>
+          <text x="776" y="393" text-anchor="middle" font-size="11.2" fill="#334155">GD-11 (Hợp nhất phiếu &amp; trọng tài hủy)</text>
 
-          <ellipse cx="792" cy="386" rx="124" ry="34" fill="#f5f3ff" stroke="#6d28d9" stroke-width="1.8"/>
-          <text x="792" y="381" text-anchor="middle" font-size="12.5" font-weight="700" fill="#5b21b6">UC-08: Từ chối &amp; phân xử hủy</text>
-          <text x="792" y="398" text-anchor="middle" font-size="11.5" fill="#334155">Báo nguyên liệu hỏng, quyết định hủy</text>
+          <ellipse cx="776" cy="478" rx="142" ry="34" fill="#f5f3ff" stroke="#6d28d9" stroke-width="1.8"/>
+          <text x="776" y="472" text-anchor="middle" font-size="12.5" font-weight="700" fill="#5b21b6">UC-08: Xử lý phiếu chế biến</text>
+          <text x="776" y="489" text-anchor="middle" font-size="11.2" fill="#334155">GD-12..GD-15 (Xem, nấu, từ chối, xong)</text>
 
-          <ellipse cx="792" cy="492" rx="124" ry="34" fill="#f1f5f9" stroke="#334155" stroke-width="1.8"/>
-          <text x="792" y="487" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0f172a">UC-09: Giám sát vận hành</text>
-          <text x="792" y="504" text-anchor="middle" font-size="11.5" fill="#334155">Kết nối Kafka, độ trễ &amp; cảnh báo</text>
+          <ellipse cx="776" cy="578" rx="142" ry="34" fill="#f1f5f9" stroke="#334155" stroke-width="1.8"/>
+          <text x="776" y="572" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0f172a">UC-09: Xem báo cáo hợp nhất</text>
+          <text x="776" y="589" text-anchor="middle" font-size="11.2" fill="#334155">GD-16 (Thống kê đa kênh &amp; độ trễ)</text>
 
-          <ellipse cx="792" cy="582" rx="124" ry="34" fill="#f1f5f9" stroke="#334155" stroke-width="1.8"/>
-          <text x="792" y="577" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0f172a">UC-10: Xem báo cáo hợp nhất</text>
-          <text x="792" y="594" text-anchor="middle" font-size="11.5" fill="#334155">Số liệu toàn chuỗi &amp; mốc dữ liệu từng kênh</text>
+          <!-- Clean Actor -> Use Case Associations -->
+          <line x1="112" y1="168" x2="236" y2="142" stroke="#1d4ed8" stroke-width="1.5"/>
+          <line x1="112" y1="184" x2="236" y2="286" stroke="#1d4ed8" stroke-width="1.5"/>
+          <path d="M112,192 Q176,228 236,434" fill="none" stroke="#1d4ed8" stroke-width="1.5"/>
 
-          <line x1="112" y1="120" x2="235" y2="112" stroke="#334155" stroke-width="1.5"/>
-          <line x1="112" y1="132" x2="235" y2="200" stroke="#334155" stroke-width="1.5"/>
-          <line x1="112" y1="145" x2="235" y2="288" stroke="#334155" stroke-width="1.5"/>
-          <line x1="112" y1="158" x2="235" y2="378" stroke="#334155" stroke-width="1.5"/>
+          <line x1="112" y1="398" x2="236" y2="156" stroke="#0f766e" stroke-width="1.4"/>
+          <line x1="112" y1="412" x2="236" y2="306" stroke="#0f766e" stroke-width="1.4"/>
+          <line x1="112" y1="426" x2="236" y2="450" stroke="#0f766e" stroke-width="1.4"/>
 
-          <line x1="112" y1="340" x2="235" y2="120" stroke="#475569" stroke-width="1.4"/>
-          <line x1="112" y1="348" x2="235" y2="208" stroke="#475569" stroke-width="1.4"/>
-          <line x1="112" y1="358" x2="235" y2="294" stroke="#475569" stroke-width="1.4"/>
-          <line x1="112" y1="368" x2="235" y2="382" stroke="#475569" stroke-width="1.4"/>
+          <!-- Right Actors -> Use Cases (no crossing text!) -->
+          <line x1="1032" y1="108" x2="918" y2="106" stroke="#b45309" stroke-width="1.5"/>
 
-          <line x1="1036" y1="140" x2="916" y2="110" stroke="#334155" stroke-width="1.5"/>
-          <line x1="1036" y1="152" x2="916" y2="196" stroke="#334155" stroke-width="1.5"/>
-          <path d="M1036,168 L965,440 L914,484" fill="none" stroke="#94a3b8" stroke-width="1.2"/>
+          <line x1="1032" y1="252" x2="918" y2="200" stroke="#1d4ed8" stroke-width="1.5"/>
+          <line x1="1032" y1="266" x2="918" y2="284" stroke="#1d4ed8" stroke-width="1.5"/>
+          <line x1="1032" y1="280" x2="918" y2="378" stroke="#1d4ed8" stroke-width="1.5"/>
 
-          <line x1="1036" y1="358" x2="916" y2="298" stroke="#334155" stroke-width="1.5"/>
-          <line x1="1036" y1="368" x2="916" y2="386" stroke="#334155" stroke-width="1.5"/>
-          <line x1="1036" y1="382" x2="914" y2="492" stroke="#94a3b8" stroke-width="1.2"/>
+          <line x1="1032" y1="436" x2="918" y2="474" stroke="#6d28d9" stroke-width="1.5"/>
 
-          <line x1="1036" y1="538" x2="916" y2="496" stroke="#334155" stroke-width="1.5"/>
-          <line x1="1036" y1="552" x2="916" y2="582" stroke="#334155" stroke-width="1.5"/>
+          <line x1="1032" y1="578" x2="918" y2="578" stroke="#334155" stroke-width="1.5"/>
+          <path d="M1032,566 L962,530 L962,130 L914,116" fill="none" stroke="#94a3b8" stroke-width="1.2"/>
 
-          <path d="M474,218 L482,506" fill="none" stroke="#1d4ed8" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ucArr)"/>
-          <path d="M452,316 L472,508" fill="none" stroke="#1d4ed8" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ucArr)"/>
-          <path d="M676,208 L516,508" fill="none" stroke="#1d4ed8" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ucArr)"/>
-          <path d="M676,396 L536,512" fill="none" stroke="#1d4ed8" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ucArr)"/>
-          <rect x="498" y="395" width="90" height="22" rx="5" fill="#ffffff" stroke="#93c5fd"/>
-          <text x="543" y="410" text-anchor="middle" font-size="11" font-weight="600" fill="#1d4ed8">«include»</text>
+          <!-- Valid UML «include» from UC-05 & UC-04 to UC-06 (routed neatly on left rail inside boundary) -->
+          <path d="M634,106 L576,106 L576,274 L634,274" fill="none" stroke="#1d4ed8" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ucArr)"/>
+          <path d="M634,196 L596,196 L596,292 L634,292" fill="none" stroke="#1d4ed8" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ucArr)"/>
+          <rect x="536" y="140" width="84" height="22" rx="5" fill="#ffffff" stroke="#93c5fd"/>
+          <text x="578" y="155" text-anchor="middle" font-size="11" font-weight="600" fill="#1d4ed8">«include»</text>
 
-          <path d="M670,378 C625,355 625,225 670,204" fill="none" stroke="#b45309" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ucArr)"/>
-          <rect x="598" y="280" width="76" height="20" rx="5" fill="#fff7ed" stroke="#fdba74"/>
-          <text x="636" y="294" text-anchor="middle" font-size="11" font-weight="600" fill="#9a3412">«trigger»</text>
-
-          <rect x="200" y="654" width="748" height="44" rx="9" fill="#f8fafc" stroke="#cbd5e1"/>
-          <text x="220" y="681" font-size="12" font-weight="700" fill="#334155">Chú giải UML:</text>
-          <g transform="translate(335, 675)" stroke="#334155" stroke-width="1.5" fill="none">
+          <!-- Legend -->
+          <rect x="206" y="664" width="736" height="44" rx="9" fill="#f8fafc" stroke="#cbd5e1"/>
+          <text x="224" y="691" font-size="12" font-weight="700" fill="#334155">Chú giải UML:</text>
+          <g transform="translate(338, 685)" stroke="#334155" stroke-width="1.5" fill="none">
             <circle cx="0" cy="-7" r="4"/>
             <line x1="0" y1="-3" x2="0" y2="6"/>
             <line x1="-6" y1="0" x2="6" y2="0"/>
             <line x1="0" y1="6" x2="-4" y2="12"/>
             <line x1="0" y1="6" x2="4" y2="12"/>
           </g>
-          <text x="350" y="681" font-size="11.5" fill="#334155">Tác nhân</text>
-          <ellipse cx="450" cy="676" rx="20" ry="10" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.5"/>
-          <text x="478" y="681" font-size="11.5" fill="#334155">Ca sử dụng (Use Case)</text>
-          <line x1="628" y1="676" x2="665" y2="676" stroke="#334155" stroke-width="1.5"/>
-          <text x="673" y="681" font-size="11.5" fill="#334155">Tương tác</text>
-          <line x1="752" y1="676" x2="795" y2="676" stroke="#1d4ed8" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#ucArr)"/>
-          <text x="803" y="681" font-size="11.5" fill="#334155">«include» / kích hoạt</text>
+          <text x="352" y="691" font-size="11.5" fill="#334155">Tác nhân</text>
+          <ellipse cx="448" cy="686" rx="20" ry="10" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.5"/>
+          <text x="476" y="691" font-size="11.5" fill="#334155">Ca sử dụng (UC-01..09)</text>
+          <line x1="634" y1="686" x2="670" y2="686" stroke="#334155" stroke-width="1.5"/>
+          <text x="678" y="691" font-size="11.5" fill="#334155">Tương tác</text>
+          <line x1="756" y1="686" x2="800" y2="686" stroke="#1d4ed8" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#ucArr)"/>
+          <text x="808" y="691" font-size="11.5" fill="#334155">«include» (UML 2.5)</text>
         </svg>
       </div>
     `,
@@ -454,10 +457,10 @@ export const P2_ARCH_DIAGRAMS = [
     ],
     relations: [
       { from: "Branch DB: orders", to: "Branch DB: outbox_events", fromSide: "b", toSide: "t", label: "chờ gửi", cardFrom: "1", cardTo: "N", dw: 40 },
-      { from: "Branch DB: orders", to: "Inventory DB: inventory_orders", fromSide: "r", toSide: "l", label: "OrderCreated", cardFrom: "1", cardTo: "0..1", dw: 52, c1y: -4, c2y: -4 },
+      { from: "Branch DB: orders", to: "Inventory DB: inventory_orders", fromSide: "r", toSide: "l", fromOff: -9.5, label: "OrderCreated", cardFrom: "1", cardTo: "0..1", dw: 52, c1y: -4, c2y: -4 },
       { from: "Branch DB: orders", to: "Central DB: orders & heartbeat", fromSide: "t", toSide: "t", route: "u", dx: 578, dy: 68, label: "WAL Replication", cardFrom: "1", cardTo: "1", dw: 62 },
       { from: "Inventory DB: inventory_orders", to: "Inventory DB: stock & reservations", fromSide: "b", toSide: "t", label: "giữ kho", cardFrom: "1", cardTo: "N", dw: 40 },
-      { from: "Inventory DB: inventory_orders", to: "Kitchen DB: kitchen_orders", fromSide: "r", toSide: "l", dx: 787, dy: 256, label: "OrderReserved", cardFrom: "1", cardTo: "0..1", dw: 46 },
+      { from: "Inventory DB: inventory_orders", to: "Kitchen DB: kitchen_orders", fromSide: "r", toSide: "l", dx: 787, dy: 256, label: "OrderReserved", cardFrom: "1", cardTo: "0..1", dw: 56 },
       { from: "Inventory DB: dish_status", to: "Branch DB: menu_cache", fromSide: "l", toSide: "r", label: "menu-events", cardFrom: "1", cardTo: "N", dw: 50 },
       { from: "Inventory DB: stock & reservations", to: "Kitchen DB: flagged_ingredients", fromSide: "r", toSide: "l", fromOff: 22, dx: 787, dy: 462, label: "cờ kiểm kho", cardFrom: "1", cardTo: "0..1", dw: 44 },
     ],
@@ -467,7 +470,7 @@ export const P2_ARCH_DIAGRAMS = [
         y: 608,
         w: 1092,
         h: 38,
-        text: "Các thực thể giữa 4 cơ sở dữ liệu liên thông nghiệp vụ theo order_id (UUID) qua Kafka hoặc Logical Replication; bảng hạ tầng processed_events, alerts có trong từng dịch vụ.",
+        text: "Các thực thể giữa 4 mô hình lược đồ CSDL (6 thực thể PostgreSQL) liên thông nghiệp vụ theo order_id (UUID) qua Kafka hoặc Logical Replication; bảng hạ tầng processed_events, alerts có trong từng dịch vụ.",
       },
     ],
   }),
@@ -520,15 +523,16 @@ export const P2_ARCH_DIAGRAMS = [
         ],
       },
       {
-        id: "dish_status",
+        id: "alerts",
         x: 34,
         y: 288,
         w: 256,
+        infra: true,
         cols: [
-          ["dish_id", "PK"],
-          ["status", ""],
-          ["epoch", ""],
-          ["seq", ""],
+          ["id", "PK"],
+          ["kind / source_topic", "UNI*"],
+          ["order_id / event_id", ""],
+          ["detail / created_at", ""],
         ],
       },
       {
@@ -556,27 +560,26 @@ export const P2_ARCH_DIAGRAMS = [
         ],
       },
       {
-        id: "menu_version",
+        id: "dish_status",
         x: 34,
         y: 486,
         w: 256,
         cols: [
-          ["id", "PK"],
+          ["dish_id", "PK"],
+          ["status", ""],
           ["epoch", ""],
           ["seq", ""],
         ],
       },
       {
-        id: "alerts",
+        id: "menu_version",
         x: 444,
         y: 486,
         w: 266,
-        infra: true,
         cols: [
           ["id", "PK"],
-          ["kind / source_topic", "UNI"],
-          ["order_id / event_id", ""],
-          ["detail / created_at", ""],
+          ["epoch", ""],
+          ["seq", ""],
         ],
       },
       {
@@ -592,12 +595,12 @@ export const P2_ARCH_DIAGRAMS = [
       },
     ],
     relations: [
-      { from: "inventory_orders", to: "inventory_reservations", fromSide: "r", toSide: "l", fromOff: -12, label: "giữ", cardFrom: "1", cardTo: "N", dw: 36 },
-      { from: "stock", to: "inventory_reservations", fromSide: "l", toSide: "r", fromOff: -12, label: "thuộc", cardFrom: "1", cardTo: "N", dw: 38 },
+      { from: "inventory_orders", to: "inventory_reservations", fromSide: "r", toSide: "l", fromOff: -19, label: "giữ", cardFrom: "1", cardTo: "N", dw: 36 },
+      { from: "stock", to: "inventory_reservations", fromSide: "l", toSide: "r", fromOff: -19, label: "thuộc", cardFrom: "1", cardTo: "N", dw: 38 },
       { from: "stock", to: "recipes", fromSide: "b", toSide: "r", route: "vh", dx: 792, dy: 244, label: "dùng trong", cardFrom: "1", cardTo: "N", dw: 46, c1x: -18, c2y: -10 },
-      { from: "dish_status", to: "recipes", fromSide: "r", toSide: "l", label: "gồm", cardFrom: "1", cardTo: "N", dx: 396, dw: 30 },
-      { from: "menu_version", to: "dish_status", fromSide: "t", toSide: "b", label: "cấp version", cardFrom: "1", cardTo: "N", dw: 48, c1x: 4, c2x: 4 },
-      { from: "inventory_orders", to: "alerts", fromSide: "r", toSide: "l", fromOff: 38, route: "hv", dx: 336, dy: 542, label: "cảnh báo", cardFrom: "0..1", cardTo: "N", dw: 38 },
+      { from: "dish_status", to: "recipes", fromSide: "t", toSide: "l", fromOff: 60, route: "vh", dx: 344, dy: 428, label: "gồm", cardFrom: "1", cardTo: "N", dw: 32, c1x: 12, c2y: -6 },
+      { from: "menu_version", to: "dish_status", fromSide: "l", toSide: "r", fromOff: 9.5, toOff: 0, label: "cấp version", cardFrom: "1", cardTo: "N", dw: 48, c1y: -4, c2y: -4 },
+      { from: "inventory_orders", to: "alerts", fromSide: "b", toSide: "t", label: "cảnh báo", cardFrom: "0..1", cardTo: "N", dw: 42, c1x: 8, c2x: 8 },
     ],
     notes: [
       {
@@ -605,7 +608,7 @@ export const P2_ARCH_DIAGRAMS = [
         y: 636,
         w: 1088,
         h: 36,
-        text: "Toàn bộ mối quan hệ nghiệp vụ và khóa ngoại trong Inventory DB; outbox_events và processed_events là bảng hạ tầng phục vụ Outbox và chống trùng sự kiện.",
+        text: "Toàn bộ mối quan hệ nghiệp vụ và khóa ngoại trong Inventory DB; outbox_events, processed_events là bảng hạ tầng; UNI* chỉ khóa tổ hợp 4 cột của alerts.",
       },
     ],
   }),
@@ -664,7 +667,7 @@ export const P2_ARCH_DIAGRAMS = [
         infra: true,
         cols: [
           ["id", "PK"],
-          ["kind / source_topic", "UNI"],
+          ["kind / source_topic", "UNI*"],
           ["order_id / event_id", ""],
           ["detail / created_at", ""],
         ],
@@ -684,9 +687,8 @@ export const P2_ARCH_DIAGRAMS = [
       },
     ],
     relations: [
-      { from: "kitchen_orders", to: "flagged_ingredients", fromSide: "r", toSide: "l", fromOff: -32, label: "đối chiếu", cardFrom: "N", cardTo: "M", dw: 44 },
+      { from: "kitchen_orders", to: "flagged_ingredients", fromSide: "r", toSide: "l", fromOff: -38, label: "đối chiếu", cardFrom: "N", cardTo: "M", dw: 44 },
       { from: "kitchen_orders", to: "alerts", fromSide: "b", toSide: "t", label: "cảnh báo", cardFrom: "0..1", cardTo: "N", dw: 42, c1x: 8, c2x: 8 },
-      { from: "kitchen_orders", to: "outbox_events", fromSide: "r", toSide: "l", fromOff: 44, route: "hv", dx: 404, dy: 356, label: "phát tin", cardFrom: "1", cardTo: "N", dw: 40 },
     ],
     notes: [
       {
@@ -694,7 +696,7 @@ export const P2_ARCH_DIAGRAMS = [
         y: 458,
         w: 1040,
         h: 36,
-        text: "kitchen_orders lưu tập trung thông tin giữ nguyên liệu (reserved JSONB) để đối chiếu cảnh báo trực tiếp với flagged_ingredients mà không cần JOIN chéo dịch vụ.",
+        text: "kitchen_orders lưu tập trung thông tin giữ nguyên liệu (reserved JSONB) để đối chiếu cảnh báo trực tiếp với flagged_ingredients; outbox_events, processed_events là bảng hạ tầng.",
       },
     ],
   }),
@@ -761,7 +763,7 @@ export const P2_ARCH_DIAGRAMS = [
       {
         id: "menu_cache_meta",
         x: 454,
-        y: 282,
+        y: 256,
         w: 268,
         cols: [
           ["id", "PK"],
@@ -788,7 +790,7 @@ export const P2_ARCH_DIAGRAMS = [
         infra: true,
         cols: [
           ["id", "PK"],
-          ["kind / source_topic", "UNI"],
+          ["kind / source_topic", "UNI*"],
           ["order_id / event_id", ""],
           ["detail / created_at", ""],
         ],
@@ -806,7 +808,7 @@ export const P2_ARCH_DIAGRAMS = [
       },
     ],
     relations: [
-      { from: "orders", to: "outbox_events", fromSide: "r", toSide: "l", fromOff: -12, label: "chờ gửi", cardFrom: "1", cardTo: "N", dw: 38 },
+      { from: "orders", to: "outbox_events", fromSide: "r", toSide: "l", fromOff: -19, label: "chờ gửi", cardFrom: "1", cardTo: "N", dw: 38 },
       { from: "dishes", to: "menu_cache", fromSide: "b", toSide: "t", label: "lưu đệm", cardFrom: "1", cardTo: "0..1", dw: 40 },
       { from: "menu_cache_meta", to: "menu_cache", fromSide: "r", toSide: "l", label: "độ mới", cardFrom: "1", cardTo: "N", dw: 40 },
       { from: "replication_heartbeat", to: "orders", fromSide: "t", toSide: "b", label: "đồng bộ", cardFrom: "1", cardTo: "N", dw: 42 },
@@ -858,7 +860,7 @@ export const P2_ARCH_DIAGRAMS = [
       },
     ],
     relations: [
-      { from: "replication_heartbeat", to: "orders", fromSide: "r", toSide: "l", fromOff: 0, label: "mốc dữ liệu", cardFrom: "1", cardTo: "N", dw: 50 },
+      { from: "replication_heartbeat", to: "orders", fromSide: "r", toSide: "l", toOff: -19, label: "mốc dữ liệu", cardFrom: "1", cardTo: "N", dw: 50 },
     ],
     notes: [
       {

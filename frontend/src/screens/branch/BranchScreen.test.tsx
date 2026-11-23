@@ -188,7 +188,7 @@ describe("branch screen: cancelling", () => {
     expect(await within(dialog).findByText("Chọn lý do hủy")).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole("combobox", { name: "Lý do hủy" }));
     const options = (await screen.findAllByRole("option")).map((o) => o.textContent);
-    expect(options).toEqual(["Khách đổi ý", "Khách chờ quá lâu", "Thu ngân nhập sai đơn"]);
+    expect(options).toEqual(["Khách đổi ý", "Đợi quá lâu", "Nhập nhầm đơn"]);
   });
 
   it("reports a local cancel (200)", async () => {
@@ -219,7 +219,7 @@ describe("branch screen: cancelling", () => {
     );
     renderRoute("/branch/POS01");
     const dialog = await openCancel();
-    await chooseReason(dialog, "Khách chờ quá lâu");
+    await chooseReason(dialog, "Đợi quá lâu");
     await userEvent.click(within(dialog).getByRole("button", { name: "Xác nhận hủy" }));
     expect(
       await screen.findByText(
